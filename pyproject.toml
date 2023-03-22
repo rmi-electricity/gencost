@@ -1,0 +1,186 @@
+[build-system]
+requires = ["setuptools<66", "setuptools_scm[toml]>=3.5.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rmi.cheshire"
+description = "A modified template based on ``catalyst-cooperative/cheshire``."
+license = {file = "LICENSE.txt"}
+readme = "README.rst"
+dynamic = ["version"]
+classifiers = [
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "pandas >= 1.4,< 1.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black[jupyter] >= 22,< 24",
+    "isort>=5.0,<5.13",
+    "tox>=3.20,<4.5",
+]
+doc = [
+    "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
+    "furo>=2022.4.7",  # A clean customisable Sphinx documentation theme.
+    "rstcheck[sphinx,toml]>=5.0,<6.2",  # ReStructuredText linter
+    "sphinx>=4,!=5.1.0,<6.1.4",
+    "sphinx-autoapi>=1.8,<2.1",
+    "sphinx-issues>=1.2,<3.1",
+    "sphinx-autodoc-typehints>1.19,<1.23.0",
+    "sphinxcontrib-mermaid>0.7,<0.9.0",
+]
+tests = [
+    "bandit>=1.6,<1.8",  # Checks code for security issues
+    "coverage>=5.3,<7.3",  # Lets us track what code is being tested
+    "flake8>=4.0,<6.1",  # A framework for linting & static analysis
+    "flake8-builtins>=1.5,<2.2",  # Avoid shadowing Python built-in names
+    "flake8-docstrings>=1.5,<1.8",  # Ensure docstrings are formatted well
+    "flake8-pyproject>1.0,<1.3",  # flake8 config in pyproject.toml
+    "flake8-rst-docstrings>=0.2,<0.4",  # Allow use of ReST in docstrings
+    "flake8-use-fstring>=1.0,<1.5",  # Highlight use of old-style string formatting
+    "mccabe>=0.6,<0.8",  # Checks that code isn't overly complicated
+    "mypy>=0.942,<1.2",  # Static type checking
+    "pep8-naming>=0.12,<0.14",  # Require PEP8 compliant variable names
+    "pre-commit>=2.9,<3.3",  # Allow us to run pre-commit hooks in testing
+    "pydocstyle>=5.1,<6.4",  # Style guidelines for Python documentation
+    "pytest>=6.2,<7.3",  # test framework
+    "pytest-console-scripts>=1.1,<1.4",  # Allow automatic testing of scripts
+    "pytest-cov>=2.10,<4.1",  # Pytest plugin for working with coverage
+    "tox>=3.20,<4.5",  # Python test environment manager
+]
+types = [
+    "types-setuptools"
+]
+
+[project.scripts]  # entry points
+winston = "cheshire.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "cheshire._version.__version__"}
+
+[tool.setuptools_scm]
+write_to = "src/cheshire/_version.py"
+
+#######################################################################################
+# Configurations for linters and other tools
+#######################################################################################
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]
+
+[tool.black]
+line-length = 88
+target-version = ["py39", "py310", "py311"]
+include = "\\.pyi?$"
+
+[tool.doc8]
+max-line-length = 88
+ignore-path = "docs/_build"
+
+[tool.flake8]
+extend-ignore = [
+    # * W503, W504: Line break before / after binary operator.
+    "W503", "W504",
+    "D401", # * D401: Imperative mood.
+    "E501", # * E501: Overlong line
+    "E203", # * E203: Space before ':' (black recommends to ignore)
+    # * RST201,RST203,RST301: Google docstrings aren't RST until after being processed by
+    #   Napoleon. See https://github.com/peterjc/flake8-rst-docstrings/issues/17
+    "RST201",  "RST203",  "RST301",
+    "D105",
+]
+max-complexity = 15
+inline-quotes = "double"
+max-line-length = 88
+docstring-convention = "google"
+# Files and directories that should not be subject to linting
+extend-exclude = [
+    ".env_tox",
+    ".eggs",
+    "build",
+]
+rst-roles =[
+    "attr",
+    "class",
+    "doc",
+    "func",
+    "meth",
+    "mod",
+    "obj",
+    "py:const",
+    "ref",
+    "user",
+]
+rst-directives =[
+    "envvar",
+    "exception",
+]
+percent-greedy = 2
+format-greedy = 2
+per-file-ignores = [
+    "__init__.py:F401"
+]
+
+[tool.isort]
+profile = "black"
+known_first_party = ["cheshire"]
+
+[tool.mypy]
+#python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+#plugins = "numpy.typing.mypy_plugin"
+
+[[tool.mypy.overrides]]
+module = [
+    "addfips.*",
+    "coloredlogs.*",
+    "dask.*",
+    "datapackage.*",
+    "dbfread.*",
+    "geopandas.*",
+    "matplotlib.*",
+    "networkx.*",
+    "numba.*",
+    "numpy.*",
+    "pandas.*",
+    "pyarrow.*",
+    "seaborn.*",
+    "scipy.*",
+    "sklearn.*",
+    "sphinx.*",
+    "sqlalchemy.*",
+    "tableschema.*",
+    "timezonefinder.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = ["--verbose"]
+log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
+log_date_format=" %Y-%m-%d %H:%M:%S"
+log_cli = true
+log_cli_level = "INFO"
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL", "ELLIPSIS"]
+filterwarnings = [
+    "ignore:distutils Version classes are deprecated:DeprecationWarning",
+    "ignore:Creating a LegacyVersion:DeprecationWarning:pkg_resources[.*]",
+]
+
+[tool.rstcheck]
+report_level = "WARNING"
+ignore_roles = ["pr", "issue", "user", "include"]
+ignore_messages = '(Hyperlink target .* is not referenced\.$|Duplicate implicit target name:|An `AttributeError` error occured.*)'
+ignore_directives = ["bibliography", "todo", "include"]
