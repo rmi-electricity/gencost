@@ -1,7 +1,6 @@
 GenCost: A tool for estimating generator unit costs from public utility data
 =======================================================================================
 
-.. readme-intro
 
 .. image:: https://github.com/rmi-electricity/gencost/workflows/tox-pytest/badge.svg
    :target: https://github.com/rmi-electricity/gencost/actions?query=workflow%3Atox-pytest
@@ -11,8 +10,9 @@ GenCost: A tool for estimating generator unit costs from public utility data
    :target: https://rmi-electricity.github.io/gencost/
    :alt: GitHub Pages Status
 
-.. image:: https://coveralls.io/repos/github/rmi-electricity/gencost/badge.svg
-   :target: https://coveralls.io/github/rmi-electricity/gencost
+.. Not worth it while private
+   .. image:: https://coveralls.io/repos/github/rmi-electricity/gencost/badge.svg
+      :target: https://coveralls.io/github/rmi-electricity/gencost
 
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black>
@@ -22,14 +22,12 @@ GenCost: A tool for estimating generator unit costs from public utility data
    :target: https://pycqa.github.io/isort/
    :alt: Imports: isort
 
-This template repository helps make new Python projects easier to set up and more
-uniform. It contains a lot of infrastructure surrounding a minimal Python package named
-``gencost`` (the cat who isn't entirely there...).
+.. readme-intro
 
 Development install
 =======================================================================================
 
-To create an environment for Dispatch, navigate to the repo folder in terminal and run:
+To create an environment for GenCost, navigate to the repo folder in terminal and run:
 
 .. code-block:: bash
 

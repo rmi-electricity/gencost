@@ -30,6 +30,13 @@ repos:
   # Formatters: hooks that re-write Python and RST files
   ########################################################################################
 
+  # Linter and formatter that replaces flake8
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: "v0.0.258"
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
   # Convert relative imports to absolute imports
   - repo: https://github.com/MarcoGorelli/absolufy-imports
     rev: v0.3.1
@@ -80,42 +87,6 @@ repos:
   ########################################################################################
   # Linters: hooks that check but don't alter Python & RST files
   ########################################################################################
-
-  # Check for PEP8 non-compliance, code complexity, style, errors, etc:
-  - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
-    hooks:
-      - id: flake8
-        additional_dependencies:
-          - flake8-docstrings
-          - flake8-colors
-          - pydocstyle
-          - flake8-builtins
-          - mccabe
-          - pep8-naming
-          - pycodestyle
-          - pyflakes
-          - flake8-rst-docstrings
-          - flake8-pyproject
-          - flake8-use-fstring
-
-  # Check for known security vulnerabilities:
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.4
-    hooks:
-      - id: bandit
-        args: ["-c", "pyproject.toml"]
-        additional_dependencies: ["bandit[toml]"]
-
-  #  # Use type annotations to check types
-  #  - repo: https://github.com/pre-commit/mirrors-mypy
-  #    rev: v0.990
-  #    hooks:
-  #      - id: mypy
-  #        additional_dependencies:
-  #          - pytest
-  #          - types-jinja2
-  #          - types-setuptools
 
   # Check for errors in restructuredtext (.rst) files under the doc hierarchy
   - repo: https://github.com/PyCQA/doc8
