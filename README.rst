@@ -1,18 +1,18 @@
-Cheshire: a Python Template Repository for RMI created by Catalyst Cooperative
+GenCost: A tool for estimating generator unit costs from public utility data
 =======================================================================================
 
 .. readme-intro
 
-.. image:: https://github.com/rmi-electricity/cheshire/workflows/tox-pytest/badge.svg
-   :target: https://github.com/rmi-electricity/cheshire/actions?query=workflow%3Atox-pytest
+.. image:: https://github.com/rmi-electricity/gencost/workflows/tox-pytest/badge.svg
+   :target: https://github.com/rmi-electricity/gencost/actions?query=workflow%3Atox-pytest
    :alt: Tox-PyTest Status
 
-.. image:: https://github.com/rmi-electricity/cheshire/workflows/docs/badge.svg
-   :target: https://rmi-electricity.github.io/cheshire/
+.. image:: https://github.com/rmi-electricity/gencost/workflows/docs/badge.svg
+   :target: https://rmi-electricity.github.io/gencost/
    :alt: GitHub Pages Status
 
-.. image:: https://coveralls.io/repos/github/rmi-electricity/cheshire/badge.svg
-   :target: https://coveralls.io/github/rmi-electricity/cheshire
+.. image:: https://coveralls.io/repos/github/rmi-electricity/gencost/badge.svg
+   :target: https://coveralls.io/github/rmi-electricity/gencost
 
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black>
@@ -24,73 +24,58 @@ Cheshire: a Python Template Repository for RMI created by Catalyst Cooperative
 
 This template repository helps make new Python projects easier to set up and more
 uniform. It contains a lot of infrastructure surrounding a minimal Python package named
-``cheshire`` (the cat who isn't entirely there...). This template is mostly a lightly
-modified copy of Catalyst Cooperative's
-`cheshire <https://github.com/catalyst-cooperative/cheshire>`_ but with alterations
-for private work and alternative tools.
+``gencost`` (the cat who isn't entirely there...).
 
-Create a new repository from this template
+Development install
 =======================================================================================
 
-* Choose a name for the new package that you are creating.
-* The name of the repository should be the same as the name of the new Python package
-  you are going to create. E.g. a repository at ``rmi-electricity/cheshire`` should
-  be used to define a package named ``cheshire``.
-* Fork this template repository to create a new Python project repo.
-  `See these instructions <https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template>`__.
-* Create a release with a version tag if there isn't one already. This is required
-  because various tools use it to set the version dynamically.
-* Clone the new repository to your development machine.
-* Run ``pre-commit install`` in the newly clone repository to install the
-  `pre-commit hooks <https://pre-commit.com/>`__ defined in ``.pre-commit-config.yaml``
-* Create the ``cheshire`` conda environment by running ``conda env create`` or
-  (preferably) ``mamba env create`` in the top level of the repository.
-* Activate the new conda environment with ``conda activate cheshire``.
-* Run ``tox`` from the top level of the repository to verify that everything is working
-  correctly.
+To create an environment for Dispatch, navigate to the repo folder in terminal and run:
+
+.. code-block:: bash
+
+   mamba update mamba
+   mamba env create --name gencost --file environment.yml
+
+If you get a ``CondaValueError`` that the prefix already exists, that means an
+environment with the same name already exists. You must remove the old one before
+creating the new one:
+
+.. code-block:: bash
+
+   mamba update mamba
+   mamba env remove --name gencost
+   mamba env create --name gencost --file environment.yml
 
 
-Rename the package and distribution
-=======================================================================================
+Then setup some tools...
 
-Once you know that your forked version of the ``cheshire`` package is working as
-expected, you should update the package and distribution names in your new repo to
-reflect the name of your new package. The **package name** is determined by the name of
-the directory under ``src/`` which contains the source code, and is the name you'll use
-to import the package for use in a program, script, or notebook. E.g.:
+.. code-block:: bash
 
-.. code:: python
+   mamba activate gencost
+   pre-commit install
 
-  import cheshire
+Setup ``pudl``
+---------------
+After the installation is complete, you will need to set up ``pudl``. This only needs to be
+done once. If you have already done this set up for another project, you can
+skip this step. To do this run the following commands:
+
+.. code-block:: console
+
+   $ mamba activate gencost
+   $ pudl_setup <PUDL_DIR>
 
 
-The **distribution name** is the name that is used to install the software using a
-program like  ``pip``, ``conda``, or ``mamba``. Because we do not generally distribute
-our work in this way, this issue is not so important, but we use this naming convention
-for internal consistency. It is often identical to the package
-name, but can also contain a prefix namespace that indicates the individual or
-organization responsible for maintaining the package. See :pep:`423` for more on
-Python package naming conventions.  We are using the ``rmi`` namespace for the
-packages that we publish, so our ``dispatch`` package would become ``rmi.dispatch``
-in the Python Package Index (PyPI) or on ``conda-forge``. Because we do not generally
-distribute our work publicly, this issue is not so important, but we use this naming
-convention for internal consistency. The distribution name is determined
-by the ``name`` argument under ``[project]`` in ``pyproject.toml``.
+Where ``<PUDL_DIR>`` is the directory you want to use as your ``pudl`` workspace.
+Currently, we use the pre-built `pudl.sqlite <https://data.catalyst.coop/pudl.db>`_ and
+`ferc1.sqlite <https://data.catalyst.coop/ferc1.db>`_ databases created
+by Catalyst Cooperative available through `datasette <https://data.catalyst.coop>`_. Once you have
+downloaded those files, place them in ``<PUDL_DIR>/sqlite``.
 
-The package and distribution names are referenced in many of the files in the template
-repository, and they all need to be replaced with the name of your new package. You can
-use ``grep -r`` to search recursively through all of the files for the word ``cheshire``
-at the command line, or use the search-and-replace functionality of your IDE / text
-editor. The name of the package directory under ``src/`` will also need to be changed.
+Additional instructions for setting up ``pudl`` can be found
+`here <https://catalystcoop-pudl.readthedocs.io/en/latest/dev/dev_setup.html>`__.
 
-* Rename the ``src/cheshire`` directory to reflect the new package name.
-* Search for ``cheshire`` and replace it as appropriate everywhere. Sometimes
-  this will be with a distribution name like ``rmi.cheshire``
-  (the package as it would appear for ``pip`` or ``PyPI``) and sometimes this will be
-  the importable package name (the name of the directory under ``src`` e.g.
-  ``cheshire``)
-
-What this template provides
+Stuff from the template README
 =======================================================================================
 
 Python Package Skeleton

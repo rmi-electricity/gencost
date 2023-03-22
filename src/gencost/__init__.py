@@ -1,35 +1,32 @@
-"""A template repository for a Python package.
-
-Created by Catalyst Cooperative, modified by RMI.
-"""
+"""A tool for estimating generator unit costs from public utility data."""
 import logging
 from importlib.metadata import PackageNotFoundError, version
 
 # In order for the package modules to be available when you import the package,
 # they need to be imported here somehow. Not sure if this is best practice though.
-import cheshire.cli
-import cheshire.dummy  # noqa: F401
+import gencost.cli
+import gencost.dummy  # noqa: F401
 
 # Create a root logger for use anywhere within the package.
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 __author__ = "RMI"
-__contact__ = "...@rmi.org"
-__maintainer__ = "Cheshire Cat"
+__contact__ = "aengel@rmi.org"
+__maintainer__ = "RMI"
 __license__ = "BSD 3-Clause License"
 __maintainer_email__ = "...@rmi.org"
 __docformat__ = "restructuredtext en"
-__description__ = "A template for Python package repositories."
+__description__ = "A tool for estimating generator unit costs from public utility data."
 __long_description__ = """
-This should be a paragraph long description of what the package does.
+A tool for estimating generator unit costs from public utility data.
 """
 
 try:
-    __version__ = version("rmi.cheshire")
+    __version__ = version("rmi.gencost")
 except PackageNotFoundError:
     logger.warning("Version unknown because package is not installed.")
     __version__ = "unknown"
 
-__projecturl__ = "https://github.com/rmi-electricity/cheshire"
-__downloadurl__ = "https://github.com/rmi-electricity/cheshire"
+__projecturl__ = "https://github.com/rmi-electricity/gencost"
+__downloadurl__ = "https://github.com/rmi-electricity/gencost"
