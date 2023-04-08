@@ -1,0 +1,2 @@
+include src/gencost/package_data/*.gzip
+include src/gencost/package_data/*.csv
