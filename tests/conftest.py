@@ -3,8 +3,9 @@ import logging
 from pathlib import Path
 
 import pytest
-from etoolbox.utils.pudl import make_pudl_tabl
-from platformdirs import user_cache_path
+
+from gencost.crosswalk import Crosswalk
+from gencost.waterfall import DataBySubplant
 
 logger = logging.getLogger(__name__)
 
@@ -37,39 +38,10 @@ def test_dir() -> Path:
 
 
 @pytest.fixture(scope="session")
-def pudl_tabl():
-    return make_pudl_tabl(
-        user_cache_path("gencost", "rmi") / "pdltbl",
-        tables=(
-            "boil_eia860",
-            "gf_eia923",
-            "gen_original_eia923",
-            "bf_eia923",
-            "gens_eia860",
-            "plants_eia860",
-            "epacamd_eia",
-            "own_eia860",
-            "bga_eia860",
-            "utils_eia860",
-            "frc_eia923",
-        ),
-    )
+def crosswalk():
+    return Crosswalk()
 
 
-@pytest.fixture(
-    scope="session",
-    # params=[
-    #     "pudl",
-    #     "oge",
-    # ],
-)
-def crosswalk(
-    pudl_tabl,
-    # request
-):
-    from gencost.crosswalk import Crosswalk
-
-    return Crosswalk(
-        pudl_tabl,
-        # xwalk_source=request.param
-    )
+@pytest.fixture(scope="class")
+def databysubplant(crosswalk):
+    return DataBySubplant(crosswalk)

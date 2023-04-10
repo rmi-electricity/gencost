@@ -2,20 +2,18 @@
 GenCost Release Notes
 =======================================================================================
 
-.. _release-v0-3-0:
+.. _release-v0-1-0:
 
 ---------------------------------------------------------------------------------------
-0.1.0 (2022-XX-XX)
+0.1.0 (2023-XX-XX)
 ---------------------------------------------------------------------------------------
 
 What's New?
 ^^^^^^^^^^^
 *  Setting things up...
-*  Added module :mod:`.gencost.pudl` to load a :class:`pudl.PudlTabl` from cache or
-   create one.
-*  Remove ``conda`` from GHA process to avoid unnecessary duplication. Making
-   :mod:`pudl` optional because its dependencies are extensive and not always required.
+*  Remove ``conda`` from GHA process to avoid unnecessary duplication. We now no longer
+   use PUDL to make a ``PudlTabl``, for now, we download a serialized one from
+   `another repo <https://github.com/rmi-electricity/easy-data>`_.
 *  Replace all linters with :mod:`ruff`.
-
-
-.. _release-v0-2-0:
+*  Bring gencost related data pre-processing over from
+   `patio <https://github.com/rmi-electricity/patio-model>`_.

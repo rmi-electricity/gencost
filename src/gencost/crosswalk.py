@@ -722,7 +722,7 @@ class Crosswalk:
     def grand_crosswalk(self):
         warnings.warn(
             "This crosswalk is not safe, it may have `pf_subplants with multiple "
-            "primes, and missing epa keys. Use `safe_xwalk` instead.",
+            "primes. Use `safe_xwalk` instead.",
             UserWarning,
             stacklevel=2,
         )
@@ -751,7 +751,7 @@ class Crosswalk:
                 "plant_id_eia": int,
                 "subplant_id": int,
                 "pf_subplant_id": int,
-                "generator_operating_date": "datetime64",
+                "generator_operating_date": "datetime64[ns]",
             }
         )
 
