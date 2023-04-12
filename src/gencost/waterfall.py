@@ -10,7 +10,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pyarrow
 import pyarrow.dataset as ds
-from etoolbox.utils.pudl_helpers import month_year_to_date, simplify_columns
+from etoolbox.utils.pudl_helpers import (
+    month_year_to_date,
+    simplify_columns,
+    sum_and_weighted_average_agg,
+)
 from etoolbox.utils.remote_zip import RemoteIOError, RemoteZip
 from platformdirs import user_cache_path, user_documents_path
 from tqdm.auto import tqdm
@@ -300,15 +304,15 @@ class DataBySubplant:
                         x.top_fuel_share >= 0.6,
                         "≥60% " + x.top_fuel,
                     ).mask(x.top_fuel_share >= 0.9, x.top_fuel),
-                    _age_cap=lambda x: x.age * x.capacity_mw,
-                    _age_prime_fuel_average=lambda x: x.groupby(
-                        ["prime_mover", "top_fuel"]
-                    )._age_cap.transform("sum")
-                    / x.groupby(["prime_mover", "top_fuel"]).capacity_mw.transform(
-                        "sum"
-                    ),
-                    age_relative_to_average2=lambda x: x.age
-                    - x._age_prime_fuel_average,
+                    # _age_cap=lambda x: x.age * x.capacity_mw,
+                    # _age_prime_fuel_average=lambda x: x.groupby(
+                    #     ["prime_mover", "top_fuel"]
+                    # )._age_cap.transform("sum")
+                    # / x.groupby(["prime_mover", "top_fuel"]).capacity_mw.transform(
+                    #     "sum"
+                    # ),
+                    # age_relative_to_average2=lambda x: x.age
+                    # - x._age_prime_fuel_average,
                 )
                 .drop(
                     columns=[
@@ -316,8 +320,8 @@ class DataBySubplant:
                         "hrs_in_yr",
                         "true_multi_fuel",
                         "exa_cost",
-                        "_age_cap",
-                        "_age_prime_fuel_average",
+                        # "_age_cap",
+                        # "_age_prime_fuel_average",
                     ]
                 )
             )
@@ -444,7 +448,7 @@ class DataBySubplant:
             "plant_id_eia": "Int64",
             "pf_subplant_id": "Int64",
             "subplant_id": "Int64",
-            "report_date": "datetime64",
+            "report_date": "datetime64[ns]",
             "step": "Int64",
             "capacity_mw": "Float64",
             "camd_capacity_mw": "Float64",
@@ -918,20 +922,51 @@ class DataBySubplant:
         )
         if merge_only:
             return merged
+        wtavg_dict = {
+            "associated_combined_heat_power": "capacity_mw",
+            "duct_burners": "capacity_mw",
+            "bypass_heat_recovery": "capacity_mw",
+            "solid_fuel_gasification": "capacity_mw",
+            "carbon_capture": "capacity_mw",
+            "fluidized_bed_tech": "capacity_mw",
+            "pulverized_coal_tech": "capacity_mw",
+            "stoker_tech": "capacity_mw",
+            "other_combustion_tech": "capacity_mw",
+            "subcritical_tech": "capacity_mw",
+            "supercritical_tech": "capacity_mw",
+            "ultrasupercritical_tech": "capacity_mw",
+        }
         return (
             merged.query("_merge == 'both'")
+            .astype({k: float for k in wtavg_dict})
+            .fillna({k: 0.0 for k in wtavg_dict})
             .drop(columns=["_merge"])
-            .groupby(
-                [
+            .pipe(
+                sum_and_weighted_average_agg,
+                by=[
                     "plant_id_eia",
                     subplant_id_col,
                     pd.Grouper(key="report_date", freq="YS"),
-                ]
+                ],
+                sum_cols=["capacity_mw"],
+                wtavg_dict=wtavg_dict,
             )
-            .capacity_mw.sum()
-            .reset_index()
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
         )
+        # return (
+        #     merged.query("_merge == 'both'")
+        #     .drop(columns=["_merge"])
+        #     .groupby(
+        #         [
+        #             "plant_id_eia",
+        #             subplant_id_col,
+        #             pd.Grouper(key="report_date", freq="YS"),
+        #         ]
+        #     )
+        #     .capacity_mw.sum()
+        #     .reset_index()
+        #     .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+        # )
 
     def get_gen923_by_subplant(self):
         """
@@ -1491,7 +1526,7 @@ class DataBySubplant:
         dtypes = {
             "plant_id_eia": "Int64",
             "prime_mover": "string",
-            "report_date": "datetime64",
+            "report_date": "datetime64[ns]",
             "state": "string",
             "fuel_1": "string",
             "fuel_2": "string",
@@ -1506,7 +1541,7 @@ class DataBySubplant:
             .pipe(month_year_to_date)
             .pipe(simplify_columns)
             .rename(columns={"plant": "plant_id_eia", "prime": "prime_mover"})
-            .drop(columns=["cc", "gt", "ic", "ot", "st"])
+            # .drop(columns=["cc", "gt", "ic", "ot", "st"])
         )
         fuel_counts = cost.groupby(
             ["plant_id_eia", "prime_mover", "report_date"]
@@ -1578,14 +1613,24 @@ class DataBySubplant:
                 "cf_relative_to_average",
                 "real_opex_per_kw",
                 "real_capex_per_kw",
-                "opex_per_kw",
-                "capex_per_kw",
+                "real_opex",
+                "real_capex",
                 "inflator_to_2021",
                 "wage_scale",
+                "natural_gas",
+                "coal",
+                "petroleum",
+                "petroleum_coke",
+                "other_gas",
+                "cc",
+                "gt",
+                "ic",
+                "ot",
+                "st",
                 # "extraordinary_expense",
-                # "maintenance_capex",
+                "maintenance_capex",
                 # "interim_retirements",
-                # "real_maintenance_capex",
+                "real_maintenance_capex",
                 # "real_interim_retirements",
                 # "arc_per_kw",
             ]

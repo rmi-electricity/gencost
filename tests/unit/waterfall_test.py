@@ -84,6 +84,11 @@ class TestDataByPrime:
 
 
 class TestFullWaterfall:
+    def test_get_cost_data_by_prime(self, databysubplant):
+        """Perfunctory test."""
+        df = databysubplant.get_cost_data_by_prime()
+        assert not df.empty
+
     def test_full_waterfall(self, databysubplant):
         """Perfunctory test."""
         df = databysubplant.get_exa_all()
