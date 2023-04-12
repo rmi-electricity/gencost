@@ -479,6 +479,7 @@ class DataBySubplant:
             )
 
             non_zeros = out.sum(axis=0) != 0
+            non_zeros.loc["solid_fuel_gasification"] = True
             self._dfs["exa_by_prime"] = out.loc[
                 :, [non_zeros.get(x, True) for x in out.columns]
             ]
@@ -626,6 +627,7 @@ class DataBySubplant:
 
             waterfall = merged.query("_merge == 'all'").drop(columns=["_merge"])
             non_zeros = waterfall.sum(axis=0) != 0
+            non_zeros.loc["solid_fuel_gasification"] = True
             self._dfs["waterfall" + str(by_fuel)] = waterfall.loc[
                 :, [non_zeros.get(x, True) for x in waterfall.columns]
             ]
