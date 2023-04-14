@@ -304,6 +304,7 @@ class DataBySubplant:
                         x.top_fuel_share >= 0.6,
                         "≥60% " + x.top_fuel,
                     ).mask(x.top_fuel_share >= 0.9, x.top_fuel),
+                    report_year=lambda x: x.report_date.dt.year,
                     # _age_cap=lambda x: x.age * x.capacity_mw,
                     # _age_prime_fuel_average=lambda x: x.groupby(
                     #     ["prime_mover", "top_fuel"]
@@ -1613,6 +1614,8 @@ class DataBySubplant:
                 "real_opex_percentile",
                 "real_capex_percentile",
                 "cf_relative_to_average",
+                "opex_per_kw",
+                "capex_per_kw",
                 "real_opex_per_kw",
                 "real_capex_per_kw",
                 "real_opex",
@@ -1635,6 +1638,7 @@ class DataBySubplant:
                 "real_maintenance_capex",
                 # "real_interim_retirements",
                 # "arc_per_kw",
+                "real_pollution_control_costs_per_kw",
             ]
         ]
 
