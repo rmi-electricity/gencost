@@ -40,7 +40,7 @@ dev = [
     "pytest-console-scripts>=1.1,<1.4",  # Allow automatic testing of scripts
     "pytest-cov>=4.0,<4.1",  # Pytest plugin for working with coverage
     "ruff>0.0.259,<0.0.263",
-    "tox>=4.2,<4.5",
+    "tox>=4.2,<4.6",
 ]
 doc = [
     "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
