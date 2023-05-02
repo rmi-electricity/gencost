@@ -543,7 +543,7 @@ class DataBySubplant:
             df_gen923 = self.get_gen923_by_subplant()
             df_bf923 = self.get_bf923_by_subplant(by_fuel=by_fuel)
 
-            # add fuel consummption data to make waterfall step one complete
+            # add fuel consumption data to make waterfall step one complete
             waterfall_step_one = df_gen923.merge(
                 df_bf923,
                 on=["plant_id_eia", "subplant_id", "report_date"],
@@ -719,14 +719,28 @@ class DataBySubplant:
             .query("report_date > 2007 & report_date < 2021")
             .assign(year_group=lambda x: x.report_date.dt.year.replace(self.yr_groups))
         )
+        auto = {
+            "capacity": {"x": "capacity_mw", "y": "camd_capacity_mw"},
+            "capacity_ferc": {
+                "x": "capacity_mw",
+                "y": "capacity_of_currently_operating_units",
+            },
+            "energy": {"x": "net_generation_mwh", "y": "gross_generation_mwh"},
+            "cf": {"x": "net_cf", "y": "gross_cf"},
+            "cf_ferc": {"x": "net_cf", "y": "ferc_cf"},
+        }
+        if isinstance(comparison, str) and comparison in auto:
+            comparison = auto[comparison]
+        if any(("x" not in comparison, "y" not in comparison)):
+            raise ValueError(
+                f"'comparison' must be one of {tuple(auto.keys())} or a dict with "
+                f"keys 'x' and 'y' each of which is one of the following "
+                f"cols: \n {tuple(result.columns)}"
+            )
 
         fig = px.scatter(
-            result,
-            **{
-                "capacity": {"x": "capacity_mw", "y": "camd_capacity_mw"},
-                "energy": {"x": "net_generation_mwh", "y": "gross_generation_mwh"},
-                "cf": {"x": "net_cf", "y": "gross_cf"},
-            }[comparison],
+            result.astype({k: float for k in comparison.values()}),
+            **comparison,
             facet_col=facet_col,
             facet_row=facet_row,
             color=color,
@@ -743,15 +757,26 @@ class DataBySubplant:
         facet_row=None,
         marginal="rug",
         clean=True,
+        query=None,
+        height=None,
+        width=None,
     ):
+        df = self.merge_all(clean=clean).assign(
+            year_group=lambda x: x.report_date.dt.year.replace(self.yr_groups)
+        )
+        if df is not None:
+            df = df.query(query)
+
         return px.ecdf(
-            self.merge_all(clean=clean),
+            df,
             x=x,
             markers=True,
             color=color,
             facet_col=facet_col,
             facet_row=facet_row,
             marginal=marginal,
+            height=height,
+            width=width,
         )
 
     def draw_capacity_ecdf(
@@ -761,6 +786,8 @@ class DataBySubplant:
         clean=True,
         ecdfnorm="probability",
         ecdfmode="standard",
+        height=None,
+        width=None,
     ) -> go.Figure:
         result = self.compare_capacity_df(clean=clean).assign(
             year_group=lambda x: x.year.replace(self.yr_groups)
@@ -774,6 +801,8 @@ class DataBySubplant:
                 color="series",
                 ecdfnorm=ecdfnorm,
                 ecdfmode=ecdfmode,
+                height=height,
+                width=width,
             )
             .for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
             .update_yaxes(matches=None, showticklabels=True)
@@ -1198,7 +1227,7 @@ class DataBySubplant:
             )
             .dropna(subset="report_year")
         )
-        (
+        msg = (
             df.query("_merge != 'both' & prime_mover in @FOSSIL_PRIME_MOVER_MAP")
             .replace(
                 {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
@@ -1211,7 +1240,8 @@ class DataBySubplant:
 
         logger.warning(
             "Waterfall subset 2: Subplant groups that are not the single and only "
-            "prime mover within their plant are being dropped",
+            "prime mover within their plant are being dropped %s",
+            msg.to_dict(),
         )
         if by_fuel:
             out = (

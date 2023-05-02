@@ -682,30 +682,38 @@ class Crosswalk:
             )
         else:
             self.pudl_tabl = pudl_tabl
-        file = user_cache_path("gencost", "rmi") / "xwalk.parquet"
+        file = user_cache_path("gencost", "rmi") / "xwalk_pudl.parquet"
         if not file.exists() or clobber:
             if not file.parent.exists():
                 file.parent.mkdir(parents=True)
-
-            df = generate_subplant_ids(
-                self.pudl_tabl,
-                harmonize_eia_epa_orispl(
-                    pd.read_parquet(
-                        PACKAGE_PATH / "camd_unit_starts_ms.parquet.gzip"
-                    ).rename(
-                        columns={
-                            "plant_id_cems": "plant_id_epa",
-                            "unit_id_cems": "emissions_unit_id_epa",
-                            "gross_gen": "gross_generation_mwh",
-                            "gross_gen_max": "camd_capacity_mw",
-                            "gen_starts": "generator_starts",
-                        }
-                    ),
-                    self.pudl_tabl.epacamd_eia(),
-                ),
-            )
-            if file.exists():
-                file.unlink()
+            df = self.pudl_tabl.epacamd_eia_subplant_ids()
+            # see https://github.com/catalyst-cooperative/pudl/issues/2548#issuecomment-1530735429
+            fixes = [
+                (2708, "2A", "2"),
+                (2708, "2B", "2"),
+                (4042, "3", "2"),
+                (55126, "CT02", "CA02"),
+            ]
+            for pid, to_gen, from_gen in fixes:
+                replacement = df.loc[
+                    (df.plant_id_eia == pid) & (df.generator_id == from_gen),
+                    "subplant_id",
+                ]
+                if (
+                    isinstance(replacement, pd.Series)
+                    and len(replacement.unique()) == 1
+                ):
+                    replacement = replacement.unique()[0]
+                if not isinstance(replacement, np.int64 | np.int32 | int):
+                    raise AssertionError(
+                        f"Replacement subplant_id for ({pid=}, {to_gen=}) from "
+                        f"({pid=}, {from_gen=}) is not int-like"
+                    )
+                df.loc[
+                    (df.plant_id_eia == pid) & (df.generator_id == to_gen),
+                    "subplant_id",
+                ] = replacement
+            df = df.loc[~df.plant_id_eia.isin((55375,)), :]
 
             df.to_parquet(file)
             self.base_xwalk = df
@@ -730,9 +738,7 @@ class Crosswalk:
 
     @property
     def safe_xwalk(self):
-        return self._grand_xwalk[
-            self._grand_xwalk.safe_ppf & self._grand_xwalk.single_prime
-        ]
+        return self._grand_xwalk[self._grand_xwalk.single_prime]
 
     def _prep_grand_xwalk(self):
         edgelist = make_subplant_ids(
@@ -755,13 +761,13 @@ class Crosswalk:
             }
         )
 
-        def safe_test(x):
+        def safe_test_func(x):
             return not (len(x.unique()) > 1 and np.any(x.isna()))
 
         def safe_prime(x):
             return len(x.unique()) == 1
 
-        return self.xwalk_w_pf.merge(
+        out = self.xwalk_w_pf.merge(
             edgelist[
                 ["plant_id_eia", "subplant_id", "pf_subplant_id"]
             ].drop_duplicates(),
@@ -785,13 +791,17 @@ class Crosswalk:
                 "ppf",
             ]
         ].assign(
-            safe_ppf=lambda x: x.groupby(
-                ["plant_id_eia", "pf_subplant_id"]
-            ).plant_id_epa.transform(safe_test),
             single_prime=lambda x: x.groupby(
                 ["plant_id_eia", "pf_subplant_id"]
             ).prime_mover.transform(safe_prime),
         )
+        safe_test = out.groupby(
+            ["plant_id_eia", "pf_subplant_id"]
+        ).plant_id_epa.transform(safe_test_func)
+        assert (  # noqa: S101
+            safe_test.all()
+        ), f"EPA IDs are unsafe {out[~safe_test].to_dict()}"
+        return out
 
     def get_crosswalk_with_prime_fuel(self, oge_xwalk):
         """Transformations:
