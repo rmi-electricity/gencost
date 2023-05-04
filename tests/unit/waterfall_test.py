@@ -1,5 +1,4 @@
 import pytest
-from etoolbox.utils.testing import idfn
 
 from gencost.waterfall import subplants_in_scenario_one
 
@@ -11,10 +10,9 @@ class TestDataBySubplant:
         df = databysubplant.get_860_by_x(merge_only=True, subplant_id_col="subplant_id")
         assert not df.empty
 
-    @pytest.mark.parametrize("by_fuel", [True, False], ids=idfn)
-    def test_get_bf923_by_subplant(self, databysubplant, by_fuel):
+    def test_get_bf923_by_subplant(self, databysubplant):
         """Perfunctory test."""
-        df = databysubplant.get_bf923_by_subplant(by_fuel=by_fuel)
+        df = databysubplant.get_bf923_by_subplant()
         assert not df.empty
 
     def test_get_gen923_by_subplant(self, databysubplant):
@@ -74,11 +72,6 @@ class TestDataByPrime:
         )
         assert not df.empty
 
-    def test_get_cost_data_by_ppf(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_cost_data_by_prime()
-        assert not df.empty
-
     def test_get_exa_by_prime(self, databysubplant):
         """Perfunctory test."""
         df = databysubplant.get_exa_by_prime()
@@ -86,11 +79,6 @@ class TestDataByPrime:
 
 
 class TestFullWaterfall:
-    def test_get_cost_data_by_prime(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_cost_data_by_prime()
-        assert not df.empty
-
     def test_full_waterfall(self, databysubplant):
         """Perfunctory test."""
         df = databysubplant.get_exa_all()
