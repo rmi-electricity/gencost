@@ -16,6 +16,7 @@ from etoolbox.utils.pudl_helpers import (
     sum_and_weighted_average_agg,
 )
 from etoolbox.utils.remote_zip import RemoteIOError, RemoteZip
+from datetime import datetime as dt
 from platformdirs import user_cache_path, user_documents_path
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -907,7 +908,9 @@ class DataBySubplant:
     # Aggregate source data to subplant levels
     ###########################################################################
 
-    def get_860_by_x(self, subplant_id_col="pf_subplant_id", merge_only=False):
+    def get_860_by_x(
+        self, subplant_id_col="pf_subplant_id", merge_only=False, age_year=2021
+    ):
         """
         Map capacity and sum to plant prime fuel subplant level
 
@@ -915,6 +918,24 @@ class DataBySubplant:
         xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
             subplant_id_col
         ]
+        col_info = pd.read_csv(PACKAGE_PATH / "coi_col_info.csv", index_col=0).assign(
+            agg_method_r=lambda x: x.agg_method.replace(
+                {"cap_wt_avg": "sum", "mode": mode}
+            )
+        )
+        coi = (
+            pd.read_parquet(PACKAGE_PATH / "unit_level_costs_with_flag.parquet.gzip")
+            .rename(
+                columns=col_info.old_names.reset_index()
+                .set_index("old_names")
+                .dropna()
+                .squeeze()
+                .to_dict()
+            )
+            .pipe(month_year_to_date)
+            .astype(col_info.new_type.dropna().to_dict())
+        )
+
         merged = (
             self.pudl_tabl.gens_eia860()
             .query("operational_status == 'existing'")
@@ -933,7 +954,24 @@ class DataBySubplant:
                 validate="m:1",
                 indicator=True,
             )
+            .merge(
+                coi[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]],
+                on=["plant_id_eia", "generator_id"],
+                how="outer",
+                validate="m:1",
+                indicator="exists",
+            )
+            .assign(
+                gen_pollution_control_costs=lambda x: (
+                    x["pollution_control_costs_per_kw"] * x["capacity_mw"]
+                )
+                * 1000,
+                subplant_pollution_control_costs=lambda x: x.groupby(
+                    ["plant_id_eia", subplant_id_col, "report_date"]
+                )["gen_pollution_control_costs"].transform("sum"),
+            )
         )
+
         test = (
             merged.query(
                 "_merge != 'both' & prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
@@ -967,9 +1005,32 @@ class DataBySubplant:
             "subcritical_tech": "capacity_mw",
             "supercritical_tech": "capacity_mw",
             "ultrasupercritical_tech": "capacity_mw",
+            "avg_age_from_report_year": "capacity_mw",
+            "current_avg_age": "capacity_mw",
+            "subplant_pollution_control_costs": "capacity_mw",
         }
+
+        if age_year == 2021:
+            age_year_str = dt.strptime("12-1-2021", "%m-%d-%Y").year
+        else:
+            age_year_str = dt.utcnow.year
         return (
-            merged.query("_merge == 'both'")
+            merged.query("_merge == 'both' & exists == 'both'")
+            .assign(
+                age_from_report_year=lambda x: x["report_date"].dt.year
+                - x["generator_operating_date"].dt.year,
+                avg_age_from_report_year=lambda x: x.groupby(
+                    ["plant_id_eia", subplant_id_col]
+                )["age_from_report_year"].transform("mean"),
+                current_age=lambda x: age_year_str
+                - x["generator_operating_date"].dt.year,
+                current_avg_age=lambda x: x.groupby(["plant_id_eia", subplant_id_col])[
+                    "current_age"
+                ].transform("mean"),
+                age_of_observation=lambda x: age_year_str - x["report_date"].dt.year,
+                age_relative_to_avg=lambda x: x["current_age"]
+                - x["avg_age_from_report_year"],
+            )
             .astype({k: float for k in wtavg_dict})
             .fillna({k: 0.0 for k in wtavg_dict})
             .drop(columns=["_merge"])
@@ -984,7 +1045,16 @@ class DataBySubplant:
                 wtavg_dict=wtavg_dict,
             )
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+            .assign(
+                pollution_control_costs_per_kw=lambda x: x[
+                    "subplant_pollution_control_costs"
+                ]
+                / x["capacity_mw"]
+                / 1000
+            )
+            .drop(columns=["subplant_pollution_control_costs"])
         )
+
         # return (
         #     merged.query("_merge == 'both'")
         #     .drop(columns=["_merge"])
