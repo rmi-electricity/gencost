@@ -1652,11 +1652,11 @@ class DataBySubplant:
                 indicator=True,
             )
             .assign(
-                real_capex=lambda x: x.real_capex_per_kw * x.capacity_mw,
-                real_opex=lambda x: x.real_opex_per_kw * x.capacity_mw,
-                capex=lambda x: x.capex_per_kw * x.capacity_mw,
-                opex=lambda x: x.opex_per_kw * x.capacity_mw,
-                arc=lambda x: x.arc_per_kw * x.capacity_mw,
+                real_capex=lambda x: x.real_capex_per_kw * x.capacity_mw * 1e3,
+                real_opex=lambda x: x.real_opex_per_kw * x.capacity_mw * 1e3,
+                capex=lambda x: x.capex_per_kw * x.capacity_mw * 1e3,
+                opex=lambda x: x.opex_per_kw * x.capacity_mw * 1e3,
+                arc=lambda x: x.arc_per_kw * x.capacity_mw * 1e3,
             )
             .drop(columns=[x for x in d_cols if "_kw" in x])
         )
