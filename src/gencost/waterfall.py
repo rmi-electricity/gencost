@@ -1017,8 +1017,10 @@ class DataBySubplant:
         return (
             merged.query("_merge == 'both' & exists == 'both'")
             .assign(
-                age_from_report_year=lambda x: x["report_date"].dt.year
-                - x["generator_operating_date"].dt.year,
+                age_from_report_year=lambda x: (
+                    x["report_date"] - x["generator_operating_date"]
+                ).dt.days
+                / 365.25
                 avg_age_from_report_year=lambda x: x.groupby(
                     ["plant_id_eia", subplant_id_col]
                 )["age_from_report_year"].transform("mean"),
