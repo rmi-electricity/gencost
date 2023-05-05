@@ -918,23 +918,12 @@ class DataBySubplant:
         xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
             subplant_id_col
         ]
-        col_info = pd.read_csv(PACKAGE_PATH / "coi_col_info.csv", index_col=0).assign(
-            agg_method_r=lambda x: x.agg_method.replace(
-                {"cap_wt_avg": "sum", "mode": mode}
-            )
-        )
         coi = (
             pd.read_parquet(PACKAGE_PATH / "unit_level_costs_with_flag.parquet.gzip")
-            .rename(
-                columns=col_info.old_names.reset_index()
-                .set_index("old_names")
-                .dropna()
-                .squeeze()
-                .to_dict()
-            )
+            .pipe(simplify_columns)
             .pipe(month_year_to_date)
-            .astype(col_info.new_type.dropna().to_dict())
-        )
+            .rename(columns={"plant_id": "plant_id_eia"})
+        )[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]]
 
         merged = (
             self.pudl_tabl.gens_eia860()
