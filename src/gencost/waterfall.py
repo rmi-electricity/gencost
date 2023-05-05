@@ -1010,10 +1010,10 @@ class DataBySubplant:
             "subplant_pollution_control_costs": "capacity_mw",
         }
 
-        if age_year == 2021:
-            age_year_str = dt.strptime("12-1-2021", "%m-%d-%Y").year
+        if age_year is not None:
+            age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
         else:
-            age_year_str = dt.utcnow.year
+            age_year_str = dt.utcnow()
         return (
             merged.query("_merge == 'both' & exists == 'both'")
             .assign(
