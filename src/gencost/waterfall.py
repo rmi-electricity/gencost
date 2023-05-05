@@ -946,18 +946,8 @@ class DataBySubplant:
             .merge(
                 coi[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]],
                 on=["plant_id_eia", "generator_id"],
-                how="outer",
+                how="left",
                 validate="m:1",
-                indicator="exists",
-            )
-            .assign(
-                gen_pollution_control_costs=lambda x: (
-                    x["pollution_control_costs_per_kw"] * x["capacity_mw"]
-                )
-                * 1000,
-                subplant_pollution_control_costs=lambda x: x.groupby(
-                    ["plant_id_eia", subplant_id_col, "report_date"]
-                )["gen_pollution_control_costs"].transform("sum"),
             )
         )
 
@@ -994,9 +984,12 @@ class DataBySubplant:
             "subcritical_tech": "capacity_mw",
             "supercritical_tech": "capacity_mw",
             "ultrasupercritical_tech": "capacity_mw",
+            "age_from_report_year": "capacity_mw",
             "avg_age_from_report_year": "capacity_mw",
             "current_avg_age": "capacity_mw",
-            "subplant_pollution_control_costs": "capacity_mw",
+            "age_of_observation": "capacity_mw",
+            "age_relative_to_avg": "capacity_mw",
+            "pollution_control_costs_per_kw": "capacity_mw",
         }
 
         if age_year is not None:
@@ -1004,21 +997,24 @@ class DataBySubplant:
         else:
             age_year_str = dt.utcnow()
         return (
-            merged.query("_merge == 'both' & exists == 'both'")
+            merged.query("_merge == 'both'")
             .assign(
                 age_from_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
                 ).dt.days
-                / 365.25
+                / 365.25,
                 avg_age_from_report_year=lambda x: x.groupby(
                     ["plant_id_eia", subplant_id_col]
                 )["age_from_report_year"].transform("mean"),
-                current_age=lambda x: age_year_str
-                - x["generator_operating_date"].dt.year,
+                current_age=lambda x: (
+                    age_year_str - x["generator_operating_date"]
+                ).dt.days
+                / 365.25,
                 current_avg_age=lambda x: x.groupby(["plant_id_eia", subplant_id_col])[
                     "current_age"
                 ].transform("mean"),
-                age_of_observation=lambda x: age_year_str - x["report_date"].dt.year,
+                age_of_observation=lambda x: (age_year_str - x["report_date"]).dt.days
+                / 365.25,
                 age_relative_to_avg=lambda x: x["current_age"]
                 - x["avg_age_from_report_year"],
             )
@@ -1036,14 +1032,6 @@ class DataBySubplant:
                 wtavg_dict=wtavg_dict,
             )
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
-            .assign(
-                pollution_control_costs_per_kw=lambda x: x[
-                    "subplant_pollution_control_costs"
-                ]
-                / x["capacity_mw"]
-                / 1000
-            )
-            .drop(columns=["subplant_pollution_control_costs"])
         )
 
         # return (
