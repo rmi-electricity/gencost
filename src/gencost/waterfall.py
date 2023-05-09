@@ -1,6 +1,7 @@
 import logging
 import shutil
 import warnings
+from datetime import datetime as dt
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,6 @@ from etoolbox.utils.pudl_helpers import (
     sum_and_weighted_average_agg,
 )
 from etoolbox.utils.remote_zip import RemoteIOError, RemoteZip
-from datetime import datetime as dt
 from platformdirs import user_cache_path, user_documents_path
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -27,34 +27,11 @@ from gencost.package_data import PACKAGE_PATH
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
 logger = logging.getLogger(__name__)
-FUEL_COLS = [
-    "biofuel_mmbtu",
-    "coal_mmbtu",
-    "natural_gas_mmbtu",
-    "other_mmbtu",
-    "other_gas_mmbtu",
-    "petroleum_mmbtu",
-    "petroleum_coke_mmbtu",
-]
-MWH_COLS = [
-    "biofuel_bf_gross_mwh",
-    "coal_bf_gross_mwh",
-    "natural_gas_bf_gross_mwh",
-    "other_bf_gross_mwh",
-    "other_gas_bf_gross_mwh",
-    "petroleum_bf_gross_mwh",
-    "petroleum_coke_bf_gross_mwh",
-]
 
 
 def subplants_in_scenario_one(gen_923_by_subplant):
-    """
-
-    Make a list of sub-plant composite key that work in scenario #1,
-    so we don't have to try to match them in scenario 2.
-
-    """
-
+    """Make a list of sub-plant composite key that work in scenario #1,
+    so we don't have to try to match them in scenario 2."""
     return (
         gen_923_by_subplant.assign(
             year=lambda x: x.report_date.dt.year,
@@ -70,6 +47,17 @@ def subplants_in_scenario_one(gen_923_by_subplant):
 def mode(x):
     """Custom mode agg func."""
     a = pd.Series(x).mode()
+    if len(a) == 0:
+        return pd.NA
+    if len(a) == 1:
+        return a[0]
+    else:
+        return ", ".join(map(str, a))
+
+
+def sorted_unique_cat(x):
+    """Custom unique cat function."""
+    a = sorted(set(x))
     if len(a) == 0:
         return pd.NA
     if len(a) == 1:
@@ -97,31 +85,27 @@ def drop_zero_cols(df, keep=("solid_fuel_gasification",)):
 
 
 def _hr(df, by, mmbtu_col, mwh_col):
-    """Calculate aggregated heat rate.
-
-    Args:
-        df:
-        by:
-        mmbtu_col:
-        mwh_col:
-
-    Returns:
-
-    """
+    """Calculate aggregated heat rate."""
     return df.groupby(by)[mmbtu_col].transform("sum") / df.groupby(by)[
         mwh_col
     ].transform("sum")
 
 
-def positive_heat_rate(df, mmbtu_col, mwh_col):
+def positive_heat_rate(
+    df: pd.DataFrame,
+    mmbtu_col: str,
+    mwh_col: str,
+    src: bool = False,
+) -> np.ndarray | pd.Series:
     """Find the best non-negative heat rate.
 
     Args:
-        df:
-        mmbtu_col:
-        mwh_col:
+        df: input dataframe
+        mmbtu_col: name of fuel consumption column to use
+        mwh_col: name of generation column to use
+        src: if True return source of heat rate rather than data
 
-    Returns:
+    Returns: array-like of non-negative heat rates or their source
 
     """
     hr = df[mmbtu_col] / df[mwh_col]
@@ -129,14 +113,41 @@ def positive_heat_rate(df, mmbtu_col, mwh_col):
         df, ["plant_id_eia", "prime_mover", "fuel_group"], mmbtu_col, mwh_col
     )
     avg_pf_hr = _hr(df, ["prime_mover", "fuel_group"], mmbtu_col, mwh_col)
+    avg_p_hr = _hr(df, ["prime_mover"], mmbtu_col, mwh_col)
+    if not np.all(avg_p_hr >= 0.0):
+        x_ = df.assign(avg_p_hr=avg_p_hr)
+        bad = x_[x_.prime_mover.isin(FOSSIL_PRIME_MOVER_MAP.values()) & x_.avg_p_hr < 0]
+        if not bad.empty:
+            bad = (
+                bad.groupby(["prime_mover", "fuel_group"])
+                .plant_id_eia.nunique()
+                .to_dict()
+            )
+            raise AssertionError(
+                f"Count of plants with negative heat rates in all aggregations:\n{bad}"
+            )
+
+    if src:
+        return np.where(
+            hr > 0.0,
+            "no agg",
+            np.where(
+                avg_ppf_hr > 0.0,
+                "plant prime fuel",
+                np.where(avg_pf_hr > 0.0, "prime fuel", "prime"),
+            ),
+        )
     return np.where(
         hr > 0.0,
         hr,
-        np.where(avg_ppf_hr > 0.0, avg_ppf_hr, avg_pf_hr),
+        np.where(
+            avg_ppf_hr > 0.0, avg_ppf_hr, np.where(avg_pf_hr > 0.0, avg_pf_hr, avg_p_hr)
+        ),
     )
 
 
 def bio_into_other(df, col_suffix):
+    """Filter with columns suffix and combine biofuel into other."""
     filter_cols = list(df.filter(like=col_suffix).columns)
     if len(filter_cols) == 0:
         raise ValueError(
@@ -149,7 +160,28 @@ def bio_into_other(df, col_suffix):
     return filtered.drop(columns=["biofuel" + col_suffix])
 
 
-def allocate_col_by(df, *, to_allocate, new_suffix, old_suffix, fillna=None, drop=True):
+def allocate_col_by(
+    df: pd.DataFrame,
+    *,
+    to_allocate: str,
+    new_suffix: str,
+    old_suffix: str,
+    fillna: int | float | str | None = None,
+    drop: bool = True,
+):
+    """Allocate a column proportionally using values in a set of columns.
+
+    Args:
+        df: input dataframe
+        to_allocate: the column that will be allocated
+        new_suffix: suffix that will replace the old one in the new columns
+        old_suffix: suffix of columns to use for allocation
+        fillna: fill nans in new columns with new value
+        drop: drop the old_suffix columns
+
+    Returns:
+
+    """
     old_cols = list(df.filter(like=old_suffix).columns)
     new_cols = [x.replace(old_suffix, new_suffix) for x in old_cols]
     df[new_cols] = np.where(
@@ -1229,21 +1261,6 @@ class DataBySubplant:
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
         )
 
-        # return (
-        #     merged.query("_merge == 'both'")
-        #     .drop(columns=["_merge"])
-        #     .groupby(
-        #         [
-        #             "plant_id_eia",
-        #             subplant_id_col,
-        #             pd.Grouper(key="report_date", freq="YS"),
-        #         ]
-        #     )
-        #     .capacity_mw.sum()
-        #     .reset_index()
-        #     .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
-        # )
-
     def get_gen923_by_subplant(self):
         """
         Args:
@@ -1349,6 +1366,9 @@ class DataBySubplant:
                 # calculate boiler fuel ~mwh using heat rates from gf923
                 bf_gross_mwh=lambda x: x.fuel_consumed_mmbtu
                 / positive_heat_rate(x, "gf_mmbtu", "gf_mwh"),
+                # hr_src=lambda x: positive_heat_rate(
+                #     x, "gf_mmbtu", "gf_mwh", src=True
+                # ),
                 bf_net_mwh=lambda x: x.fuel_consumed_mmbtu * x.gf_mwh / x.gf_mmbtu,
             )
         )
@@ -1440,7 +1460,12 @@ class DataBySubplant:
                 ],
                 columns="fuel_group",
                 values=["bf_gross_mwh", "bf_net_mwh", "mmbtu"],
-                aggfunc="sum",
+                aggfunc={
+                    "bf_gross_mwh": "sum",
+                    "bf_net_mwh": "sum",
+                    "mmbtu": "sum",
+                    # "hr_src": sorted_unique_cat,
+                },
             )
             .reorder_levels([1, 0], axis=1)
         )
@@ -1503,6 +1528,9 @@ class DataBySubplant:
                 report_year=lambda x: x.report_date.dt.year,
                 bf_gross_mwh=lambda x: x.fuel_consumed_mmbtu
                 / positive_heat_rate(x, "fuel_consumed_mmbtu", "net_generation_mwh"),
+                # hr_src=lambda x: positive_heat_rate(
+                #     x, "fuel_consumed_mmbtu", "net_generation_mwh", src=True
+                # ),
             )
             .merge(
                 pf_crosswalk[["plant_id_eia", "subplant_id", "prime_mover"]],
@@ -1542,7 +1570,12 @@ class DataBySubplant:
                 ],
                 columns="fuel_group",
                 values=["net_mwh", "bf_gross_mwh", "mmbtu"],
-                aggfunc="sum",
+                aggfunc={
+                    "bf_gross_mwh": "sum",
+                    "net_mwh": "sum",
+                    "mmbtu": "sum",
+                    # "hr_src": sorted_unique_cat,
+                },
             )
             .reorder_levels([1, 0], axis=1)
         )
@@ -1580,6 +1613,9 @@ class DataBySubplant:
             .assign(
                 bf_gross_mwh=lambda x: x.fuel_consumed_mmbtu
                 / positive_heat_rate(x, "fuel_consumed_mmbtu", "net_generation_mwh"),
+                # hr_src=lambda x: positive_heat_rate(
+                #     x, "fuel_consumed_mmbtu", "net_generation_mwh", src=True
+                # ),
             )
             .rename(
                 columns={
@@ -1591,7 +1627,12 @@ class DataBySubplant:
                 index=["plant_id_eia", "prime_mover", "report_date"],
                 columns="fuel_group",
                 values=["net_mwh", "bf_gross_mwh", "mmbtu"],
-                aggfunc="sum",
+                aggfunc={
+                    "bf_gross_mwh": "sum",
+                    "net_mwh": "sum",
+                    "mmbtu": "sum",
+                    # "hr_src": sorted_unique_cat,
+                },
             )
             .reorder_levels([1, 0], axis=1)
         )
