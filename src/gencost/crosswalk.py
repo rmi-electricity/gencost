@@ -736,6 +736,13 @@ class Crosswalk:
         )
         return self._grand_xwalk
 
+    def multiprime(self, subplant_id_col):
+        return self._grand_xwalk.assign(
+            pm_count=lambda x: x.groupby(
+                ["plant_id_eia", subplant_id_col]
+            ).prime_mover.transform(pd.Series.nunique)
+        ).query("pm_count > 1")
+
     @property
     def safe_xwalk(self):
         return self._grand_xwalk[self._grand_xwalk.single_prime]
@@ -816,15 +823,23 @@ class Crosswalk:
         """
         eia_860 = (
             self.pudl_tabl.gens_eia860()
-            .query(
-                "prime_mover_code.notnull() "
-                # "& prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
-            )
+            .query("prime_mover_code.notnull() ")
+            .sort_values(["plant_id_eia", "generator_id", "report_date"])
             .assign(
-                prime_mover=lambda x: x["prime_mover_code"].replace(
+                prime_mover_=lambda x: x["prime_mover_code"].replace(
                     FOSSIL_PRIME_MOVER_MAP
                 ),
-                capacity_xwalk=lambda x: x.capacity_mw,
+                # because some of these can change over time, want to make sure we get
+                # the most recent and only the most recent value
+                prime_mover=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id"]
+                ).prime_mover_.transform("last"),
+                capacity_xwalk=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id"]
+                ).capacity_mw.transform("last"),
+                generator_operating_date=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id"]
+                ).generator_operating_date.transform("last"),
             )
             .melt(
                 id_vars=[
