@@ -1,4 +1,3 @@
-import datetime
 import logging
 import shutil
 import warnings
@@ -37,6 +36,15 @@ FUEL_COLS = [
     "petroleum_mmbtu",
     "petroleum_coke_mmbtu",
 ]
+MWH_COLS = [
+    "biofuel_bf_gross_mwh",
+    "coal_bf_gross_mwh",
+    "natural_gas_bf_gross_mwh",
+    "other_bf_gross_mwh",
+    "other_gas_bf_gross_mwh",
+    "petroleum_bf_gross_mwh",
+    "petroleum_coke_bf_gross_mwh",
+]
 
 
 def subplants_in_scenario_one(gen_923_by_subplant):
@@ -70,19 +78,98 @@ def mode(x):
         return ", ".join(map(str, a))
 
 
-def add_metrics(df):
-    return df.assign(
-        net_cf=lambda x: x.net_generation_mwh / (x.capacity_mw * 8760),
-        net_hr=lambda x: x.fuel_consumed_for_electricity_mmbtu / x.net_generation_mwh,
+def fix_cc_in_prime(df, old_col="prime_mover_code"):
+    """Add prime_mover call with CCs rolled together."""
+    return df.assign(prime_mover=lambda x: x[old_col].replace(FOSSIL_PRIME_MOVER_MAP))
+
+
+def add_fuel_group(df, old_col="energy_source_code"):
+    """Add new column with fuel groups."""
+    return df.assign(fuel_group=lambda x: x[old_col].replace(FUEL_GROUP_MAP))
+
+
+def drop_zero_cols(df, keep=("solid_fuel_gasification",)):
+    """Drop numeric columns that sum to zero."""
+    non_zeros = df.sum(axis=0, numeric_only=True) != 0
+    for col in keep:
+        non_zeros.loc[col] = True
+    return df.loc[:, [non_zeros.get(x, True) for x in df.columns]]
+
+
+def _hr(df, by, mmbtu_col, mwh_col):
+    """Calculate aggregated heat rate.
+
+    Args:
+        df:
+        by:
+        mmbtu_col:
+        mwh_col:
+
+    Returns:
+
+    """
+    return df.groupby(by)[mmbtu_col].transform("sum") / df.groupby(by)[
+        mwh_col
+    ].transform("sum")
+
+
+def positive_heat_rate(df, mmbtu_col, mwh_col):
+    """Find the best non-negative heat rate.
+
+    Args:
+        df:
+        mmbtu_col:
+        mwh_col:
+
+    Returns:
+
+    """
+    hr = df[mmbtu_col] / df[mwh_col]
+    avg_ppf_hr = _hr(
+        df, ["plant_id_eia", "prime_mover", "fuel_group"], mmbtu_col, mwh_col
+    )
+    avg_pf_hr = _hr(df, ["prime_mover", "fuel_group"], mmbtu_col, mwh_col)
+    return np.where(
+        hr > 0.0,
+        hr,
+        np.where(avg_ppf_hr > 0.0, avg_ppf_hr, avg_pf_hr),
     )
 
 
-def filter_fuels(df):
-    return (
-        df[FUEL_COLS]
-        .assign(other_net_mwh=lambda x: x.other_mmbtu + x.biofuel_mmbtu)
-        .drop(columns=["biofuel_mmbtu"])
+def bio_into_other(df, col_suffix):
+    filter_cols = list(df.filter(like=col_suffix).columns)
+    if len(filter_cols) == 0:
+        raise ValueError(
+            f"Cannot combine biofuel into other, no columns with {col_suffix=}"
+        )
+    filtered = df[filter_cols]
+    filtered["other" + col_suffix] = (
+        filtered["other" + col_suffix] + filtered["biofuel" + col_suffix]
     )
+    return filtered.drop(columns=["biofuel" + col_suffix])
+
+
+def allocate_col_by(df, *, to_allocate, new_suffix, old_suffix, fillna=None, drop=True):
+    old_cols = list(df.filter(like=old_suffix).columns)
+    new_cols = [x.replace(old_suffix, new_suffix) for x in old_cols]
+    df[new_cols] = np.where(
+        # np.repeat(df[old_cols].sum(axis=1)[:, np.newaxis], len(old_cols), 1) != 0.0,
+        df[old_cols] != 0.0,
+        df[old_cols]
+        .divide(df[old_cols].sum(axis=1), axis=0)
+        .multiply(df[to_allocate], axis=0),
+        np.where(
+            np.repeat(df[old_cols].isna().sum(axis=1)[:, np.newaxis], len(old_cols), 1)
+            == len(old_cols) - 1,
+            np.repeat(df[to_allocate][:, np.newaxis], len(old_cols), 1),
+            0.0,
+        ),
+    )
+    if fillna is not None:
+        df[new_cols] = df[new_cols].fillna(fillna)
+    if drop:
+        return df.drop(columns=old_cols)
+    return df
 
 
 def wage_data(
@@ -206,10 +293,7 @@ class DataBySubplant:
 
     def merge_all(self, clean=True, rollup=False):
         if "merge_all" not in self._dfs:
-            exa = self.get_exa_all().pipe(self.add_costs)
-            # ags = self.get_additional_generator_specs_by_x(
-            #     subplant_id_col="pf_subplant_id"
-            # )
+            exa = self.get_exa_all().pipe(self.add_costs, on="pf_subplant_id")
 
             if rollup:
                 aggs = {
@@ -227,8 +311,9 @@ class DataBySubplant:
                 out = exa
 
             test = (
-                out.query("_merge != 'both'")
-                .groupby(["_merge", "report_date"])
+                out.query("ferc_merge != 'both'")
+                .replace({"ferc_merge": {"left_only": "exa", "right_only": "ferc"}})
+                .groupby(["ferc_merge", "prime_mover"])
                 .plant_id_eia.nunique()
                 .to_frame()
                 .query("plant_id_eia > 0")
@@ -236,19 +321,19 @@ class DataBySubplant:
             )
             logger.warning(
                 "Final merge stats, only those marked 'all' will be retained "
-                "('+' means additional generator specs were available):\n %s \n",
+                ":\n %s \n",
                 test.squeeze().to_dict(),
             )
+            print(test.squeeze().to_dict())
+            gross_mwh_cols = out.filter(like="_gross_mwh").columns
             out = (
-                out.query("_merge == 'both'")
+                out.query("ferc_merge == 'both'")
                 .assign(
                     hrs_in_yr=lambda x: np.where(
                         x.report_date.dt.is_leap_year, 8784, 8760
                     ),
                     net_cf=lambda x: x.net_generation_mwh
                     / (x.capacity_mw * x.hrs_in_yr),
-                    net_hr=lambda x: x.fuel_consumed_for_electricity_mmbtu
-                    / x.net_generation_mwh,
                     gross_cf=lambda x: x.gross_generation_mwh
                     / (x.capacity_mw * x.hrs_in_yr),
                     gross_hr=lambda x: x.heat_in_mmbtu / x.gross_generation_mwh,
@@ -256,58 +341,44 @@ class DataBySubplant:
                         x.gross_generation_mwh - x.net_generation_mwh
                     )
                     / (x.capacity_mw * x.hrs_in_yr),
-                    # average_age_in_report_year=lambda x: (
-                    #     x.report_date - x.operating_date
-                    # ).dt.days
-                    # / 365.25,
-                    n_fuel_groups=lambda x: (x[FUEL_COLS] / x[FUEL_COLS].sum(axis=1))
+                    n_fuel_groups=lambda x: (
+                        x[gross_mwh_cols] / x[gross_mwh_cols].sum(axis=1)
+                    )
                     .gt(0.02)
                     .sum(axis=1)
                     .astype("Int64"),
-                    top_fuel_share=lambda x: filter_fuels(x).max(axis=1)
-                    / x[FUEL_COLS].sum(axis=1),
-                    top_fuel=lambda x: filter_fuels(x)
+                    top_fuel_share=lambda x: bio_into_other(x, "_gross_mwh").max(axis=1)
+                    / x[gross_mwh_cols].sum(axis=1),
+                    top_fuel=lambda x: bio_into_other(x, "_gross_mwh")
+                    .fillna(0.0)
                     .idxmax(axis=1)
-                    .str.replace("_mmbtu", ""),
+                    .str.replace("_gross_mwh", ""),
                     true_multi_fuel="multi_fuel",
                     fuel_category=lambda x: x.true_multi_fuel.mask(
                         x.top_fuel_share >= 0.6,
                         "≥60% " + x.top_fuel,
                     ).mask(x.top_fuel_share >= 0.9, x.top_fuel),
                     report_year=lambda x: x.report_date.dt.year,
-                    # _age_cap=lambda x: x.age * x.capacity_mw,
-                    # _age_prime_fuel_average=lambda x: x.groupby(
-                    #     ["prime_mover", "top_fuel"]
-                    # )._age_cap.transform("sum")
-                    # / x.groupby(["prime_mover", "top_fuel"]).capacity_mw.transform(
-                    #     "sum"
-                    # ),
-                    # age_relative_to_average2=lambda x: x.age
-                    # - x._age_prime_fuel_average,
                 )
                 .drop(
                     columns=[
-                        "_merge",
+                        "ferc_merge",
                         "hrs_in_yr",
                         "true_multi_fuel",
-                        # "exa_cost",
-                        # "_age_cap",
-                        # "_age_prime_fuel_average",
                     ]
                 )
             )
 
-            # add gross cfs by fuel group
-            out[[x.replace("_mmbtu", "_gross_cf") for x in FUEL_COLS]] = (
-                out[FUEL_COLS]
-                .divide(out[FUEL_COLS].sum(axis=1), axis=0)
-                .multiply(out.gross_generation_mwh, axis=0)
-                .divide(
-                    out.capacity_mw
-                    * np.where(out.report_date.dt.is_leap_year, 8784, 8760),
-                    axis=0,
-                )
-            )
+            # out[[x.replace("_mwh", "_gross_cf") for x in MWH_COLS]] = (
+            #     out[MWH_COLS]
+            #     .divide(out[MWH_COLS].sum(axis=1), axis=0)
+            #     .multiply(out.gross_generation_mwh, axis=0)
+            #     .divide(
+            #         out.capacity_mw
+            #         * np.where(out.report_date.dt.is_leap_year, 8784, 8760),
+            #         axis=0,
+            #     )
+            # )
             self._dfs["merge_all"] = out
 
         if clean:
@@ -315,7 +386,7 @@ class DataBySubplant:
                 self._dfs["merge_all"]
                 # numexpr / query cannot deal with nullable floats
                 .astype({"parasitic_load_pct": float, "gross_cf": float})
-                .query("0.0 < parasitic_load_pct < 100.0 & 0.0 <= gross_cf <= 1.5")
+                .query("0.0 < parasitic_load_pct < 0.2 & 0.0 <= gross_cf <= 1.5")
                 .astype({"parasitic_load_pct": "Float64", "gross_cf": "Float64"})
                 .copy()
             )
@@ -421,18 +492,17 @@ class DataBySubplant:
             "subplant_id": "Int64",
             "report_date": "datetime64[ns]",
             "step": "Int64",
-            "capacity_mw": "Float64",
-            "camd_capacity_mw": "Float64",
-            "net_generation_mwh": "Float64",
-            "fuel_consumed_for_electricity_mmbtu": "Float64",
+            "capacity_mw": "float64",
+            "camd_capacity_mw": "float64",
+            "net_generation_mwh": "float64",
             "generator_starts": "Int64",
             "fuel_starts": "Int64",
-            "gross_generation_mwh": "Float64",
-            "heat_in_mmbtu": "Float64",
+            "gross_generation_mwh": "float64",
+            "heat_in_mmbtu": "float64",
         }
-        return ppf_and_waterfall.astype(
-            {k: "Float64" for k in ppf_and_waterfall} | types
-        )[list(types) + [x for x in ppf_and_waterfall if x not in types]]
+        return ppf_and_waterfall.astype(types)[
+            list(types) + [x for x in ppf_and_waterfall if x not in types]
+        ]
 
     def get_exa_by_prime(self):
         if "exa_by_prime" not in self._dfs:
@@ -448,12 +518,7 @@ class DataBySubplant:
                 .drop(columns=["_merge"])
                 .dropna(axis=1, how="all")
             )
-
-            non_zeros = out.sum(axis=0) != 0
-            non_zeros.loc["solid_fuel_gasification"] = True
-            self._dfs["exa_by_prime"] = out.loc[
-                :, [non_zeros.get(x, True) for x in out.columns]
-            ]
+            self._dfs["exa_by_prime"] = drop_zero_cols(out)
         return self._dfs["exa_by_prime"]
 
     def _exa_by_prime(self):
@@ -466,17 +531,16 @@ class DataBySubplant:
             on=["plant_id_eia", "pf_subplant_id", "report_date"],
             validate="1:1",
             how="right",
-            indicator=True,
-        ).rename(columns={"_merge": "eia_merge"})
+            indicator="eia_merge",
+        )
         merged = (
             merged0.merge(
                 df_cems,
                 on=["plant_id_eia", "pf_subplant_id", "report_date"],
                 validate="1:1",
-                how="outer",
-                indicator=True,
+                how="left",
+                indicator="exa_merge",
             )
-            .rename(columns={"_merge": "exa_merge"})
             .assign(
                 _merge=lambda x: x[["eia_merge", "exa_merge"]]
                 .astype("string")
@@ -487,12 +551,23 @@ class DataBySubplant:
                         "both,both": "all",
                         "both,left_only": "eia_only",
                         "right_only,both": "923_epa",
-                        ",right_only": "epa_only",
                     }
                 )
             )
             .drop(columns=["eia_merge", "exa_merge"])
         )
+
+        # bf_gross_mwh columns are not true gross generation, they are really
+        # calculated from fuel consumption and never negative HRs, but those are
+        # net HRs
+        merged = allocate_col_by(
+            merged,
+            to_allocate="gross_generation_mwh",
+            new_suffix="_gross_mwh",
+            old_suffix="_bf_gross_mwh",
+            drop=True,
+        )
+
         return merged
 
     def get_exa_by_subplant(self, by_fuel=True):
@@ -516,36 +591,48 @@ class DataBySubplant:
             df_bf923 = self.get_bf923_by_subplant()
 
             # add fuel consumption data to make waterfall step one complete
-            waterfall_step_one = df_gen923.merge(
+            wf1 = df_gen923.merge(
                 df_bf923,
                 on=["plant_id_eia", "subplant_id", "report_date"],
                 how="inner",
                 validate="1:1",
             )
 
-            # create mwh by fuel columns
-            cols = list(waterfall_step_one.filter(like="_bf_mwh").columns)
-            waterfall_step_one[[x.replace("_bf_mwh", "_net_mwh") for x in cols]] = (
-                waterfall_step_one[cols]
-                .divide(waterfall_step_one[cols].sum(axis=1), axis=0)
-                .multiply(waterfall_step_one.net_generation_mwh, axis=0)
+            # create net_mwh by fuel columns
+            wf1 = allocate_col_by(
+                wf1,
+                to_allocate="net_generation_mwh",
+                new_suffix="_net_mwh",
+                old_suffix="_bf_net_mwh",
+                drop=True,
             )
-            waterfall_step_one = waterfall_step_one.assign(
-                fuel_consumed_mmbtu=lambda x: x.filter(like="_mmbtu").sum(axis=1)
-            ).drop(columns=cols)
+            logger.warning(
+                "Dropping %s rows from waterfall step one because net generation "
+                "allocation by fuel failed.",
+                np.sum(
+                    ~np.isclose(
+                        wf1.net_generation_mwh, wf1.filter(like="_net_mwh").sum(axis=1)
+                    )
+                ),
+            )
+            wf1 = wf1[
+                np.isclose(
+                    wf1.net_generation_mwh, wf1.filter(like="_net_mwh").sum(axis=1)
+                )
+            ]
 
             # waterfall step 2:
-            waterfall_step_two = self.get_gf923_by_subplant(
+            wf2 = self.get_gf923_by_subplant(
                 # crosswalk with prime fuel from crosswalk class, used OGE version so
                 # preserving that for now
-                subplants_in_scenario_one(df_gen923),
+                subplants_in_scenario_one(wf1),
             )
 
             # now that both waterfall steps have generation and fuel consumption,
             # let's concat them
-            waterfall = pd.concat(
-                [waterfall_step_one.assign(step=1), waterfall_step_two.assign(step=2)]
-            ).sort_values(by=["plant_id_eia", "subplant_id", "report_date"])
+            waterfall = pd.concat([wf1.assign(step=1), wf2.assign(step=2)]).sort_values(
+                by=["plant_id_eia", "subplant_id", "report_date"]
+            )
 
             # merge cems and 860 data
             merged = (
@@ -554,17 +641,15 @@ class DataBySubplant:
                     on=["plant_id_eia", "subplant_id", "report_date"],
                     validate="1:1",
                     how="right",
-                    indicator=True,
+                    indicator="eia_merge",
                 )
-                .rename(columns={"_merge": "eia_merge"})
                 .merge(
                     df_cems,
                     on=["plant_id_eia", "subplant_id", "report_date"],
                     validate="1:1",
                     how="outer",
-                    indicator=True,
+                    indicator="exa_merge",
                 )
-                .rename(columns={"_merge": "exa_merge"})
                 .assign(
                     _merge=lambda x: x[["eia_merge", "exa_merge"]]
                     .astype("string")
@@ -588,13 +673,32 @@ class DataBySubplant:
                 "waterfall 1 and 2:\n %s \n",
                 test.squeeze().to_dict(),
             )
+            # bf_gross_mwh columns are not true gross generation, they are really
+            # calculated from fuel consumption and never negative HRs, but those are
+            # net HRs
+            merged = allocate_col_by(
+                merged,
+                to_allocate="gross_generation_mwh",
+                new_suffix="_gross_mwh",
+                old_suffix="_bf_gross_mwh",
+                drop=True,
+            )
 
-            waterfall = merged.query("_merge == 'all'").drop(columns=["_merge"])
-            non_zeros = waterfall.sum(axis=0) != 0
-            non_zeros.loc["solid_fuel_gasification"] = True
-            self._dfs["waterfall"] = waterfall.loc[
-                :, [non_zeros.get(x, True) for x in waterfall.columns]
-            ]
+            merged = drop_zero_cols(
+                merged.query("_merge == 'all'").drop(columns=["_merge"])
+            )
+            close = np.isclose(
+                merged.gross_generation_mwh,
+                merged.filter(like="_gross_mwh").sum(axis=1),
+                rtol=2e-2,
+            )
+            logger.warning(
+                "Dropping %s rows from waterfall steps one+two because gross "
+                "generation allocation by fuel failed.",
+                np.sum(~close),
+            )
+            merged = merged[close]
+            self._dfs["waterfall"] = merged
         return self._dfs["waterfall"]
 
     def export_data_by_prime(self, name=None, clean=True):
@@ -818,17 +922,23 @@ class DataBySubplant:
                 "& prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
             )
             .copy()
-            .assign(
-                prime_mover=lambda x: x.prime_mover_code.replace(
-                    FOSSIL_PRIME_MOVER_MAP
-                ),
-                year=lambda x: x.report_date.dt.year,
-            )[["plant_id_eia", "generator_id", "year", "prime_mover", "capacity_mw"]]
+            .pipe(fix_cc_in_prime)
+            .assign(year=lambda x: x.report_date.dt.year)[
+                [
+                    "plant_id_eia",
+                    "generator_id",
+                    "year",
+                    "prime_mover",
+                    "capacity_mw",
+                    "report_date",
+                ]
+            ]
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             cems = (
                 self.get_cems()
+                .assign(year=lambda x: x.report_date.dt.year)
                 .merge(
                     self.xwalk.dropna(
                         axis=0, subset=["plant_id_epa", "emissions_unit_id_epa"]
@@ -836,65 +946,155 @@ class DataBySubplant:
                     on=["plant_id_epa", "emissions_unit_id_epa"],
                     how="inner",
                     validate="m:m",
-                )[["plant_id_eia", "generator_id"]]
+                )[["plant_id_eia", "generator_id", "year"]]
                 .drop_duplicates()
             )
         cems_covered = df860.merge(
             cems,
-            on=["plant_id_eia", "generator_id"],
+            on=["plant_id_eia", "generator_id", "year"],
             how="inner",
-            validate="m:1",
-        ).assign(series="cems_matched")
-        ppf_covered = df860.merge(
+            validate="1:1",
+        ).assign(series="camd_matched")
+
+        ferc_matched = (
+            self.add_costs(df860, on="prime_mover")
+            .query("ferc_merge == 'both'")
+            .assign(series="ferc_matched")
+        )
+        cems_ferc = (
+            self.add_costs(cems_covered, on="prime_mover")
+            .query("ferc_merge == 'both'")
+            .assign(series="camd_ferc")
+        )
+
+        df860.merge(
             self.xwalk.merge(
-                self.merge_all(clean=False)[
-                    ["plant_id_eia", "pf_subplant_id"]
-                ].drop_duplicates(),
-                on=["plant_id_eia", "pf_subplant_id"],
-                how="inner",
-                validate="m:1",
-            )[["plant_id_eia", "generator_id"]].drop_duplicates(),
-            on=["plant_id_eia", "generator_id"],
-            how="inner",
-            validate="m:1",
-        ).assign(series="final_merge")
-        ppf_clean = df860.merge(
-            self.xwalk.merge(
-                self.merge_all(clean=True)[
-                    ["plant_id_eia", "pf_subplant_id"]
-                ].drop_duplicates(),
-                on=["plant_id_eia", "pf_subplant_id"],
-                how="inner",
-                validate="m:1",
-            )[["plant_id_eia", "generator_id"]].drop_duplicates(),
-            on=["plant_id_eia", "generator_id"],
-            how="inner",
-            validate="m:1",
-        ).assign(series="cleaned")
-        very_clean = df860.merge(
-            self.xwalk.merge(
-                self.merge_all(clean=True)
-                .assign(max_gross=lambda x: np.where(x.net_cf > 0, x.net_cf * 1.5, 1))
-                .astype({"gross_cf": float, "net_cf": float, "max_gross": float})
-                .query("gross_cf > net_cf & gross_cf < max_gross")[
-                    ["plant_id_eia", "pf_subplant_id"]
+                self.get_exa_by_prime()
+                .assign(year=lambda x: x.report_date.dt.year)[
+                    ["plant_id_eia", "pf_subplant_id", "year"]
                 ]
                 .drop_duplicates(),
                 on=["plant_id_eia", "pf_subplant_id"],
                 how="inner",
-                validate="m:1",
-            )[["plant_id_eia", "generator_id"]].drop_duplicates(),
-            on=["plant_id_eia", "generator_id"],
+                validate="m:m",
+            )[["plant_id_eia", "generator_id", "year"]].drop_duplicates(),
+            on=["plant_id_eia", "generator_id", "year"],
             how="inner",
-            validate="m:1",
-        ).assign(series="very_clean")
+            validate="1:1",
+        ).assign(series="exa_prime")
+
+        df860.merge(
+            self.xwalk.merge(
+                self.get_exa_by_subplant()
+                .assign(year=lambda x: x.report_date.dt.year)[
+                    ["plant_id_eia", "subplant_id", "year"]
+                ]
+                .drop_duplicates(),
+                on=["plant_id_eia", "subplant_id"],
+                how="inner",
+                validate="m:m",
+            )[["plant_id_eia", "generator_id", "year"]].drop_duplicates(),
+            on=["plant_id_eia", "generator_id", "year"],
+            how="inner",
+            validate="1:1",
+        ).assign(series="exa_subplant")
+
+        exa_all = df860.merge(
+            self.xwalk.merge(
+                self.get_exa_all()
+                .assign(year=lambda x: x.report_date.dt.year)[
+                    ["plant_id_eia", "pf_subplant_id", "year"]
+                ]
+                .drop_duplicates(),
+                on=["plant_id_eia", "pf_subplant_id"],
+                how="inner",
+                validate="m:m",
+            )[["plant_id_eia", "generator_id", "year"]].drop_duplicates(),
+            on=["plant_id_eia", "generator_id", "year"],
+            how="inner",
+            validate="1:1",
+        ).assign(series="exa_all")
+
+        ppf_covered = df860.merge(
+            self.xwalk.merge(
+                self.merge_all(clean=False)
+                .assign(year=lambda x: x.report_date.dt.year)[
+                    ["plant_id_eia", "pf_subplant_id", "year"]
+                ]
+                .drop_duplicates(),
+                on=["plant_id_eia", "pf_subplant_id"],
+                how="inner",
+                validate="m:m",
+            )[["plant_id_eia", "generator_id", "year"]].drop_duplicates(),
+            on=["plant_id_eia", "generator_id", "year"],
+            how="inner",
+            validate="1:1",
+        ).assign(series="final_merge")
+        ppf_clean = df860.merge(
+            self.xwalk.merge(
+                self.merge_all(clean=True)
+                .assign(year=lambda x: x.report_date.dt.year)[
+                    ["plant_id_eia", "pf_subplant_id", "year"]
+                ]
+                .drop_duplicates(),
+                on=["plant_id_eia", "pf_subplant_id"],
+                how="inner",
+                validate="m:m",
+            )[["plant_id_eia", "generator_id", "year"]].drop_duplicates(),
+            on=["plant_id_eia", "generator_id", "year"],
+            how="inner",
+            validate="1:1",
+        ).assign(series="cleaned")
+
+        (
+            cems_ferc.merge(
+                exa_all,
+                on=["plant_id_eia", "generator_id", "year"],
+                how="outer",
+                indicator="cf_exa",
+                validate="1:1",
+                suffixes=("_cf", "_exa"),
+            )
+            .merge(
+                ppf_covered,
+                on=["plant_id_eia", "generator_id", "year"],
+                how="outer",
+                indicator="final",
+                validate="1:1",
+                suffixes=("_cfa", "_fin"),
+            )
+            .sort_values(["plant_id_eia", "generator_id", "year"])
+        )
+
         result = pd.concat(
             [
-                df860.assign(series="860"),
-                cems_covered,
-                ppf_covered,
-                ppf_clean,
-                very_clean,
+                # df860.assign(series="860").drop_duplicates(
+                #     subset=["plant_id_eia", "generator_id", "year"]
+                # ),
+                cems_covered.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "year"]
+                ),
+                ferc_matched.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "year"]
+                ),
+                cems_ferc.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "year"]
+                ),
+                # exa_prime.drop_duplicates(
+                #     subset=["plant_id_eia", "generator_id", "year"]
+                # ),
+                # exa_subplant.drop_duplicates(
+                #     subset=["plant_id_eia", "generator_id", "year"]
+                # ),
+                exa_all.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "year"]
+                ),
+                ppf_covered.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "year"]
+                ),
+                ppf_clean.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "year"]
+                ),
             ]
         )
         return result
@@ -1137,22 +1337,19 @@ class DataBySubplant:
         """
         bf923 = (
             self.pudl_tabl.bf_eia923()
-            .assign(
-                prime_mover=lambda x: x.prime_mover_code.replace(
-                    FOSSIL_PRIME_MOVER_MAP
-                ),
-            )
+            .pipe(fix_cc_in_prime)
+            .pipe(add_fuel_group)
             .merge(
                 self.get_elec_pf_gf923(),
-                on=["plant_id_eia", "prime_mover", "energy_source_code", "report_date"],
+                on=["plant_id_eia", "prime_mover", "energy_source_code"],
                 how="left",
                 validate="m:1",
             )
             .assign(
                 # calculate boiler fuel ~mwh using heat rates from gf923
-                bf_mwh=lambda x: x.fuel_consumed_mmbtu
-                * x.gf_mwh
-                / x.gf_mmbtu
+                bf_gross_mwh=lambda x: x.fuel_consumed_mmbtu
+                / positive_heat_rate(x, "gf_mmbtu", "gf_mwh"),
+                bf_net_mwh=lambda x: x.fuel_consumed_mmbtu * x.gf_mwh / x.gf_mmbtu,
             )
         )
 
@@ -1172,24 +1369,54 @@ class DataBySubplant:
             len(z),
         )
 
-        merged = bf923.assign(
-            fuel_group=lambda x: x.energy_source_code.map(FUEL_GROUP_MAP)
-        ).merge(
+        # test2 = bf923.set_index(["report_date", "plant_id_eia", "boiler_id"])
+        # negatives = test2[
+        #     (test2.hr < 0.0)
+        #     & (test2.fuel_consumed_mmbtu > 0.0)
+        #     & ~(
+        #         (test2.prime_mover == "CC")
+        #         & (test2.index.get_level_values("report_date") < "2015")
+        #     )
+        # ].index
+        # negatives = test2[
+        #     (
+        #         test2.groupby(
+        #             ["plant_id_eia", "boiler_id", "report_date"]
+        #         ).energy_source_code.transform(pd.Series.nunique)
+        #         > 1
+        #     )
+        #     & ~(
+        #         (test2.prime_mover == "CC")
+        #         & (test2.index.get_level_values("report_date") < "2015")
+        #     )
+        # ].index
+        # (
+        #     test2.loc[negatives, :]
+        #     .reset_index()
+        #     .sort_values(
+        #         [
+        #             "report_date",
+        #             "plant_id_eia",
+        #             "boiler_id",
+        #             "energy_source_code",
+        #         ]
+        #     )
+        #     .to_clipboard()
+        # )
+
+        merged = bf923.pipe(add_fuel_group).merge(
             self.xwalk.query("unit_id_pudl.notnull()")[
                 ["plant_id_eia", "unit_id_pudl", "subplant_id"]
             ].drop_duplicates(),
             on=["plant_id_eia", "unit_id_pudl"],
-            how="outer",
+            how="left",
             validate="m:1",
             indicator=True,
         )
 
         test = (
             merged.query("_merge != 'both' ")
-            .replace(
-                {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
-            )
-            .groupby(["_merge", "prime_mover_code"])
+            .groupby(["prime_mover_code"])
             .plant_id_eia.nunique()
             .to_frame()
             .query("plant_id_eia > 0")
@@ -1204,11 +1431,7 @@ class DataBySubplant:
             return merged
         out = (
             merged.query("_merge == 'both'")
-            .rename(
-                columns={
-                    "fuel_consumed_mmbtu": "mmbtu",
-                }
-            )
+            .rename(columns={"fuel_consumed_mmbtu": "mmbtu"})
             .pivot_table(
                 index=[
                     "plant_id_eia",
@@ -1216,13 +1439,14 @@ class DataBySubplant:
                     pd.Grouper(key="report_date", freq="YS"),
                 ],
                 columns="fuel_group",
-                values=["mmbtu", "bf_mwh"],
+                values=["bf_gross_mwh", "bf_net_mwh", "mmbtu"],
                 aggfunc="sum",
             )
             .reorder_levels([1, 0], axis=1)
         )
         out.columns = map("_".join, out.columns)
-        return out.loc[:, out.sum(axis=0) != 0].reset_index()
+        out = out.loc[:, out.sum(axis=0) != 0].reset_index()
+        return out
 
     def get_gf923_by_subplant(self, scenario_one_subplants):
         """
@@ -1272,18 +1496,18 @@ class DataBySubplant:
         # grab GF info from list of qualifying subplants
         df = (
             self.pudl_tabl.gf_eia923()
+            # moving this up top to allow CC matches
+            .pipe(fix_cc_in_prime)
+            .pipe(add_fuel_group)
             .assign(
                 report_year=lambda x: x.report_date.dt.year,
-                # moving this up top to allow CC matches
-                prime_mover=lambda x: x.prime_mover_code.replace(
-                    FOSSIL_PRIME_MOVER_MAP
-                ),
+                bf_gross_mwh=lambda x: x.fuel_consumed_mmbtu
+                / positive_heat_rate(x, "fuel_consumed_mmbtu", "net_generation_mwh"),
             )
-            # .rename(columns={"prime_mover_code": "prime_mover"})
             .merge(
                 pf_crosswalk[["plant_id_eia", "subplant_id", "prime_mover"]],
                 on=["plant_id_eia", "prime_mover"],
-                how="outer",
+                how="left",
                 validate="m:1",
                 indicator=True,
             )
@@ -1291,29 +1515,23 @@ class DataBySubplant:
         )
         msg = (
             df.query("_merge != 'both' & prime_mover in @FOSSIL_PRIME_MOVER_MAP")
-            .replace(
-                {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
-            )
-            .groupby(["_merge", "prime_mover"], dropna=False)
+            .groupby(["prime_mover"], dropna=False)
             .plant_id_eia.nunique()
             .to_frame()
             .query("plant_id_eia > 0")
         )
 
         logger.warning(
-            "Waterfall subset 2: Subplant groups that are not the single and only "
-            "prime mover within their plant are being dropped %s",
+            "Waterfall subset 2 gf923: Subplant groups that are not the single and "
+            "only prime mover within their plant are being dropped %s",
             msg.to_dict(),
         )
 
         out = (
-            df.assign(
-                fuel_group=lambda x: x.energy_source_code.replace(FUEL_GROUP_MAP),
-            )
-            .rename(
+            df.rename(
                 columns={
-                    "fuel_consumed_for_electricity_mmbtu": "mmbtu",
                     "net_generation_mwh": "net_mwh",
+                    "fuel_consumed_mmbtu": "mmbtu",
                 }
             )
             .pivot_table(
@@ -1323,7 +1541,7 @@ class DataBySubplant:
                     pd.Grouper(key="report_date", freq="YS"),
                 ],
                 columns="fuel_group",
-                values=["mmbtu", "net_mwh"],
+                values=["net_mwh", "bf_gross_mwh", "mmbtu"],
                 aggfunc="sum",
             )
             .reorder_levels([1, 0], axis=1)
@@ -1338,9 +1556,6 @@ class DataBySubplant:
                 ]
                 .astype(str)
                 .agg("_".join, axis=1),
-                fuel_consumed_for_electricity_mmbtu=lambda x: x.filter(
-                    like="_mmbtu"
-                ).sum(axis=1),
                 net_generation_mwh=lambda x: x.filter(like="_net_mwh").sum(axis=1),
             )
             .query("plant_subplant_year_eia not in @scenario_one_subplants")
@@ -1360,43 +1575,39 @@ class DataBySubplant:
         """
         merged = (
             self.pudl_tabl.gf_eia923()
+            .pipe(fix_cc_in_prime)
+            .pipe(add_fuel_group)
             .assign(
-                # report_year=lambda x: x.report_date.dt.year,
-                prime_mover=lambda x: x.prime_mover_code.replace(
-                    FOSSIL_PRIME_MOVER_MAP
-                ),
-                fuel_group=lambda x: x.energy_source_code.replace(FUEL_GROUP_MAP),
+                bf_gross_mwh=lambda x: x.fuel_consumed_mmbtu
+                / positive_heat_rate(x, "fuel_consumed_mmbtu", "net_generation_mwh"),
             )
             .rename(
                 columns={
-                    "fuel_consumed_for_electricity_mmbtu": "mmbtu",
                     "net_generation_mwh": "net_mwh",
+                    "fuel_consumed_mmbtu": "mmbtu",
                 }
             )
             .pivot_table(
                 index=["plant_id_eia", "prime_mover", "report_date"],
                 columns="fuel_group",
-                values=["mmbtu", "net_mwh"],
+                values=["net_mwh", "bf_gross_mwh", "mmbtu"],
                 aggfunc="sum",
             )
             .reorder_levels([1, 0], axis=1)
         )
         merged.columns = map("_".join, merged.columns)
         merged = merged.reset_index().merge(
-            self.safe_xwalk[
+            self.xwalk[
                 ["plant_id_eia", "pf_subplant_id", "prime_mover"]
             ].drop_duplicates(),
             on=["plant_id_eia", "prime_mover"],
-            how="outer",
+            how="left",
             validate="m:1",
             indicator=True,
         )
         test = (
             merged.query("_merge != 'both' & prime_mover in @FOSSIL_PRIME_MOVER_MAP")
-            .replace(
-                {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
-            )
-            .groupby(["_merge", "prime_mover"])
+            .groupby(["prime_mover"])
             .plant_id_eia.nunique()
             .to_frame()
             .query("plant_id_eia > 0")
@@ -1421,12 +1632,7 @@ class DataBySubplant:
             )
             .sum()
             .reset_index()
-            .assign(
-                net_generation_mwh=lambda x: x.filter(like="_net_mwh").sum(axis=1),
-                fuel_consumed_for_electricity_mmbtu=lambda x: x.filter(
-                    like="_mmbtu"
-                ).sum(axis=1),
-            )
+            .assign(net_generation_mwh=lambda x: x.filter(like="_net_mwh").sum(axis=1))
         )
 
     def get_cems_by_x(self, subplant_id_col, xwalk=None, merge_only=False):
@@ -1441,10 +1647,10 @@ class DataBySubplant:
 
         """
         if xwalk is None:
-            xwalk = self.safe_xwalk
+            xwalk = self.xwalk
 
         merged = self.get_cems().merge(
-            self.safe_xwalk[
+            xwalk[
                 [
                     "plant_id_epa",
                     "plant_id_eia",
@@ -1462,10 +1668,9 @@ class DataBySubplant:
         test = (
             merged.fillna({"plant_id_epa": merged.plant_id_eia})
             .query("_merge != 'both'")
-            .replace(
-                {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
-            )
-            .groupby(["_merge", pd.Grouper(key="report_date", freq="YS")], dropna=False)
+            .replace({"_merge": {"left_only": "data_only", "right_only": "xwalk_only"}})
+            .assign(year=lambda x: x.report_date.dt.year)
+            .groupby(["_merge", "year"], dropna=False)
             .plant_id_epa.nunique()
             .to_frame()
             .query("plant_id_epa > 0")
@@ -1484,8 +1689,6 @@ class DataBySubplant:
             "gross_generation_mwh": "sum",
             "heat_in_mmbtu": "sum",
             "co2_tons": "sum",
-            # "heat_in_mmbtu_max": "sum",  # don't think we need this
-            # "co2_tons_max": "sum",  # don't think we need this
         }
         return (
             merged.query("_merge == 'both'")
@@ -1506,98 +1709,11 @@ class DataBySubplant:
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
         )
 
-    def get_additional_generator_specs_by_x(
-        self, merge_only=False, subplant_id_col="pf_subplant_id"
-    ):
-        col_info = pd.read_csv(PACKAGE_PATH / "coi_col_info.csv", index_col=0).assign(
-            agg_method_r=lambda x: x.agg_method.replace(
-                {"cap_wt_avg": "sum", "mode": mode}
-            )
-        )
-
-        coi = (
-            pd.read_parquet(PACKAGE_PATH / "unit_level_costs_with_flag.parquet.gzip")
-            .rename(
-                columns=col_info.old_names.reset_index()
-                .set_index("old_names")
-                .dropna()
-                .squeeze()
-                .to_dict()
-            )
-            .pipe(month_year_to_date)
-            .assign(
-                age=lambda x: (datetime.datetime.now() - x.operating_date),
-                td_retirement=lambda x: datetime.datetime.now() - x.retirement_date,
-                td_planned_retirement=lambda x: datetime.datetime.now()
-                - x.planned_retirement_date,
-            )
-            .astype(col_info.new_type.dropna().to_dict())
-        )
-        merged = (
-            self.safe_xwalk[["plant_id_eia", "generator_id", subplant_id_col]]
-            .drop_duplicates()
-            .merge(
-                coi,
-                on=["plant_id_eia", "generator_id"],
-                how="outer",
-                validate="1:1",
-                indicator=True,
-            )
-        )
-        test = merged.groupby(["_merge"]).plant_id_eia.nunique()
-        logger.warning(
-            "AGS %s: Unique plants that did not have matches in both "
-            "additional generator specs and the xwalk so will be dropped:\n %s \n",
-            {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
-            test.squeeze().to_dict(),
-        )
-        if merge_only:
-            return merged
-        merged = merged.query("_merge == 'both'").drop(columns=["_merge"])
-        cap_wt_cols = list(
-            col_info[["agg_method"]].dropna().query("agg_method == 'cap_wt_avg'").index
-        )
-        round_cols = list(col_info[["round"]].dropna().index)
-        merged.loc[:, round_cols] = merged.loc[:, round_cols].fillna(0)
-        merged.loc[:, cap_wt_cols] = merged.loc[:, cap_wt_cols].multiply(
-            (
-                merged["operational_capacity_in_report_year"]
-                / merged.groupby(
-                    ["plant_id_eia", subplant_id_col]
-                ).operational_capacity_in_report_year.transform("sum")
-            ),
-            axis=0,
-        )
-
-        out = (
-            merged.groupby(["plant_id_eia", subplant_id_col])
-            .agg(col_info.agg_method_r.dropna().to_dict())
-            .assign(
-                operating_date=lambda x: (datetime.datetime.now() - x.age).dt.floor(
-                    freq="D", ambiguous="infer"
-                ),
-                retirement_date=lambda x: (
-                    datetime.datetime.now()
-                    - x.td_retirement.replace({pd.Timedelta(0): pd.NaT})
-                ).dt.floor(freq="D", ambiguous="infer"),
-                planned_retirement_date=lambda x: (
-                    datetime.datetime.now()
-                    - x.td_planned_retirement.replace({pd.Timedelta(0): pd.NaT})
-                ).dt.floor(freq="D", ambiguous="infer"),
-                age=lambda x: x.age.dt.days / 365,
-            )
-            .reset_index()
-            .drop(columns=["td_retirement", "td_planned_retirement"])
-            .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
-        )
-        # Rounding these columns to bring back the binary original might not be the
-        # right choice for the regression and can always be done later
-        # out.loc[:, round_cols] = out.loc[:, round_cols].round().astype("Int64")
-        return out
-
-    def add_costs(self, df: pd.DataFrame):
+    def add_costs(self, df: pd.DataFrame, on="subplant_id"):
         id_cols = ["plant_id_eia", "prime_mover", "report_date"]
         d_cols = [
+            "subplant_id",
+            "pf_subplant_id",
             "inflator_to_2021",
             "wage_scale",
             "real_capex_per_kw",
@@ -1625,31 +1741,69 @@ class DataBySubplant:
                     validate="m:1",
                 )
                 .fillna({"wage_scale": 1})
+                .merge(
+                    self.xwalk.drop_duplicates(
+                        subset=[
+                            "plant_id_eia",
+                            "prime_mover",
+                            "subplant_id",
+                            "pf_subplant_id",
+                        ]
+                    ),
+                    on=["plant_id_eia", "prime_mover"],
+                    how="left",
+                    validate="m:m",
+                )
+                .sort_values(
+                    [
+                        "plant_id_eia",
+                        "subplant_id",
+                        "pf_subplant_id",
+                        "prime_mover",
+                        "report_date",
+                    ]
+                )
+                .assign(
+                    sbi_count=lambda x: x.groupby(
+                        ["plant_id_eia", "subplant_id", "report_date"]
+                    ).wage_scale.transform(pd.Series.nunique),
+                    psbi_count=lambda x: x.groupby(
+                        ["plant_id_eia", "pf_subplant_id", "report_date"]
+                    ).wage_scale.transform(pd.Series.nunique),
+                )
             )
-            self._dfs["costs"] = cost[cost.counts == 1][id_cols + d_cols]
+            cost = cost[cost.counts == 1]
+            assert cost.query(  # noqa: S101
+                "sbi_count > 1"
+            ).empty, (
+                "adding subplants to costs created non-unique costs per subplant_id"
+            )
+            assert cost.query("psbi_count > 1").empty, (  # noqa: S101
+                "adding pf_subplants to costs created "
+                "non-unique costs per pf_subplant_id"
+            )
+            self._dfs["costs"] = cost[id_cols + d_cols]
 
-        if "prime_mover" not in df:
-            df = df.merge(
-                self.safe_xwalk[
-                    ["plant_id_eia", "subplant_id", "prime_mover"]
-                ].drop_duplicates(),
-                on=["plant_id_eia", "subplant_id"],
-                validate="m:1",
-                how="left",
-            )
-            logger.warning(
-                "add_costs: `prime_mover` not in `df` so adding it. "
-                "Better you do it tho. `prime_mover` missing for %s rows",
-                df.prime_mover.isna().sum(),
-            )
+        dt = df.dtypes.astype("string").to_dict()
 
         return (
-            df.merge(
-                self._dfs["costs"],
-                on=id_cols,
+            df.astype(
+                {"plant_id_eia": int}
+                | {
+                    x: int
+                    for x in ("subplant_id", "pf_subplant_id")
+                    if all((x in df, x == on))
+                }
+            )
+            .merge(
+                self._dfs["costs"].drop_duplicates(
+                    subset=["plant_id_eia", on, "report_date"]
+                ),
+                on=["plant_id_eia", on, "report_date"],
                 validate="m:1",
                 how="left",
-                indicator=True,
+                indicator="ferc_merge",
+                suffixes=("", "_dup"),
             )
             .assign(
                 real_capex=lambda x: x.real_capex_per_kw * x.capacity_mw * 1e3,
@@ -1659,6 +1813,7 @@ class DataBySubplant:
                 arc=lambda x: x.arc_per_kw * x.capacity_mw * 1e3,
             )
             .drop(columns=[x for x in d_cols if "_kw" in x])
+            .astype(dt)
         )
 
     def get_wage_scale(self):
@@ -1694,15 +1849,11 @@ class DataBySubplant:
         }
         prime_fuel_heat_rates = (
             self.pudl_tabl.gf_eia923()
-            .assign(
-                prime_mover=lambda x: x.prime_mover_code.replace(
-                    FOSSIL_PRIME_MOVER_MAP
-                ),
-            )
+            .pipe(fix_cc_in_prime)
             .rename(columns=rname)
-            .groupby(
-                ["plant_id_eia", "prime_mover", "energy_source_code", "report_date"]
-            )[list(rname.values())]
+            .groupby(["plant_id_eia", "prime_mover", "energy_source_code"])[
+                list(rname.values())
+            ]
             .sum()
             .reset_index()
         )

@@ -31,13 +31,6 @@ class TestDataBySubplant:
         df = databysubplant.get_cems_by_x(subplant_id_col="subplant_id")
         assert not df.empty
 
-    def test_get_additional_generator_specs(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_additional_generator_specs_by_x(
-            subplant_id_col="subplant_id"
-        )
-        assert not df.empty
-
     def test_get_exa_by_subplant(self, databysubplant):
         """Perfunctory test."""
         df = databysubplant.get_exa_by_subplant()
@@ -62,13 +55,6 @@ class TestDataByPrime:
         """Perfunctory test."""
         df = databysubplant.get_860_by_x(
             merge_only=True, subplant_id_col="pf_subplant_id"
-        )
-        assert not df.empty
-
-    def test_get_additional_generator_specs_by_ppf(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_additional_generator_specs_by_x(
-            subplant_id_col="pf_subplant_id"
         )
         assert not df.empty
 
