@@ -4,6 +4,7 @@ from etoolbox.utils.testing import idfn
 from gencost.waterfall import subplants_in_scenario_one
 
 
+@pytest.mark.skip(reason="duplicative")
 class TestDataBySubplant:
     def test_get_860_by_subplant(self, databysubplant):
         """Perfunctory test."""
@@ -45,6 +46,7 @@ class TestDataBySubplant:
         assert not df.empty
 
 
+@pytest.mark.skip(reason="duplicative")
 class TestDataByPrime:
     """Test aggregations by plant, prime, fuel."""
 
