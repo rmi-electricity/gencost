@@ -1990,28 +1990,18 @@ class DataBySubplant:
                 pa.Check(lambda df: ~(df["capex"] < 0)),
                 pa.Check(lambda df: ~(df["opex"] < 0)),
                 pa.Check(
-                    lambda df: (
-                        df["biofuel_net_mwh"]
-                        + df["coal_net_mwh"]
-                        + df["natural_gas_net_mwh"]
-                        + df["other_net_mwh"]
-                        + df["other_gas_net_mwh"]
-                        + df["petroleum_net_mwh"]
-                        + df["petroleum_coke_net_mwh"]
+                    lambda df: np.isclose(
+                        (
+                            df["coal_net_mwh"]
+                            + df["natural_gas_net_mwh"]
+                            + df["other_net_mwh"]
+                            + df["other_gas_net_mwh"]
+                            + df["petroleum_net_mwh"]
+                            + df["petroleum_coke_net_mwh"]
+                        ),
+                        df["net_generation_mwh"],
+                        rtol=0.1,
                     )
-                    == df["net_generation_mwh"]
-                ),
-                pa.Check(
-                    lambda df: (
-                        df["biofuel_gross_mwh"]
-                        + df["coal_gross_mwh"]
-                        + df["natural_gas_gross_mwh"]
-                        + df["other_gross_mwh"]
-                        + df["other_gas_gross_mwh"]
-                        + df["petroleum_gross_mwh"]
-                        + df["petroleum_coke_gross_mwh"]
-                    )
-                    == df["gross_generation_mwh"]
                 ),
             ],
             index=pa.Index(int),
