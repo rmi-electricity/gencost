@@ -185,17 +185,27 @@ def allocate_col_by(
     """
     old_cols = list(df.filter(like=old_suffix).columns)
     new_cols = [x.replace(old_suffix, new_suffix) for x in old_cols]
+    if "pf_subplant_id" in df:
+        agg_old_cols = df.groupby(["plant_id_eia", "pf_subplant_id"])[
+            old_cols
+        ].transform("sum")
+        multi_zeros = agg_old_cols.divide(agg_old_cols.sum(axis=1), axis=0).multiply(
+            df[to_allocate], axis=0
+        )
+    else:
+        multi_zeros = 0.0
     df[new_cols] = np.where(
-        # np.repeat(df[old_cols].sum(axis=1)[:, np.newaxis], len(old_cols), 1) != 0.0,
         df[old_cols] != 0.0,
         df[old_cols]
         .divide(df[old_cols].sum(axis=1), axis=0)
         .multiply(df[to_allocate], axis=0),
         np.where(
+            # all columns nan except one that is zero, zero col gets 100% allocation
             np.repeat(df[old_cols].isna().sum(axis=1)[:, np.newaxis], len(old_cols), 1)
             == len(old_cols) - 1,
             np.repeat(df[to_allocate][:, np.newaxis], len(old_cols), 1),
-            0.0,
+            # otherwise use allocation based on all years of data
+            multi_zeros,
         ),
     )
     if fillna is not None:
@@ -203,6 +213,11 @@ def allocate_col_by(
     if drop:
         return df.drop(columns=old_cols)
     return df
+
+
+def rime_sort_key(string: str):
+    """Sort strings starting from the end."""
+    return string[::-1]
 
 
 def wage_data(
