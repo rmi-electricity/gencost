@@ -591,8 +591,8 @@ class DataBySubplant:
         )
 
         # bf_gross_mwh columns are not true gross generation, they are really
-        # calculated from fuel consumption and never negative HRs, but those are
-        # net HRs
+        # calculated
+
         merged = allocate_col_by(
             merged,
             to_allocate="gross_generation_mwh",
