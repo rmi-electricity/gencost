@@ -1990,17 +1990,47 @@ class DataBySubplant:
                 pa.Check(lambda df: ~(df["capex"] < 0)),
                 pa.Check(lambda df: ~(df["opex"] < 0)),
                 pa.Check(
-                    lambda df: np.isclose(
-                        (
-                            df["coal_net_mwh"]
-                            + df["natural_gas_net_mwh"]
-                            + df["other_net_mwh"]
-                            + df["other_gas_net_mwh"]
-                            + df["petroleum_net_mwh"]
-                            + df["petroleum_coke_net_mwh"]
+                    lambda df: pd.Series(
+                        np.isclose(
+                            (
+                                df[
+                                    [
+                                        "biofuel_net_mwh",
+                                        "coal_net_mwh",
+                                        "natural_gas_net_mwh",
+                                        "other_net_mwh",
+                                        "other_gas_net_mwh",
+                                        "petroleum_net_mwh",
+                                        "petroleum_coke_net_mwh",
+                                    ]
+                                ].sum(axis=1)
+                            ),
+                            df["net_generation_mwh"],
+                            rtol=0.1,
                         ),
-                        df["net_generation_mwh"],
-                        rtol=0.1,
+                        index=df.index,
+                    )
+                ),
+                pa.Check(
+                    lambda df: pd.Series(
+                        np.isclose(
+                            (
+                                df[
+                                    [
+                                        "biofuel_gross_mwh",
+                                        "coal_gross_mwh",
+                                        "natural_gas_gross_mwh",
+                                        "other_gross_mwh",
+                                        "other_gas_gross_mwh",
+                                        "petroleum_gross_mwh",
+                                        "petroleum_coke_gross_mwh",
+                                    ]
+                                ].sum(axis=1)
+                            ),
+                            df["gross_generation_mwh"],
+                            rtol=0.1,
+                        ),
+                        index=df.index,
                     )
                 ),
             ],
@@ -2009,6 +2039,6 @@ class DataBySubplant:
             coerce=False,
         )
 
-        df = schema.validate(merge_all_df)
+        df = schema.validate(merge_all_df, lazy=True)
 
         return df
