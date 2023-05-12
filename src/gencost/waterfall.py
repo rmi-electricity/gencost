@@ -1146,29 +1146,15 @@ class DataBySubplant:
     ###########################################################################
     # Aggregate source data to subplant levels
     ###########################################################################
-    def merge_to_get_subplant_id(self):
-        """
-        input: unaggregated 860, 923, CAMD data
-
-        output: 860, 923, CAMD data at desired sub-plant level
-
-        """
 
     def get_860_by_x(
-        self,
-        subplant_id_col="pf_subplant_id",
-        merge_only=False,
-        age_year=2021,
-        generator_level=False,
+        self, subplant_id_col="pf_subplant_id", merge_only=False, age_year=2021
     ):
         """
         Map capacity and sum to plant prime fuel subplant level
 
         """
 
-        xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
-            subplant_id_col
-        ]
         coi = (
             pd.read_parquet(PACKAGE_PATH / "unit_level_costs_with_flag.parquet.gzip")
             .pipe(simplify_columns)
@@ -1176,37 +1162,66 @@ class DataBySubplant:
             .rename(columns={"plant_id": "plant_id_eia"})
         )[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]]
 
-        if generator_level is False:
-            merged = (
-                self.pudl_tabl.gens_eia860()
-                .query("operational_status == 'existing'")
-                .assign(
-                    prime_mover=lambda x: x.prime_mover_code.replace(
-                        FOSSIL_PRIME_MOVER_MAP
-                    ),
-                )
-                .copy()
-                .merge(
-                    xwalk[
-                        ["plant_id_eia", "generator_id", subplant_id_col]
-                    ].drop_duplicates(),
-                    on=["plant_id_eia", "generator_id"],
-                    how="outer",
-                    validate="m:1",
-                    indicator=True,
-                )
-                .merge(
-                    coi[
-                        [
-                            "plant_id_eia",
-                            "generator_id",
-                            "pollution_control_costs_per_kw",
-                        ]
-                    ],
-                    on=["plant_id_eia", "generator_id"],
-                    how="left",
-                    validate="m:1",
-                )
+        if age_year is not None:
+            age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
+        else:
+            age_year_str = dt.utcnow()
+
+        merged = (
+            self.pudl_tabl.gens_eia860()
+            .query("operational_status == 'existing'")
+            .assign(
+                prime_mover=lambda x: x.prime_mover_code.replace(
+                    FOSSIL_PRIME_MOVER_MAP
+                ),
+            )
+            .copy()
+            .merge(
+                coi[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]],
+                on=["plant_id_eia", "generator_id"],
+                how="left",
+                validate="m:1",
+            )
+        )
+
+        if subplant_id_col == "generator_id":
+            # have to cast True, False, and NA from tech cols in 860 as 0 and 1
+            # since at the PF level, this is done in wt avg
+
+            merged = self.tech_cols_dummy(merged)
+
+            if merge_only:
+                return merged
+
+            return merged.assign(
+                age_from_report_year=lambda x: (
+                    x["report_date"] - x["generator_operating_date"]
+                ).dt.days
+                / 365.25,
+                avg_age_from_report_year=lambda x: x.age_from_report_year,
+                current_age=lambda x: (
+                    age_year_str - x["generator_operating_date"]
+                ).dt.days
+                / 365.25,
+                current_avg_age=lambda x: x.current_age,
+                age_of_observation=lambda x: (age_year_str - x["report_date"]).dt.days
+                / 365.25,
+                age_relative_to_avg=lambda x: x["current_age"]
+                - x["avg_age_from_report_year"],
+            ).astype({"plant_id_eia": "Int64", "generator_id": "str"})[GET_860_GEN_COLS]
+        else:
+            xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
+                subplant_id_col
+            ]
+
+            merged = merged.merge(
+                xwalk[
+                    ["plant_id_eia", "generator_id", subplant_id_col]
+                ].drop_duplicates(),
+                on=["plant_id_eia", "generator_id"],
+                how="outer",
+                validate="m:1",
+                indicator=True,
             )
 
             test = (
@@ -1255,10 +1270,6 @@ class DataBySubplant:
                 "pollution_control_costs_per_kw": "capacity_mw",
             }
 
-            if age_year is not None:
-                age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
-            else:
-                age_year_str = dt.utcnow()
             return (
                 merged.query("_merge == 'both'")
                 .assign(
@@ -1298,75 +1309,6 @@ class DataBySubplant:
                 )
                 .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
             )
-        else:
-            merged = (
-                self.pudl_tabl.gens_eia860()
-                .query("operational_status == 'existing'")
-                .assign(
-                    prime_mover=lambda x: x.prime_mover_code.replace(
-                        FOSSIL_PRIME_MOVER_MAP
-                    ),
-                )
-                .copy()
-                .merge(
-                    coi[
-                        [
-                            "plant_id_eia",
-                            "generator_id",
-                            "pollution_control_costs_per_kw",
-                        ]
-                    ],
-                    on=["plant_id_eia", "generator_id"],
-                    how="left",
-                    validate="m:1",
-                    indicator=True,
-                )
-            )
-
-        test = (
-            merged.query(
-                "_merge != 'both' & prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
-            )
-            .replace(
-                {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
-            )
-            .groupby(["_merge", "prime_mover_code"], dropna=False)
-            .plant_id_eia.nunique()
-            .to_frame()
-            .query("plant_id_eia > 0")
-        )
-
-        if merge_only:
-            return merged
-
-        if age_year is not None:
-            age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
-        else:
-            age_year_str = dt.utcnow()
-        return (
-            merged.query("_merge == 'both'")
-            .assign(
-                age_from_report_year=lambda x: (
-                    x["report_date"] - x["generator_operating_date"]
-                ).dt.days
-                / 365.25,
-                avg_age_from_report_year=lambda x: x.groupby(
-                    ["plant_id_eia", "generator_id"]
-                )["age_from_report_year"].transform("mean"),
-                current_age=lambda x: (
-                    age_year_str - x["generator_operating_date"]
-                ).dt.days
-                / 365.25,
-                current_avg_age=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
-                    "current_age"
-                ].transform("mean"),
-                age_of_observation=lambda x: (age_year_str - x["report_date"]).dt.days
-                / 365.25,
-                age_relative_to_avg=lambda x: x["current_age"]
-                - x["avg_age_from_report_year"],
-            )
-            .astype({"plant_id_eia": "Int64", "generator_id": "str"})[GET_860_GEN_COLS]
-        )
 
     def get_gen923_by_subplant(self):
         """
@@ -2014,11 +1956,26 @@ class DataBySubplant:
 
         return prime_fuel_heat_rates
 
-    def _exa_by_generator(self):
-        """
-        Grab 860, 923, and CEMS data at generator level for counterfactural information.
+    def tech_cols_dummy(self, df):
+        techs = [
+            "associated_combined_heat_power",
+            "duct_burners",
+            "bypass_heat_recovery",
+            "solid_fuel_gasification",
+            "carbon_capture",
+            "fluidized_bed_tech",
+            "pulverized_coal_tech",
+            "stoker_tech",
+            "other_combustion_tech",
+            "subcritical_tech",
+            "supercritical_tech",
+            "ultrasupercritical_tech",
+        ]
 
-        """
+        for tech in techs:
+            df[tech] = np.where(df[tech].isna() | df[tech] is False, 0, 1)
+
+        return df
 
     @staticmethod
     def validate_merge_all_results(merge_all_df):
