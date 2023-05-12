@@ -168,7 +168,9 @@ def allocate_col_by(
     new_suffix: str,
     old_suffix: str,
     fillna: int | float | str | None = None,
+    rollup_by: list | None = None,
     drop: bool = True,
+    drop_bad_rows: str | None = None,
 ):
     """Allocate a column proportionally using values in a set of columns.
 
@@ -178,38 +180,55 @@ def allocate_col_by(
         new_suffix: suffix that will replace the old one in the new columns
         old_suffix: suffix of columns to use for allocation
         fillna: fill nans in new columns with new value
+        rollup_by: columns to use in groupby, this rollup is used for allocations
+            when a given row has only nans and more than one zero.
         drop: drop the old_suffix columns
+        drop_bad_rows: drop rows where the allocation failed, rows are dropped if
+            argument is not None, pass a string to insert into log message
 
     Returns:
 
     """
     old_cols = list(df.filter(like=old_suffix).columns)
     new_cols = [x.replace(old_suffix, new_suffix) for x in old_cols]
-    if "pf_subplant_id" in df:
-        agg_old_cols = df.groupby(["plant_id_eia", "pf_subplant_id"])[
-            old_cols
-        ].transform("sum")
-        multi_zeros = agg_old_cols.divide(agg_old_cols.sum(axis=1), axis=0).multiply(
-            df[to_allocate], axis=0
-        )
+    if rollup_by is not None:
+        agg_old_cols = df.groupby(rollup_by)[old_cols].transform("sum")
+        multi_zeros = agg_old_cols.divide(agg_old_cols.sum(axis=1), axis=0)
     else:
         multi_zeros = 0.0
-    df[new_cols] = np.where(
-        df[old_cols] != 0.0,
-        df[old_cols]
-        .divide(df[old_cols].sum(axis=1), axis=0)
-        .multiply(df[to_allocate], axis=0),
+    df[new_cols] = np.multiply(
         np.where(
-            # all columns nan except one that is zero, zero col gets 100% allocation
-            np.repeat(df[old_cols].isna().sum(axis=1)[:, np.newaxis], len(old_cols), 1)
-            == len(old_cols) - 1,
-            np.repeat(df[to_allocate][:, np.newaxis], len(old_cols), 1),
-            # otherwise use allocation based on all years of data
-            multi_zeros,
+            # this checks where row sums to zero, have to do this at the row level to
+            # make sure allocation is consistent across row
+            np.repeat(df[old_cols].sum(axis=1)[:, np.newaxis], len(old_cols), 1) != 0.0,
+            df[old_cols].divide(df[old_cols].sum(axis=1), axis=0),
+            np.where(
+                # all columns nan except one that is zero, zero col gets 100% allocation
+                np.repeat(
+                    df[old_cols].isna().sum(axis=1)[:, np.newaxis], len(old_cols), 1
+                )
+                == len(old_cols) - 1,
+                # if only one zero, zero col gets 100% allocation
+                np.where(df[old_cols] == 0.0, 1.0, np.nan),
+                # otherwise use allocation based on all years of data
+                multi_zeros,
+            ),
         ),
+        df[to_allocate][:, np.newaxis],
     )
     if fillna is not None:
         df[new_cols] = df[new_cols].fillna(fillna)
+    if drop_bad_rows is not None:
+        close = np.isclose(df[to_allocate], df[new_cols].sum(axis=1), rtol=1e-2)
+        if (num := np.sum(~close)) > 0:
+            logger.warning(
+                "%s: dropping %s rows because %s allocation by %s failed.",
+                drop_bad_rows,
+                num,
+                to_allocate,
+                old_suffix,
+            )
+            df = df[close]
     if drop:
         return df.drop(columns=old_cols)
     return df
@@ -427,10 +446,10 @@ class DataBySubplant:
             #         axis=0,
             #     )
             # )
-            self._dfs["merge_all"] = out
+            self._dfs["merge_all"] = self.validate_merge_all_results(out)
 
         if clean:
-            merged_all_df = (
+            return (
                 self._dfs["merge_all"]
                 # numexpr / query cannot deal with nullable floats
                 .astype({"parasitic_load_pct": float, "gross_cf": float})
@@ -439,7 +458,7 @@ class DataBySubplant:
                 .copy()
             )
 
-        return self.validate_merge_all_results(merged_all_df)
+        return self._dfs["merge_all"]
 
     def get_exa_all(self, by_fuel=True):
         """
@@ -566,6 +585,17 @@ class DataBySubplant:
                 .drop(columns=["_merge"])
                 .dropna(axis=1, how="all")
             )
+            # bf_gross_mwh columns are not true gross generation, they are really
+            # calculated
+            out = allocate_col_by(
+                out,
+                to_allocate="gross_generation_mwh",
+                new_suffix="_gross_mwh",
+                old_suffix="_bf_gross_mwh",
+                drop=True,
+                drop_bad_rows="Waterfall step three",
+                rollup_by=["plant_id_eia", "pf_subplant_id"],
+            )
             self._dfs["exa_by_prime"] = drop_zero_cols(out)
         return self._dfs["exa_by_prime"]
 
@@ -605,17 +635,6 @@ class DataBySubplant:
             .drop(columns=["eia_merge", "exa_merge"])
         )
 
-        # bf_gross_mwh columns are not true gross generation, they are really
-        # calculated
-
-        merged = allocate_col_by(
-            merged,
-            to_allocate="gross_generation_mwh",
-            new_suffix="_gross_mwh",
-            old_suffix="_bf_gross_mwh",
-            drop=True,
-        )
-
         return merged
 
     def get_exa_by_subplant(self, by_fuel=True):
@@ -653,22 +672,9 @@ class DataBySubplant:
                 new_suffix="_net_mwh",
                 old_suffix="_bf_net_mwh",
                 drop=True,
+                drop_bad_rows="Waterfall step one",
+                rollup_by=["plant_id_eia", "subplant_id"],
             )
-            logger.warning(
-                "Dropping %s rows from waterfall step one because net generation "
-                "allocation by fuel failed.",
-                np.sum(
-                    ~np.isclose(
-                        wf1.net_generation_mwh, wf1.filter(like="_net_mwh").sum(axis=1)
-                    )
-                ),
-            )
-            wf1 = wf1[
-                np.isclose(
-                    wf1.net_generation_mwh, wf1.filter(like="_net_mwh").sum(axis=1)
-                )
-            ]
-
             # waterfall step 2:
             wf2 = self.get_gf923_by_subplant(
                 # crosswalk with prime fuel from crosswalk class, used OGE version so
@@ -725,27 +731,16 @@ class DataBySubplant:
             # calculated from fuel consumption and never negative HRs, but those are
             # net HRs
             merged = allocate_col_by(
-                merged,
+                merged.query("_merge == 'all'").drop(columns=["_merge"]),
                 to_allocate="gross_generation_mwh",
                 new_suffix="_gross_mwh",
                 old_suffix="_bf_gross_mwh",
                 drop=True,
+                drop_bad_rows="Waterfall steps one+two",
+                rollup_by=["plant_id_eia", "subplant_id"],
             )
 
-            merged = drop_zero_cols(
-                merged.query("_merge == 'all'").drop(columns=["_merge"])
-            )
-            close = np.isclose(
-                merged.gross_generation_mwh,
-                merged.filter(like="_gross_mwh").sum(axis=1),
-                rtol=2e-2,
-            )
-            logger.warning(
-                "Dropping %s rows from waterfall steps one+two because gross "
-                "generation allocation by fuel failed.",
-                np.sum(~close),
-            )
-            merged = merged[close]
+            merged = drop_zero_cols(merged)
             self._dfs["waterfall"] = merged
         return self._dfs["waterfall"]
 
@@ -1627,7 +1622,9 @@ class DataBySubplant:
 
         merged = (
             self.pudl_tabl.gf_eia923()
-            .query("energy_source_code not in @esc_to_drop")
+            # AE - Uday categorizes wast heat as other so I made that change
+            # in constants
+            .query("energy_source_code not in ('GEO', 'NUC', 'SUN')")
             .pipe(fix_cc_in_prime)
             .pipe(add_fuel_group)
             .assign(

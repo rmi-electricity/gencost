@@ -28,27 +28,27 @@ UDAY_FOSSIL_FUEL_MAP = {  # the better map from Uday
 }
 FUEL_GROUP_MAP = UDAY_FOSSIL_FUEL_MAP | {
     "ANT": "coal",
-    "AB": "biofuel",
-    "MSW": "biofuel",
-    "OBS": "biofuel",
-    "WDS": "biofuel",
-    "OBL": "biofuel",
-    "SLW": "biofuel",
-    "BLQ": "biofuel",
-    "WDL": "biofuel",
-    "LFG": "biofuel",
-    "OBG": "biofuel",
-    "MSB": "biofuel",
-    "SUN": "renew",
-    "WND": "renew",
-    "GEO": "renew",
-    "WAT": "renew",
-    "NUC": "nuclear",
-    "WH": "waste_heat",
+    "AB": "biofuel",  # other in fuel_group_emissions_map
+    "MSW": "biofuel",  # other in fuel_group_emissions_map
+    "OBS": "biofuel",  # other in fuel_group_emissions_map
+    "WDS": "biofuel",  # other in fuel_group_emissions_map
+    "OBL": "biofuel",  # other in fuel_group_emissions_map
+    "SLW": "biofuel",  # other in fuel_group_emissions_map
+    "BLQ": "biofuel",  # other in fuel_group_emissions_map
+    "WDL": "biofuel",  # other in fuel_group_emissions_map
+    "LFG": "biofuel",  # other in fuel_group_emissions_map
+    "OBG": "biofuel",  # other in fuel_group_emissions_map
+    "MSB": "biofuel",  # other in fuel_group_emissions_map
+    "SUN": "renew",  # other in fuel_group_emissions_map
+    "WND": "renew",  # other in fuel_group_emissions_map
+    "GEO": "renew",  # other in fuel_group_emissions_map
+    "WAT": "renew",  # other in fuel_group_emissions_map
+    "NUC": "nuclear",  # other in fuel_group_emissions_map
+    "WH": "other",
     "TDF": "other",
-    "MWH": "charge",
+    "MWH": "other",
     "OTH": "other",
     "MSN": "other",
-    "PUR": "steam",
+    "PUR": "other",
     "SC": "coal",
 }
