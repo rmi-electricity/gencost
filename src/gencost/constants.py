@@ -52,3 +52,28 @@ FUEL_GROUP_MAP = UDAY_FOSSIL_FUEL_MAP | {
     "PUR": "other",
     "SC": "coal",
 }
+
+GET_860_GEN_COLS = [
+    "plant_id_eia",
+    "generator_id",
+    "report_date",
+    "capacity_mw",
+    "associated_combined_heat_power",
+    "duct_burners",
+    "bypass_heat_recovery",
+    "solid_fuel_gasification",
+    "carbon_capture",
+    "fluidized_bed_tech",
+    "pulverized_coal_tech",
+    "stoker_tech",
+    "other_combustion_tech",
+    "subcritical_tech",
+    "supercritical_tech",
+    "ultrasupercritical_tech",
+    "age_from_report_year",
+    "avg_age_from_report_year",
+    "current_avg_age",
+    "age_of_observation",
+    "age_relative_to_avg",
+    "pollution_control_costs_per_kw",
+]
