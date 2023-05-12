@@ -22,7 +22,7 @@ from platformdirs import user_cache_path, user_documents_path
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP
+from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP, GET_860_GEN_COLS
 from gencost.crosswalk import Crosswalk
 from gencost.package_data import PACKAGE_PATH
 
@@ -1146,14 +1146,26 @@ class DataBySubplant:
     ###########################################################################
     # Aggregate source data to subplant levels
     ###########################################################################
+    def merge_to_get_subplant_id(self):
+        """
+        input: unaggregated 860, 923, CAMD data
+
+        output: 860, 923, CAMD data at desired sub-plant level
+
+        """
 
     def get_860_by_x(
-        self, subplant_id_col="pf_subplant_id", merge_only=False, age_year=2021
+        self,
+        subplant_id_col="pf_subplant_id",
+        merge_only=False,
+        age_year=2021,
+        generator_level=False,
     ):
         """
         Map capacity and sum to plant prime fuel subplant level
 
         """
+
         xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
             subplant_id_col
         ]
@@ -1164,31 +1176,152 @@ class DataBySubplant:
             .rename(columns={"plant_id": "plant_id_eia"})
         )[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]]
 
-        merged = (
-            self.pudl_tabl.gens_eia860()
-            .query("operational_status == 'existing'")
-            .assign(
-                prime_mover=lambda x: x.prime_mover_code.replace(
-                    FOSSIL_PRIME_MOVER_MAP
-                ),
+        if generator_level is False:
+            merged = (
+                self.pudl_tabl.gens_eia860()
+                .query("operational_status == 'existing'")
+                .assign(
+                    prime_mover=lambda x: x.prime_mover_code.replace(
+                        FOSSIL_PRIME_MOVER_MAP
+                    ),
+                )
+                .copy()
+                .merge(
+                    xwalk[
+                        ["plant_id_eia", "generator_id", subplant_id_col]
+                    ].drop_duplicates(),
+                    on=["plant_id_eia", "generator_id"],
+                    how="outer",
+                    validate="m:1",
+                    indicator=True,
+                )
+                .merge(
+                    coi[
+                        [
+                            "plant_id_eia",
+                            "generator_id",
+                            "pollution_control_costs_per_kw",
+                        ]
+                    ],
+                    on=["plant_id_eia", "generator_id"],
+                    how="left",
+                    validate="m:1",
+                )
             )
-            .copy()
-            .merge(
-                xwalk[
-                    ["plant_id_eia", "generator_id", subplant_id_col]
-                ].drop_duplicates(),
-                on=["plant_id_eia", "generator_id"],
-                how="outer",
-                validate="m:1",
-                indicator=True,
+
+            test = (
+                merged.query(
+                    "_merge != 'both' & prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
+                )
+                .replace(
+                    {
+                        "_merge": {
+                            "left_only": "in_data_only",
+                            "right_only": "in_xwalk_only",
+                        }
+                    }
+                )
+                .groupby(["_merge", "prime_mover_code"], dropna=False)
+                .plant_id_eia.nunique()
+                .to_frame()
+                .query("plant_id_eia > 0")
             )
-            .merge(
-                coi[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]],
-                on=["plant_id_eia", "generator_id"],
-                how="left",
-                validate="m:1",
+            logger.warning(
+                "860 %s: Unique plants that did not have matches in both "
+                "860 and the xwalk so will be dropped:\\n %s \\n",
+                {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
+                test.squeeze().to_dict(),
             )
-        )
+            if merge_only:
+                return merged
+            wtavg_dict = {
+                "associated_combined_heat_power": "capacity_mw",
+                "duct_burners": "capacity_mw",
+                "bypass_heat_recovery": "capacity_mw",
+                "solid_fuel_gasification": "capacity_mw",
+                "carbon_capture": "capacity_mw",
+                "fluidized_bed_tech": "capacity_mw",
+                "pulverized_coal_tech": "capacity_mw",
+                "stoker_tech": "capacity_mw",
+                "other_combustion_tech": "capacity_mw",
+                "subcritical_tech": "capacity_mw",
+                "supercritical_tech": "capacity_mw",
+                "ultrasupercritical_tech": "capacity_mw",
+                "age_from_report_year": "capacity_mw",
+                "avg_age_from_report_year": "capacity_mw",
+                "current_avg_age": "capacity_mw",
+                "age_of_observation": "capacity_mw",
+                "age_relative_to_avg": "capacity_mw",
+                "pollution_control_costs_per_kw": "capacity_mw",
+            }
+
+            if age_year is not None:
+                age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
+            else:
+                age_year_str = dt.utcnow()
+            return (
+                merged.query("_merge == 'both'")
+                .assign(
+                    age_from_report_year=lambda x: (
+                        x["report_date"] - x["generator_operating_date"]
+                    ).dt.days
+                    / 365.25,
+                    avg_age_from_report_year=lambda x: x.groupby(
+                        ["plant_id_eia", subplant_id_col]
+                    )["age_from_report_year"].transform("mean"),
+                    current_age=lambda x: (
+                        age_year_str - x["generator_operating_date"]
+                    ).dt.days
+                    / 365.25,
+                    current_avg_age=lambda x: x.groupby(
+                        ["plant_id_eia", subplant_id_col]
+                    )["current_age"].transform("mean"),
+                    age_of_observation=lambda x: (
+                        age_year_str - x["report_date"]
+                    ).dt.days
+                    / 365.25,
+                    age_relative_to_avg=lambda x: x["current_age"]
+                    - x["avg_age_from_report_year"],
+                )
+                .astype({k: float for k in wtavg_dict})
+                .fillna({k: 0.0 for k in wtavg_dict})
+                .drop(columns=["_merge"])
+                .pipe(
+                    sum_and_weighted_average_agg,
+                    by=[
+                        "plant_id_eia",
+                        subplant_id_col,
+                        pd.Grouper(key="report_date", freq="YS"),
+                    ],
+                    sum_cols=["capacity_mw"],
+                    wtavg_dict=wtavg_dict,
+                )
+                .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+            )
+        else:
+            merged = (
+                self.pudl_tabl.gens_eia860()
+                .query("operational_status == 'existing'")
+                .assign(
+                    prime_mover=lambda x: x.prime_mover_code.replace(
+                        FOSSIL_PRIME_MOVER_MAP
+                    ),
+                )
+                .copy()
+                .merge(
+                    coi[
+                        [
+                            "plant_id_eia",
+                            "generator_id",
+                            "pollution_control_costs_per_kw",
+                        ]
+                    ],
+                    on=["plant_id_eia", "generator_id"],
+                    how="left",
+                    validate="m:1",
+                    indicator=True,
+                )
+            )
 
         test = (
             merged.query(
@@ -1202,34 +1335,9 @@ class DataBySubplant:
             .to_frame()
             .query("plant_id_eia > 0")
         )
-        logger.warning(
-            "860 %s: Unique plants that did not have matches in both "
-            "860 and the xwalk so will be dropped:\\n %s \\n",
-            {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
-            test.squeeze().to_dict(),
-        )
+
         if merge_only:
             return merged
-        wtavg_dict = {
-            "associated_combined_heat_power": "capacity_mw",
-            "duct_burners": "capacity_mw",
-            "bypass_heat_recovery": "capacity_mw",
-            "solid_fuel_gasification": "capacity_mw",
-            "carbon_capture": "capacity_mw",
-            "fluidized_bed_tech": "capacity_mw",
-            "pulverized_coal_tech": "capacity_mw",
-            "stoker_tech": "capacity_mw",
-            "other_combustion_tech": "capacity_mw",
-            "subcritical_tech": "capacity_mw",
-            "supercritical_tech": "capacity_mw",
-            "ultrasupercritical_tech": "capacity_mw",
-            "age_from_report_year": "capacity_mw",
-            "avg_age_from_report_year": "capacity_mw",
-            "current_avg_age": "capacity_mw",
-            "age_of_observation": "capacity_mw",
-            "age_relative_to_avg": "capacity_mw",
-            "pollution_control_costs_per_kw": "capacity_mw",
-        }
 
         if age_year is not None:
             age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
@@ -1243,13 +1351,13 @@ class DataBySubplant:
                 ).dt.days
                 / 365.25,
                 avg_age_from_report_year=lambda x: x.groupby(
-                    ["plant_id_eia", subplant_id_col]
+                    ["plant_id_eia", "generator_id"]
                 )["age_from_report_year"].transform("mean"),
                 current_age=lambda x: (
                     age_year_str - x["generator_operating_date"]
                 ).dt.days
                 / 365.25,
-                current_avg_age=lambda x: x.groupby(["plant_id_eia", subplant_id_col])[
+                current_avg_age=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
                     "current_age"
                 ].transform("mean"),
                 age_of_observation=lambda x: (age_year_str - x["report_date"]).dt.days
@@ -1257,20 +1365,7 @@ class DataBySubplant:
                 age_relative_to_avg=lambda x: x["current_age"]
                 - x["avg_age_from_report_year"],
             )
-            .astype({k: float for k in wtavg_dict})
-            .fillna({k: 0.0 for k in wtavg_dict})
-            .drop(columns=["_merge"])
-            .pipe(
-                sum_and_weighted_average_agg,
-                by=[
-                    "plant_id_eia",
-                    subplant_id_col,
-                    pd.Grouper(key="report_date", freq="YS"),
-                ],
-                sum_cols=["capacity_mw"],
-                wtavg_dict=wtavg_dict,
-            )
-            .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+            .astype({"plant_id_eia": "Int64", "generator_id": "str"})[GET_860_GEN_COLS]
         )
 
     def get_gen923_by_subplant(self):
@@ -1918,6 +2013,12 @@ class DataBySubplant:
         )
 
         return prime_fuel_heat_rates
+
+    def _exa_by_generator(self):
+        """
+        Grab 860, 923, and CEMS data at generator level for counterfactural information.
+
+        """
 
     @staticmethod
     def validate_merge_all_results(merge_all_df):
