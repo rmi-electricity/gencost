@@ -17,6 +17,7 @@ from etoolbox.utils.pudl_helpers import (
     sum_and_weighted_average_agg,
 )
 from etoolbox.utils.remote_zip import RemoteIOError, RemoteZip
+from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -1918,7 +1919,8 @@ class DataBySubplant:
 
         return prime_fuel_heat_rates
 
-    def validate_merge_all_results(self, merge_all_df):
+    @staticmethod
+    def validate_merge_all_results(merge_all_df):
         """
 
         Args:
@@ -1929,128 +1931,115 @@ class DataBySubplant:
 
 
         """
-
-        schema = pa.DataFrameSchema(
-            columns={
-                "plant_id_eia": pa.Column(int, nullable=False),
-                "pf_subplant_id": pa.Column(int, nullable=False),
-                "subplant_id": pa.Column(int, nullable=True),
-                "report_date": pa.Column(dt, nullable=False),
-                "step": pa.Column(int),
-                "capacity_mw": pa.Column(float),
-                "camd_capacity_mw": pa.Column(float),
-                "net_generation_mwh": pa.Column(float),
-                "generator_starts": pa.Column(int),
-                "fuel_starts": pa.Column(int),
-                "gross_generation_mwh": pa.Column(float),
-                "heat_in_mmbtu": pa.Column(float),
-                "associated_combined_heat_power": pa.Column(float),
-                "duct_burners": pa.Column(float),
-                "bypass_heat_recovery": pa.Column(float),
-                "solid_fuel_gasification": pa.Column(float),
-                "carbon_capture": pa.Column(float),
-                "fluidized_bed_tech": pa.Column(float),
-                "pulverized_coal_tech": pa.Column(float),
-                "stoker_tech": pa.Column(float),
-                "other_combustion_tech": pa.Column(float),
-                "subcritical_tech": pa.Column(float),
-                "supercritical_tech": pa.Column(float),
-                "ultrasupercritical_tech": pa.Column(float),
-                "age_from_report_year": pa.Column(float),
-                "avg_age_from_report_year": pa.Column(float),
-                "current_avg_age": pa.Column(float),
-                "age_of_observation": pa.Column(float),
-                "age_relative_to_avg": pa.Column(float),
-                "pollution_control_costs_per_kw": pa.Column(float),
-                "biofuel_mmbtu": pa.Column(float, nullable=True),
-                "coal_mmbtu": pa.Column(float, nullable=True),
-                "natural_gas_mmbtu": pa.Column(float, nullable=True),
-                "other_mmbtu": pa.Column(float, nullable=True),
-                "other_gas_mmbtu": pa.Column(float, nullable=True),
-                "petroleum_mmbtu": pa.Column(float, nullable=True),
-                "petroleum_coke_mmbtu": pa.Column(float, nullable=True),
-                "biofuel_net_mwh": pa.Column(float, nullable=True),
-                "coal_net_mwh": pa.Column(float, nullable=True),
-                "natural_gas_net_mwh": pa.Column(float, nullable=True),
-                "other_net_mwh": pa.Column(float, nullable=True),
-                "other_gas_net_mwh": pa.Column(float, nullable=True),
-                "petroleum_net_mwh": pa.Column(float, nullable=True),
-                "petroleum_coke_net_mwh": pa.Column(float, nullable=True),
-                "biofuel_gross_mwh": pa.Column(float, nullable=True),
-                "coal_gross_mwh": pa.Column(float, nullable=True),
-                "natural_gas_gross_mwh": pa.Column(float, nullable=True),
-                "other_gross_mwh": pa.Column(float, nullable=True),
-                "other_gas_gross_mwh": pa.Column(float, nullable=True),
-                "petroleum_gross_mwh": pa.Column(float, nullable=True),
-                "petroleum_coke_gross_mwh": pa.Column(float, nullable=True),
-                "real_capex": pa.Column(float, nullable=True),
-                "real_opex": pa.Column(float, nullable=True),
-                "capex": pa.Column(float, nullable=True),
-                "opex": pa.Column(float, nullable=True),
-                "arc": pa.Column(float, nullable=True),
-                "net_cf": pa.Column(float, nullable=True),
-                "gross_cf": pa.Column(float, nullable=True),
-                "gross_hr": pa.Column(float, nullable=True),
-                "report_year": pa.Column(int, nullable=True),
-            },
-            checks=[
-                pa.Check(
-                    lambda df: df["gross_generation_mwh"] > df["net_generation_mwh"]
-                ),
-                pa.Check(lambda df: ~(df["real_capex"] < 0)),
-                pa.Check(lambda df: ~(df["real_opex"] < 0)),
-                pa.Check(lambda df: ~(df["capex"] < 0)),
-                pa.Check(lambda df: ~(df["opex"] < 0)),
-                pa.Check(
-                    lambda df: pd.Series(
-                        np.isclose(
-                            (
-                                df[
-                                    [
-                                        "biofuel_net_mwh",
-                                        "coal_net_mwh",
-                                        "natural_gas_net_mwh",
-                                        "other_net_mwh",
-                                        "other_gas_net_mwh",
-                                        "petroleum_net_mwh",
-                                        "petroleum_coke_net_mwh",
-                                    ]
-                                ].sum(axis=1)
-                            ),
-                            df["net_generation_mwh"],
-                            rtol=0.1,
-                        ),
-                        index=df.index,
-                    )
-                ),
-                pa.Check(
-                    lambda df: pd.Series(
-                        np.isclose(
-                            (
-                                df[
-                                    [
-                                        "biofuel_gross_mwh",
-                                        "coal_gross_mwh",
-                                        "natural_gas_gross_mwh",
-                                        "other_gross_mwh",
-                                        "other_gas_gross_mwh",
-                                        "petroleum_gross_mwh",
-                                        "petroleum_coke_gross_mwh",
-                                    ]
-                                ].sum(axis=1)
-                            ),
-                            df["gross_generation_mwh"],
-                            rtol=0.1,
-                        ),
-                        index=df.index,
-                    )
-                ),
-            ],
-            index=pa.Index(int),
-            strict=False,
-            coerce=False,
+        fuels = (
+            "biofuel",
+            "coal",
+            "natural_gas",
+            "other",
+            "other_gas",
+            "petroleum",
+            "petroleum_coke",
+        )
+        techs = (
+            "associated_combined_heat_power",
+            "duct_burners",
+            "bypass_heat_recovery",
+            "solid_fuel_gasification",
+            "carbon_capture",
+            "fluidized_bed_tech",
+            "pulverized_coal_tech",
+            "stoker_tech",
+            "other_combustion_tech",
+            "subcritical_tech",
+            "supercritical_tech",
+            "ultrasupercritical_tech",
+        )
+        columns = (
+            {
+                "plant_id_eia": Column(int),
+                "pf_subplant_id": Column(int),
+                "subplant_id": Column("Int64", nullable=True),
+                "report_date": Column(dt),
+                "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
+                "step": Column(int, Check.isin((1, 2, 3))),
+                "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
+                "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
+                "net_generation_mwh": Column(float),
+                "generator_starts": Column(int, Check.ge(0)),
+                "fuel_starts": Column(int, Check.ge(0)),
+                "gross_generation_mwh": Column(float, Check.ge(0.0)),
+                "heat_in_mmbtu": Column(float, Check.ge(0.0)),
+            }
+            | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
+            | {
+                "age_from_report_year": Column(float),
+                "avg_age_from_report_year": Column(float),
+                "current_avg_age": Column(float, Check.in_range(0.0, 2e3)),
+                "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
+                "age_relative_to_avg": Column(float),
+            }
+            | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
+            | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
+            | {
+                f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
+                for k in fuels
+            }
+            | {
+                "parasitic_load_pct": Column(float),
+                "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                "real_capex": Column(float, Check.gt(0.0), nullable=True),
+                "real_opex": Column(float, Check.gt(0.0), nullable=True),
+                "capex": Column(float, Check.gt(0.0), nullable=True),
+                "opex": Column(float, Check.gt(0.0), nullable=True),
+                "arc": Column(float, nullable=True),
+                "net_cf": Column(float, nullable=True),
+                "gross_cf": Column(float, Check.ge(0.0), nullable=True),
+                "gross_hr": Column(float, Check.ge(0.0), nullable=True),
+                "fuel_category": Column(str),
+                "inflator_to_2021": Column(float),
+                "wage_scale": Column(float),
+                "report_year": Column(int, nullable=True),
+            }
         )
 
-        df = schema.validate(merge_all_df, lazy=True)
+        def gross_ge_net(df_):
+            return df_.gross_generation_mwh >= df_.net_generation_mwh
+
+        def x_gen_allocation(df_, kind):
+            return pd.Series(
+                np.isclose(
+                    df_.filter(like=f"_{kind}_mwh").sum(axis=1),
+                    df_[f"{kind}_generation_mwh"],
+                    rtol=2e-2,
+                ),
+                index=df_.index,
+            )
+
+        def valid_generation(df_):
+            hrs = np.where(df_.report_date.dt.is_leap_year, 8784, 8760)
+            return df_.net_generation_mwh <= df_.capacity_mw * hrs * 1.3
+
+        schema = pa.DataFrameSchema(
+            columns=columns,
+            checks=[
+                Check(
+                    gross_ge_net,
+                    title="net_gen >= gross_gen",
+                    description="Gross generation should always be greater than net",
+                    # I don't think we want to error here yet, so just raise a warning
+                    raise_warning=True,
+                ),
+                Check(x_gen_allocation, title="net_gen aggregation", kind="net"),
+                Check(x_gen_allocation, title="gross_gen aggregation", kind="gross"),
+                # I don't think we want to error here yet, so just raise a warning
+                Check(valid_generation, title="valid net gen", raise_warning=True),
+            ],
+            unique=["plant_id_eia", "subplant_id", "pf_subplant_id", "report_date"],
+            index=pa.Index(int),
+            strict=False,
+            coerce=True,
+            ordered=True,
+        )
+        df = schema.validate(merge_all_df[columns])
 
         return df
