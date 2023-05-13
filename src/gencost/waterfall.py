@@ -745,6 +745,10 @@ class DataBySubplant:
             self._dfs["waterfall"] = merged
         return self._dfs["waterfall"]
 
+    def get_exa_by_generator(self):
+        self.get_860_by_x(subplant_id_col="generator_id")
+        self.get_gf923_by_generator()
+
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
         self.merge_all(clean=clean).drop(columns=["subplant_id"]).to_parquet(
@@ -1730,6 +1734,37 @@ class DataBySubplant:
             .reset_index()
             .assign(net_generation_mwh=lambda x: x.filter(like="_net_mwh").sum(axis=1))
         )
+
+    def get_gf923_by_generator(self):
+        gf_923 = (
+            self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
+            .pipe(add_fuel_group)
+            .rename(
+                columns={
+                    "net_generation_mwh": "net_mwh",
+                    "fuel_consumed_mmbtu": "mmbtu",
+                }
+            )
+            .pivot_table(
+                index=[
+                    "plant_id_eia",
+                    "generator_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                ],
+                columns="fuel_group",
+                values=["net_mwh", "mmbtu"],
+                aggfunc={
+                    "net_mwh": "sum",
+                    "mmbtu": "sum",
+                    # "hr_src": sorted_unique_cat,
+                },
+            )
+            .reorder_levels([1, 0], axis=1)
+        )
+
+        gf_923.columns = map("_".join, gf_923.columns)
+
+        return gf_923.reset_index()
 
     def get_cems_by_x(self, subplant_id_col, xwalk=None, merge_only=False):
         """
