@@ -14,6 +14,8 @@ def make_cache_path():
 
 def retrieve_pudl_tabl():
     pudl_path = CACHE_PATH / "pdltbl.zip"
+    if pudl_path.exists() and pudl_path.stat().st_atime < 1683900580:
+        pudl_path.unlink()
     if not pudl_path.exists():
         download(
             "https://github.com/rmi-electricity/easy-data/"

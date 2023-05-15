@@ -23,11 +23,12 @@ dependencies = [
     "numpy >= 1.18.5,<2",
     "networkx >= 3.0,<3.2",
     "pandas >= 1.4,< 2.1",
-    "pandera >= 0.12, <0.15",
-    "platformdirs >=2.6,<3.3",
+    "pandera >= 0.12, < 0.16",
+    "platformdirs >=2.6,<3.6",
     "plotly>5.10,<5.15",
-    "pyarrow>=7, <12",
+    "pyarrow>=7, <13",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
+    "scikit-learn>1.1, <1.3",
     "tqdm >= 4.63,< 4.66",
 ]
 
@@ -35,18 +36,18 @@ dependencies = [
 dev = [
     "black[jupyter] >= 22,< 24",
     "coverage>=5.3,<7.3",  # Lets us track what code is being tested
-    "pre-commit>=2.9,<3.3",
+    "pre-commit>=2.9,<3.4",
     "pytest>=7.2.1,<7.4",  # test framework
     "pytest-console-scripts>=1.1,<1.4",  # Allow automatic testing of scripts
     "pytest-cov>=4.0,<4.1",  # Pytest plugin for working with coverage
-    "ruff>0.0.259,<0.0.263",
-    "tox>=4.2,<4.5",
+    "ruff>0.0.259,<0.0.266",
+    "tox>=4.2,<4.6",
 ]
 doc = [
     "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
     "furo>=2022.4.7",  # A clean customisable Sphinx documentation theme.
     "rstcheck[sphinx,toml]>=6.1,<6.2",  # ReStructuredText linter
-    "sphinx>=4.1,<6.2.1",
+    "sphinx>=4.1,<7.0.1",
     "sphinx-autoapi>=2.0,<2.2",
     "sphinx-issues>=3.0,<3.1",
     "sphinx-autodoc-typehints>1.21,<1.24.0",
