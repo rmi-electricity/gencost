@@ -1793,52 +1793,89 @@ class DataBySubplant:
             .drop_duplicates(),
             on=["plant_id_epa", "emissions_unit_id_epa"],
             how="outer",
-            validate="m:1",
+            validate="m:m",
             indicator=True,
         )
-        test = (
-            merged.fillna({"plant_id_epa": merged.plant_id_eia})
-            .query("_merge != 'both'")
-            .replace({"_merge": {"left_only": "data_only", "right_only": "xwalk_only"}})
-            .assign(year=lambda x: x.report_date.dt.year)
-            .groupby(["_merge", "year"], dropna=False)
-            .plant_id_epa.nunique()
-            .to_frame()
-            .query("plant_id_epa > 0")
-        )
-        logger.warning(
-            "CEMS %s: Unique plants that did not have matches in both "
-            "CEMS and the xwalk so will be dropped:\n %s \n",
-            {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
-            test.squeeze().to_dict(),
-        )
-        if merge_only:
-            return merged
-        aggs = {
-            "generator_starts": "sum",
-            "fuel_starts": "sum",
-            "gross_generation_mwh": "sum",
-            "heat_in_mmbtu": "sum",
-            "co2_tons": "sum",
-        }
-        return (
-            merged.query("_merge == 'both'")
-            .drop(columns=["_merge"])
-            .groupby(["plant_id_eia", subplant_id_col, "report_date"])
-            .agg(aggs | {"camd_capacity_mw": "sum"})
-            .reset_index()
-            .groupby(
-                [
-                    "plant_id_eia",
-                    subplant_id_col,
-                    pd.Grouper(key="report_date", freq="YS"),
-                ],
-                dropna=False,
+
+        if subplant_id_col == "generator_id":
+            merged_w_gf_923 = (
+                merged.query('_merge == "both"')
+                .merge(
+                    self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923(),
+                    on=["plant_id_eia", "generator_id", "report_date"],
+                    how="outer",
+                    validate="m:m",
+                    indicator="exists",
+                )
+                .pipe(add_fuel_group)
+                .rename(columns={"prime_mover_code": "prime_mover"})
+                .assign(
+                    gross_gen_mwh=lambda x: x.fuel_consumed_mmbtu
+                    / positive_heat_rate(
+                        x, "fuel_consumed_mmbtu", "gross_generation_mwh"
+                    )
+                )
+                .rename(columns={"gross_gen_mwh": "gross_mwh"})
+                .pivot_table(
+                    index=["plant_id_eia", "generator_id", "report_date"],
+                    columns="fuel_group",
+                    values=["gross_mwh"],
+                    aggfunc={"gross_mwh": "sum"},
+                )
+                .reorder_levels([1, 0], axis=1)
             )
-            .agg(aggs | {"camd_capacity_mw": "max"})
-            .reset_index()
-            .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
-        )
+
+            merged_w_gf_923.columns = map("_".join, merged_w_gf_923.columns)
+
+            return merged_w_gf_923.reset_index()
+
+        else:
+            test = (
+                merged.fillna({"plant_id_epa": merged.plant_id_eia})
+                .query("_merge != 'both'")
+                .replace(
+                    {"_merge": {"left_only": "data_only", "right_only": "xwalk_only"}}
+                )
+                .assign(year=lambda x: x.report_date.dt.year)
+                .groupby(["_merge", "year"], dropna=False)
+                .plant_id_epa.nunique()
+                .to_frame()
+                .query("plant_id_epa > 0")
+            )
+
+            logger.warning(
+                "CEMS %s: Unique plants that did not have matches in both "
+                "CEMS and the xwalk so will be dropped:\n %s \n",
+                {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
+                test.squeeze().to_dict(),
+            )
+            if merge_only:
+                return merged
+            aggs = {
+                "generator_starts": "sum",
+                "fuel_starts": "sum",
+                "gross_generation_mwh": "sum",
+                "heat_in_mmbtu": "sum",
+                "co2_tons": "sum",
+            }
+            return (
+                merged.query("_merge == 'both'")
+                .drop(columns=["_merge"])
+                .groupby(["plant_id_eia", subplant_id_col, "report_date"])
+                .agg(aggs | {"camd_capacity_mw": "sum"})
+                .reset_index()
+                .groupby(
+                    [
+                        "plant_id_eia",
+                        subplant_id_col,
+                        pd.Grouper(key="report_date", freq="YS"),
+                    ],
+                    dropna=False,
+                )
+                .agg(aggs | {"camd_capacity_mw": "max"})
+                .reset_index()
+                .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+            )
 
     def add_costs(self, df: pd.DataFrame, on="subplant_id"):
         id_cols = ["plant_id_eia", "prime_mover", "report_date"]
