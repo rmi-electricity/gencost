@@ -1780,56 +1780,148 @@ class DataBySubplant:
         if xwalk is None:
             xwalk = self.xwalk
 
-        merged = self.get_cems().merge(
-            xwalk[
-                [
-                    "plant_id_epa",
-                    "plant_id_eia",
-                    "emissions_unit_id_epa",
-                    subplant_id_col,
-                ]
-            ]
-            .dropna(axis=0, subset=["plant_id_epa", "emissions_unit_id_epa"])
-            .drop_duplicates(),
-            on=["plant_id_epa", "emissions_unit_id_epa"],
-            how="outer",
-            validate="m:m",
-            indicator=True,
-        )
-
         if subplant_id_col == "generator_id":
-            merged_w_gf_923 = (
-                merged.query('_merge == "both"')
+            merged = (
+                self.get_cems()[
+                    [
+                        "plant_id_epa",
+                        "emissions_unit_id_epa",
+                        "report_date",
+                        "generator_starts",
+                        "fuel_starts",
+                        "gross_generation_mwh",
+                        "camd_capacity_mw",
+                    ]
+                ]
                 .merge(
-                    self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923(),
-                    on=["plant_id_eia", "generator_id", "report_date"],
+                    xwalk[
+                        [
+                            "plant_id_epa",
+                            "plant_id_eia",
+                            "emissions_unit_id_epa",
+                            subplant_id_col,
+                            "capacity_xwalk",
+                            "subplant_id",
+                        ]
+                    ]
+                    .dropna(axis=0, subset=["plant_id_epa", "emissions_unit_id_epa"])
+                    .drop_duplicates(),
+                    left_on=[
+                        "plant_id_epa",
+                        "emissions_unit_id_epa",
+                        "camd_capacity_mw",
+                    ],
+                    right_on=[
+                        "plant_id_epa",
+                        "emissions_unit_id_epa",
+                        "capacity_xwalk",
+                    ],
                     how="outer",
                     validate="m:m",
-                    indicator="exists",
+                    indicator=True,
                 )
-                .pipe(add_fuel_group)
-                .rename(columns={"prime_mover_code": "prime_mover"})
-                .assign(
-                    gross_gen_mwh=lambda x: x.fuel_consumed_mmbtu
-                    / positive_heat_rate(
-                        x, "fuel_consumed_mmbtu", "gross_generation_mwh"
-                    )
+                .query('_merge == "both"')
+                .groupby(
+                    [
+                        "plant_id_eia",
+                        "subplant_id",
+                        pd.Grouper(key="report_date", freq="YS"),
+                    ]
                 )
-                .rename(columns={"gross_gen_mwh": "gross_mwh"})
-                .pivot_table(
-                    index=["plant_id_eia", "generator_id", "report_date"],
-                    columns="fuel_group",
-                    values=["gross_mwh"],
-                    aggfunc={"gross_mwh": "sum"},
+                .agg(
+                    {
+                        "gross_generation_mwh": "sum",
+                        "generator_starts": "sum",
+                        "fuel_starts": "sum",
+                    }
                 )
-                .reorder_levels([1, 0], axis=1)
+                .reset_index()
             )
 
-            merged_w_gf_923.columns = map("_".join, merged_w_gf_923.columns)
+            merged_with_gf_frac = (
+                self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
+                .pipe(add_fuel_group)
+                .groupby(
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        "fuel_group",
+                        pd.Grouper(key="report_date", freq="YS"),
+                    ]
+                )
+                .agg({"fuel_consumed_mmbtu": "sum"})
+                .reset_index()
+                .merge(
+                    xwalk[
+                        ["plant_id_eia", "generator_id", "subplant_id"]
+                    ].drop_duplicates(),
+                    on=["plant_id_eia", "generator_id"],
+                    how="outer",
+                    validate="m:1",
+                    indicator=True,
+                )
+                .assign(
+                    subplant_fuel_consumed_mmbtu=lambda x: x.groupby(
+                        ["plant_id_eia", "subplant_id", "report_date"]
+                    )["fuel_consumed_mmbtu"].transform("sum"),
+                    gen_fuel_consumed_frac=lambda x: x.fuel_consumed_mmbtu
+                    / x.subplant_fuel_consumed_mmbtu,
+                )
+                .merge(
+                    merged,
+                    on=["plant_id_eia", "subplant_id", "report_date"],
+                    how="outer",
+                    validate="m:1",
+                    indicator="exists",
+                )
+                .assign(
+                    cems_gross_mwh=lambda x: x.gross_generation_mwh
+                    * x.gen_fuel_consumed_frac
+                )
+            )
 
-            return merged_w_gf_923.reset_index()
+            out = (
+                merged_with_gf_frac.query("_merge == 'both' & exists == 'both'")
+                # .rename(columns={"generator": "mmbtu"})
+                .pivot_table(
+                    index=[
+                        "plant_id_eia",
+                        subplant_id_col,
+                        "report_date",
+                    ],
+                    columns="fuel_group",
+                    values=["cems_gross_mwh", "generator_starts", "fuel_starts"],
+                    aggfunc={
+                        "cems_gross_mwh": "sum",
+                        "generator_starts": "sum",
+                        "fuel_starts": "sum",
+                        # "hr_src": sorted_unique_cat,
+                    },
+                ).reorder_levels([1, 0], axis=1)
+            )
+            out.columns = map("_".join, out.columns)
+            out = out.loc[:, out.sum(axis=0) != 0].reset_index()
+
+            return out
 
         else:
+            merged = self.get_cems().merge(
+                xwalk[
+                    [
+                        "plant_id_epa",
+                        "plant_id_eia",
+                        "emissions_unit_id_epa",
+                        subplant_id_col,
+                    ]
+                ]
+                .dropna(axis=0, subset=["plant_id_epa", "emissions_unit_id_epa"])
+                .drop_duplicates(),
+                on=["plant_id_epa", "emissions_unit_id_epa"],
+                how="outer",
+                validate="m:1",
+                indicator=True,
+            )
+
             test = (
                 merged.fillna({"plant_id_epa": merged.plant_id_eia})
                 .query("_merge != 'both'")
