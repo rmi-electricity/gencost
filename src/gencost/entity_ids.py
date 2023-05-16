@@ -3,7 +3,7 @@ import pandas as pd
 from gencost.package_data import PACKAGE_PATH
 
 
-def add_respondent_ids(
+def add_ba_code(
     input_df: pd.DataFrame, new_ba_col: str = "final_ba_code", drop_interim=False
 ):
     """Add respondent and final ba_codes.
@@ -16,10 +16,15 @@ def add_respondent_ids(
     Returns:
 
     """
-    ferc_match = pd.read_parquet(PACKAGE_PATH / "utility_information.parquet.gzip")
-    purchased = pd.read_parquet(PACKAGE_PATH / "f1_purchased_power_tagged.parquet.gzip")
+    if missing := {"plant_id_eia", "balancing_authority_code_eia"} - set(input_df):
+        raise ValueError(f"`input_df` is missing {missing}")
+    ferc_match = pd.read_parquet(
+        PACKAGE_PATH / "utility_information.parquet.gzip"
+    ).astype({"respondent_id": "Int64"})
     purchased = (
-        purchased.query("report_year == 2020 & plant_id_eia.notna()")
+        pd.read_parquet(PACKAGE_PATH / "f1_purchased_power_tagged.parquet.gzip")
+        .astype({"respondent_id": "Int64"})
+        .query("report_year == 2020 & plant_id_eia.notna()")
         .assign(
             proportion_purchased=lambda x: x.mwh_purchased
             / x.groupby(["plant_id_eia"]).mwh_purchased.transform("sum"),
@@ -29,9 +34,7 @@ def add_respondent_ids(
     )
     out = (
         input_df.merge(
-            ferc_match[
-                ["respondent_id", "utility_id_eia", "utility_name"]
-            ].drop_duplicates(),
+            ferc_match[["respondent_id", "utility_id_eia"]].dropna().drop_duplicates(),
             on="utility_id_eia",
             how="left",
             validate="m:1",
@@ -45,16 +48,16 @@ def add_respondent_ids(
         .assign(
             final_respondent_id=lambda x: x.respondent_id.fillna(
                 x.respondent_id_purchaser
-            )
+            )  # .astype("Int64")
         )
-        .pipe(add_new_ba_code, new_ba_col=new_ba_col)
+        .pipe(adjust_ba_codes, new_ba_col=new_ba_col)
     )
     if drop_interim:
-        return out.drop(columns=["respondent_id_purchaser", "respondent_id"])
+        return out.drop(columns=["respondent_id_purchaser", "final_respondent_id"])
     return out
 
 
-def add_new_ba_code(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFrame:
+def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFrame:
     """Process for assigning plants to EIA BA codes and FERC 1 Respondent IDs."""
     # Source for PJM FRR data
     # https://www.pjm.com/-/media/markets-ops/rpm/rpm-auction-info/2024-2025/2024-2025-planning-period-parameters-for-base-residual-auction.ashx
