@@ -746,8 +746,43 @@ class DataBySubplant:
         return self._dfs["waterfall"]
 
     def get_exa_by_generator(self):
-        self.get_860_by_x(subplant_id_col="generator_id")
-        self.get_gf923_by_generator()
+        df_860 = self.get_860_by_x(subplant_id_col="generator_id")
+        df_923 = self.get_gf923_by_generator()
+        df_cems = self.get_cems_by_x(subplant_id_col="generator_id")
+
+        merged0 = df_860.merge(
+            df_923,
+            on=["plant_id_eia", "generator_id", "report_date"],
+            validate="1:1",
+            how="right",
+            indicator="eia_merge",
+        )
+
+        merged = (
+            merged0.merge(
+                df_cems,
+                on=["plant_id_eia", "generator_id", "report_date"],
+                validate="1:1",
+                how="left",
+                indicator="exa_merge",
+            )
+            .assign(
+                _merge=lambda x: x[["eia_merge", "exa_merge"]]
+                .astype("string")
+                .fillna("")
+                .agg(",".join, axis=1)
+                .replace(
+                    {
+                        "both,both": "all",
+                        "both,left_only": "eia_only",
+                        "right_only,both": "923_epa",
+                    }
+                )
+            )
+            .drop(columns=["eia_merge", "exa_merge"])
+        )
+
+        return merged
 
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
