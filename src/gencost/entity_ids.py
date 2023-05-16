@@ -16,7 +16,11 @@ def add_ba_code(
     Returns:
 
     """
-    if missing := {"plant_id_eia", "balancing_authority_code_eia"} - set(input_df):
+    if missing := {
+        "plant_id_eia",
+        "utility_id_eia",
+        "balancing_authority_code_eia",
+    } - set(input_df):
         raise ValueError(f"`input_df` is missing {missing}")
     ferc_match = pd.read_parquet(
         PACKAGE_PATH / "utility_information.parquet.gzip"
