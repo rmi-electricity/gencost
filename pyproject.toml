@@ -111,7 +111,7 @@ ignore_directives = ["bibliography", "todo", "include"]
 [tool.ruff]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 select = ["A", "B", "C", "E", "F", "N", "S", "SIM", "TCH", "W"]
-ignore = []
+ignore = ["E501"]
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 fixable = ["A", "B", "C", "D", "E", "F",]
 unfixable = []
