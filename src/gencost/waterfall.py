@@ -427,6 +427,8 @@ class DataBySubplant:
                         "≥60% " + x.top_fuel,
                     ).mask(x.top_fuel_share >= 0.9, x.top_fuel),
                     report_year=lambda x: x.report_date.dt.year,
+                    real_pollution_control_costs_per_kw=lambda x: x.pollution_control_costs_per_kw
+                    * x.inflator_to_2021,
                 )
                 .drop(
                     columns=[
@@ -437,16 +439,10 @@ class DataBySubplant:
                 )
             )
 
-            # out[[x.replace("_mwh", "_gross_cf") for x in MWH_COLS]] = (
-            #     out[MWH_COLS]
-            #     .divide(out[MWH_COLS].sum(axis=1), axis=0)
-            #     .multiply(out.gross_generation_mwh, axis=0)
-            #     .divide(
-            #         out.capacity_mw
-            #         * np.where(out.report_date.dt.is_leap_year, 8784, 8760),
-            #         axis=0,
-            #     )
-            # )
+            out[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = out[
+                gross_mwh_cols
+            ].divide(out[gross_mwh_cols].sum(axis=1), axis=0)
+
             self._dfs["merge_all"] = self.validate_merge_all_results(out)
 
         if clean:
