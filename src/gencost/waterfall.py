@@ -24,6 +24,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP, GET_860_GEN_COLS
 from gencost.crosswalk import Crosswalk
+from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
 
 pat_path = Path(__file__).parent
@@ -1221,6 +1222,19 @@ class DataBySubplant:
                 how="left",
                 validate="m:1",
             )
+            .merge(
+                self.pudl_tabl.gens_eia860m()[
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        "balancing_authority_code_eia",
+                        # "state",
+                    ]
+                ].drop_duplicates(),
+                on=["plant_id_eia", "generator_id"],
+                how="left",
+                validate="m:1",
+            )
         )
 
         if subplant_id_col == "generator_id":
@@ -1232,22 +1246,30 @@ class DataBySubplant:
             if merge_only:
                 return merged
 
-            return merged.assign(
-                age_from_report_year=lambda x: (
-                    x["report_date"] - x["generator_operating_date"]
-                ).dt.days
-                / 365.25,
-                avg_age_from_report_year=lambda x: x.age_from_report_year,
-                current_age=lambda x: (
-                    age_year_str - x["generator_operating_date"]
-                ).dt.days
-                / 365.25,
-                current_avg_age=lambda x: x.current_age,
-                age_of_observation=lambda x: (age_year_str - x["report_date"]).dt.days
-                / 365.25,
-                age_relative_to_avg=lambda x: x["current_age"]
-                - x["avg_age_from_report_year"],
-            ).astype({"plant_id_eia": "Int64", "generator_id": "str"})[GET_860_GEN_COLS]
+            return (
+                merged.assign(
+                    age_from_report_year=lambda x: (
+                        x["report_date"] - x["generator_operating_date"]
+                    ).dt.days
+                    / 365.25,
+                    avg_age_from_report_year=lambda x: x.age_from_report_year,
+                    current_age=lambda x: (
+                        age_year_str - x["generator_operating_date"]
+                    ).dt.days
+                    / 365.25,
+                    current_avg_age=lambda x: x.current_age,
+                    age_of_observation=lambda x: (
+                        age_year_str - x["report_date"]
+                    ).dt.days
+                    / 365.25,
+                    age_relative_to_avg=lambda x: x["current_age"]
+                    - x["avg_age_from_report_year"],
+                )
+                .astype({"plant_id_eia": "Int64", "generator_id": "str"})[
+                    GET_860_GEN_COLS
+                ]
+                .pipe(add_ba_code)
+            )
         else:
             xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
                 subplant_id_col
@@ -1339,7 +1361,10 @@ class DataBySubplant:
                 .pipe(
                     sum_and_weighted_average_agg,
                     by=[
+                        "utility_id_eia",
                         "plant_id_eia",
+                        "balancing_authority_code_eia",
+                        "state",
                         subplant_id_col,
                         pd.Grouper(key="report_date", freq="YS"),
                     ],
@@ -1347,6 +1372,7 @@ class DataBySubplant:
                     wtavg_dict=wtavg_dict,
                 )
                 .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+                .pipe(add_ba_code)
             )
 
     def get_gen923_by_subplant(self):

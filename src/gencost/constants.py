@@ -54,6 +54,9 @@ FUEL_GROUP_MAP = UDAY_FOSSIL_FUEL_MAP | {
 }
 
 GET_860_GEN_COLS = [
+    "utility_id_eia",
+    "balancing_authority_code_eia",
+    "state",
     "plant_id_eia",
     "generator_id",
     "report_date",
