@@ -1340,9 +1340,8 @@ class DataBySubplant:
             }
 
             return (
-                merged.query(
-                    "_merge == 'both'"
-                )  # redo age calcs with subplant group by
+                merged.query("_merge == 'both'")  # overwrite existing age columns
+                # by re-doing with group by at subplant level
                 .assign(
                     avg_age_from_report_year=lambda x: x.groupby(
                         ["plant_id_eia", subplant_id_col]
