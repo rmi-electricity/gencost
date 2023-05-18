@@ -330,49 +330,36 @@ class DataBySubplant:
             )
             print(test.squeeze().to_dict())
             gross_mwh_cols = out.filter(like="_gross_mwh").columns
-            out = (
-                out.query("ferc_merge == 'both'")
-                .assign(
-                    hrs_in_yr=lambda x: np.where(
-                        x.report_date.dt.is_leap_year, 8784, 8760
-                    ),
-                    net_cf=lambda x: x.net_generation_mwh
-                    / (x.capacity_mw * x.hrs_in_yr),
-                    gross_cf=lambda x: x.gross_generation_mwh
-                    / (x.capacity_mw * x.hrs_in_yr),
-                    gross_hr=lambda x: x.heat_in_mmbtu / x.gross_generation_mwh,
-                    parasitic_load_pct=lambda x: (
-                        x.gross_generation_mwh - x.net_generation_mwh
-                    )
-                    / (x.capacity_mw * x.hrs_in_yr),
-                    n_fuel_groups=lambda x: (
-                        x[gross_mwh_cols] / x[gross_mwh_cols].sum(axis=1)
-                    )
-                    .gt(0.02)
-                    .sum(axis=1)
-                    .astype("Int64"),
-                    top_fuel_share=lambda x: bio_into_other(x, "_gross_mwh").max(axis=1)
-                    / x[gross_mwh_cols].sum(axis=1),
-                    top_fuel=lambda x: bio_into_other(x, "_gross_mwh")
-                    .fillna(0.0)
-                    .idxmax(axis=1)
-                    .str.replace("_gross_mwh", ""),
-                    true_multi_fuel="multi_fuel",
-                    fuel_category=lambda x: x.true_multi_fuel.mask(
-                        x.top_fuel_share >= 0.6,
-                        "≥60% " + x.top_fuel,
-                    ).mask(x.top_fuel_share >= 0.9, x.top_fuel),
-                    report_year=lambda x: x.report_date.dt.year,
-                    real_pollution_control_costs_per_kw=lambda x: x.pollution_control_costs_per_kw
-                    * x.inflator_to_2021,
+            out = out.query("ferc_merge == 'both'").assign(
+                hrs_in_yr=lambda x: np.where(x.report_date.dt.is_leap_year, 8784, 8760),
+                net_cf=lambda x: x.net_generation_mwh / (x.capacity_mw * x.hrs_in_yr),
+                gross_cf=lambda x: x.gross_generation_mwh
+                / (x.capacity_mw * x.hrs_in_yr),
+                gross_hr=lambda x: x.heat_in_mmbtu / x.gross_generation_mwh,
+                parasitic_load_pct=lambda x: (
+                    x.gross_generation_mwh - x.net_generation_mwh
                 )
-                .drop(
-                    columns=[
-                        "ferc_merge",
-                        "hrs_in_yr",
-                        "true_multi_fuel",
-                    ]
+                / (x.capacity_mw * x.hrs_in_yr),
+                n_fuel_groups=lambda x: (
+                    x[gross_mwh_cols] / x[gross_mwh_cols].sum(axis=1)
                 )
+                .gt(0.02)
+                .sum(axis=1)
+                .astype("Int64"),
+                top_fuel_share=lambda x: bio_into_other(x, "_gross_mwh").max(axis=1)
+                / x[gross_mwh_cols].sum(axis=1),
+                top_fuel=lambda x: bio_into_other(x, "_gross_mwh")
+                .fillna(0.0)
+                .idxmax(axis=1)
+                .str.replace("_gross_mwh", ""),
+                true_multi_fuel="multi_fuel",
+                fuel_category=lambda x: x.true_multi_fuel.mask(
+                    x.top_fuel_share >= 0.6,
+                    "≥60% " + x.top_fuel,
+                ).mask(x.top_fuel_share >= 0.9, x.top_fuel),
+                report_year=lambda x: x.report_date.dt.year,
+                real_pollution_control_costs_per_kw=lambda x: x.pollution_control_costs_per_kw
+                * x.inflator_to_2021,
             )
 
             out[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
@@ -380,8 +367,21 @@ class DataBySubplant:
                 .divide(out[gross_mwh_cols].sum(axis=1), axis=0)
                 .fillna(0.0)
             )
+            out[[c.replace("_gross_mwh", "_gross_cf") for c in gross_mwh_cols]] = (
+                out[gross_mwh_cols]
+                .divide(out.capacity_mw * out.hrs_in_yr, axis=0)
+                .fillna(0.0)
+            )
 
-            self._dfs["merge_all"] = self.validate_merge_all_results(out)
+            self._dfs["merge_all"] = self.validate_merge_all_results(
+                out.drop(
+                    columns=[
+                        "ferc_merge",
+                        "hrs_in_yr",
+                        "true_multi_fuel",
+                    ]
+                )
+            )
 
         if clean:
             return (
@@ -1941,6 +1941,7 @@ class DataBySubplant:
                 f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
                 for k in fuels
             }
+            | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
         )
 
         def gross_ge_net(df_):
