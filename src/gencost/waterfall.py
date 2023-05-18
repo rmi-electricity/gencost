@@ -1246,7 +1246,7 @@ class DataBySubplant:
                 ].drop_duplicates(),
                 on=["plant_id_eia", "generator_id"],
                 how="left",
-                indicator=True,
+                # indicator=True,
                 validate="m:1",
             )
             .assign(
