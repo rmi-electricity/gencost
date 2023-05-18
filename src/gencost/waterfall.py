@@ -1800,7 +1800,6 @@ class DataBySubplant:
                 opex=lambda x: x.opex_per_kw * x.capacity_mw * 1e3,
                 arc=lambda x: x.arc_per_kw * x.capacity_mw * 1e3,
             )
-            .drop(columns=[x for x in d_cols if "_kw" in x])
             .astype(dt)
         )
 
@@ -1934,6 +1933,8 @@ class DataBySubplant:
                 "fuel_starts": Column(int, Check.ge(0)),
                 "opex": Column(float, Check.ge(0.0), nullable=True),
                 "real_capex": Column(float, Check.ge(0.0), nullable=True),
+                "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
+                "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
             }
             | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
             | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
