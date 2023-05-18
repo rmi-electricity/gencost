@@ -1,5 +1,4 @@
 import logging
-import shutil
 import warnings
 from datetime import datetime as dt
 from pathlib import Path
@@ -9,18 +8,13 @@ import pandas as pd
 import pandera as pa
 import plotly.express as px
 import plotly.graph_objects as go
-import pyarrow
-import pyarrow.dataset as ds
 from etoolbox.utils.pudl_helpers import (
     month_year_to_date,
     simplify_columns,
     sum_and_weighted_average_agg,
 )
-from etoolbox.utils.remote_zip import RemoteIOError, RemoteZip
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
-from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP
 from gencost.crosswalk import Crosswalk
@@ -240,64 +234,6 @@ def rime_sort_key(string: str):
     return string[::-1]
 
 
-def wage_data(
-    years=(1994, 2023), clobber=False, base_url="https://data.bls.gov/cew/data/files/"
-):
-    """Download wage data for scaling cost data by year and state.
-
-    Args:
-        years: years of data that will be downloaded
-        clobber: re-download data even if cached version exists
-        base_url: base url to download from
-
-    Returns:
-
-    """
-    par = CACHE_PATH / "wage_data.parquet"
-    if par.exists() and not clobber:
-        return pd.read_parquet(CACHE_PATH / "wage_data.parquet")
-    else:
-        path = CACHE_PATH / "temp"
-        path.mkdir(parents=True, exist_ok=True)
-        with logging_redirect_tqdm():
-            for y in tqdm(range(*years), desc="Downloading wage data"):
-                url = base_url + f"{y}/csv/{y}_annual_by_industry.zip"
-                try:
-                    with RemoteZip(url) as zipf:
-                        file, *_ = (x for x in zipf.namelist() if " 2211 " in x)
-                        zipf.extract(file, path / f"{y}.csv")
-                except RemoteIOError:
-                    logger.error("Unable to download wage data for %s from %s", y, url)
-
-        data = (
-            ds.dataset(
-                path,
-                format="csv",
-                schema=pyarrow.schema(
-                    {
-                        "area_fips": pyarrow.string(),
-                        "agglvl_code": pyarrow.int32(),
-                        "year": pyarrow.int32(),
-                        "annual_avg_emplvl": pyarrow.int64(),
-                        "avg_annual_pay": pyarrow.int64(),
-                    }
-                ),
-            )
-            .to_table(filter=ds.field("agglvl_code") == 56)
-            .to_pandas()
-            .astype(
-                {
-                    "annual_avg_emplvl": "Int64",
-                    "avg_annual_pay": "Float64",
-                    "area_fips": "Int64",
-                }
-            )
-        )
-        data.to_parquet(par)
-        shutil.rmtree(path)
-        return data
-
-
 class DataBySubplant:
     def __init__(
         self,
@@ -439,9 +375,11 @@ class DataBySubplant:
                 )
             )
 
-            out[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = out[
-                gross_mwh_cols
-            ].divide(out[gross_mwh_cols].sum(axis=1), axis=0)
+            out[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
+                out[gross_mwh_cols]
+                .divide(out[gross_mwh_cols].sum(axis=1), axis=0)
+                .fillna(0.0)
+            )
 
             self._dfs["merge_all"] = self.validate_merge_all_results(out)
 
@@ -570,7 +508,44 @@ class DataBySubplant:
 
     def get_exa_by_prime(self):
         if "exa_by_prime" not in self._dfs:
-            merged = self._exa_by_prime()
+            df_923 = self.get_gf923_by_prime()
+            # cems data aggregated to ppf_subplant id
+            df_cems = self.get_cems_by_x(subplant_id_col="pf_subplant_id")
+            df_860 = self.get_860_by_x(subplant_id_col="pf_subplant_id")
+            merged0 = df_860.merge(
+                df_923,
+                on=["plant_id_eia", "pf_subplant_id", "report_date"],
+                validate="1:1",
+                how="right",
+                indicator="eia_merge",
+            )
+            merged = (
+                merged0.merge(
+                    df_cems,
+                    on=["plant_id_eia", "pf_subplant_id", "report_date"],
+                    validate="1:1",
+                    how="left",
+                    indicator="exa_merge",
+                )
+                .sort_values(["plant_id_eia", "pf_subplant_id", "report_date"])
+                .assign(
+                    cum_starts=lambda x: x.groupby(
+                        ["plant_id_eia", "pf_subplant_id"]
+                    ).generator_starts.transform("cumsum"),
+                    _merge=lambda x: x[["eia_merge", "exa_merge"]]
+                    .astype("string")
+                    .fillna("")
+                    .agg(",".join, axis=1)
+                    .replace(
+                        {
+                            "both,both": "all",
+                            "both,left_only": "eia_only",
+                            "right_only,both": "923_epa",
+                        }
+                    ),
+                )
+                .drop(columns=["eia_merge", "exa_merge"])
+            )
 
             test = merged.groupby("_merge").plant_id_eia.nunique()
             logger.warning(
@@ -595,44 +570,6 @@ class DataBySubplant:
             )
             self._dfs["exa_by_prime"] = drop_zero_cols(out)
         return self._dfs["exa_by_prime"]
-
-    def _exa_by_prime(self):
-        df_923 = self.get_gf923_by_prime()
-        # cems data aggregated to ppf_subplant id
-        df_cems = self.get_cems_by_x(subplant_id_col="pf_subplant_id")
-        df_860 = self.get_860_by_x(subplant_id_col="pf_subplant_id")
-        merged0 = df_860.merge(
-            df_923,
-            on=["plant_id_eia", "pf_subplant_id", "report_date"],
-            validate="1:1",
-            how="right",
-            indicator="eia_merge",
-        )
-        merged = (
-            merged0.merge(
-                df_cems,
-                on=["plant_id_eia", "pf_subplant_id", "report_date"],
-                validate="1:1",
-                how="left",
-                indicator="exa_merge",
-            )
-            .assign(
-                _merge=lambda x: x[["eia_merge", "exa_merge"]]
-                .astype("string")
-                .fillna("")
-                .agg(",".join, axis=1)
-                .replace(
-                    {
-                        "both,both": "all",
-                        "both,left_only": "eia_only",
-                        "right_only,both": "923_epa",
-                    }
-                )
-            )
-            .drop(columns=["eia_merge", "exa_merge"])
-        )
-
-        return merged
 
     def get_exa_by_subplant(self, by_fuel=True):
         """
@@ -701,7 +638,11 @@ class DataBySubplant:
                     how="outer",
                     indicator="exa_merge",
                 )
+                .sort_values(["plant_id_eia", "subplant_id", "report_date"])
                 .assign(
+                    cum_starts=lambda x: x.groupby(
+                        ["plant_id_eia", "subplant_id"]
+                    ).generator_starts.transform("cumsum"),
                     _merge=lambda x: x[["eia_merge", "exa_merge"]]
                     .astype("string")
                     .fillna("")
@@ -714,7 +655,7 @@ class DataBySubplant:
                             "right_only,both": "waterfall_epa",
                             ",right_only": "epa_only",
                         }
-                    )
+                    ),
                 )
                 .drop(columns=["exa_merge", "eia_merge"])
             )
@@ -743,9 +684,7 @@ class DataBySubplant:
 
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
-        self.merge_all(clean=clean).drop(columns=["subplant_id"]).to_parquet(
-            user_documents_path() / name
-        )
+        self.merge_all(clean=clean).to_parquet(user_documents_path() / name)
 
     ###########################################################################
     # Check distribution of metrics
@@ -1764,6 +1703,7 @@ class DataBySubplant:
             "pf_subplant_id",
             "inflator_to_2021",
             "wage_scale",
+            "age_of_observation_secular_adj",
             "real_capex_per_kw",
             "real_opex_per_kw",
             "opex_per_kw",
@@ -1867,10 +1807,11 @@ class DataBySubplant:
     def get_wage_scale(self):
         fip = pd.read_csv(PACKAGE_PATH / "State_FIPS_Match.csv")
         return (
-            wage_data()
+            pd.read_parquet(PACKAGE_PATH / "wage_data.parquet.gzip")
             .assign(total_wages=lambda x: x.avg_annual_pay * x.annual_avg_emplvl)
             .groupby(["area_fips", "year"])[["annual_avg_emplvl", "total_wages"]]
             .sum()
+            .sort_index()
             .reset_index()
             .assign(
                 wages=lambda x: (x.total_wages / x.annual_avg_emplvl).mask(
@@ -1883,10 +1824,15 @@ class DataBySubplant:
                     fip.set_index("area_fips")["State"].to_dict()
                 ),
                 report_month=1,
+                age_of_observation_secular_adj=lambda x: x.groupby(
+                    ["state"]
+                ).wage_scale.transform("cumsum"),
             )
             .rename(columns={"year": "report_year"})
             .dropna(subset="state")
-            .pipe(month_year_to_date)[["report_date", "state", "wage_scale"]]
+            .pipe(month_year_to_date)[
+                ["report_date", "state", "wage_scale", "age_of_observation_secular_adj"]
+            ]
         )
 
     def get_elec_pf_gf923(self):
@@ -1951,42 +1897,49 @@ class DataBySubplant:
                 "report_date": Column(dt),
                 "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
                 "step": Column(int, Check.isin((1, 2, 3))),
+                "report_year": Column(int, nullable=True),
+                "fuel_category": Column(str),
                 "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
-                "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
-                "net_generation_mwh": Column(float),
+                "gross_cf": Column(float, Check.ge(0.0), nullable=True),
                 "generator_starts": Column(int, Check.ge(0)),
-                "fuel_starts": Column(int, Check.ge(0)),
-                "gross_generation_mwh": Column(float, Check.ge(0.0)),
-                "heat_in_mmbtu": Column(float, Check.ge(0.0)),
+                "cum_starts": Column(int, Check.ge(0)),
+                "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                "wage_scale": Column(float),
             }
+            | {
+                "age_of_observation_secular_adj": Column(float),
+                "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
+                "age_relative_to_prime_avg": Column(float),
+            }
+            | {f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0)) for k in fuels}
             | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
+            | {
+                k: Column(float, Check.gt(0.0), nullable=True)
+                for k in ("capex", "real_opex")
+            }
+            # not used in regression
             | {
                 "age_in_report_year": Column(float),
                 "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
-                "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
-                "age_relative_to_prime_avg": Column(float),
+                "parasitic_load_pct": Column(float),
+                "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
+                "gross_generation_mwh": Column(float, Check.ge(0.0)),
+                "gross_hr": Column(float, Check.ge(0.0), nullable=True),
+                "heat_in_mmbtu": Column(float, Check.ge(0.0)),
+                "net_generation_mwh": Column(float),
+                "net_cf": Column(float, nullable=True),
+                "arc": Column(float, nullable=True),
+                "inflator_to_2021": Column(float),
+                "fuel_starts": Column(int, Check.ge(0)),
+                "opex": Column(float, Check.ge(0.0), nullable=True),
+                "real_capex": Column(float, Check.ge(0.0), nullable=True),
             }
             | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
             | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
             | {
                 f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
                 for k in fuels
-            }
-            | {
-                "parasitic_load_pct": Column(float),
-                "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
-                "real_capex": Column(float, Check.gt(0.0), nullable=True),
-                "real_opex": Column(float, Check.gt(0.0), nullable=True),
-                "capex": Column(float, Check.gt(0.0), nullable=True),
-                "opex": Column(float, Check.gt(0.0), nullable=True),
-                "arc": Column(float, nullable=True),
-                "net_cf": Column(float, nullable=True),
-                "gross_cf": Column(float, Check.ge(0.0), nullable=True),
-                "gross_hr": Column(float, Check.ge(0.0), nullable=True),
-                "fuel_category": Column(str),
-                "inflator_to_2021": Column(float),
-                "wage_scale": Column(float),
-                "report_year": Column(int, nullable=True),
             }
         )
 
