@@ -1193,7 +1193,7 @@ class DataBySubplant:
             .replace(
                 {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
             )
-            .groupby(["_merge", "prime_mover_code"], dropna=False)
+            .groupby(["_merge", "prime_mover"], dropna=False)
             .plant_id_eia.nunique()
             .to_frame()
             .query("plant_id_eia > 0")
@@ -1219,39 +1219,32 @@ class DataBySubplant:
             "subcritical_tech": "capacity_mw",
             "supercritical_tech": "capacity_mw",
             "ultrasupercritical_tech": "capacity_mw",
-            "age_from_report_year": "capacity_mw",
-            "avg_age_from_report_year": "capacity_mw",
-            "current_avg_age": "capacity_mw",
+            "age_in_report_year": "capacity_mw",
+            "age_in_current_year": "capacity_mw",
             "age_of_observation": "capacity_mw",
-            "age_relative_to_avg": "capacity_mw",
+            "age_relative_to_prime_avg": "capacity_mw",
             "pollution_control_costs_per_kw": "capacity_mw",
         }
 
         if age_year is not None:
-            age_year_str = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
+            reference_date = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
         else:
-            age_year_str = dt.utcnow()
+            reference_date = dt.utcnow()
         return (
             merged.query("_merge == 'both'")
             .assign(
-                age_from_report_year=lambda x: (
+                age_in_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
                 ).dt.days
                 / 365.25,
-                avg_age_from_report_year=lambda x: x.groupby(
-                    ["plant_id_eia", subplant_id_col]
-                )["age_from_report_year"].transform("mean"),
-                current_age=lambda x: (
-                    age_year_str - x["generator_operating_date"]
+                age_in_current_year=lambda x: (
+                    reference_date - x["generator_operating_date"]
                 ).dt.days
                 / 365.25,
-                current_avg_age=lambda x: x.groupby(["plant_id_eia", subplant_id_col])[
-                    "current_age"
-                ].transform("mean"),
-                age_of_observation=lambda x: (age_year_str - x["report_date"]).dt.days
+                age_of_observation=lambda x: (reference_date - x["report_date"]).dt.days
                 / 365.25,
-                age_relative_to_avg=lambda x: x["current_age"]
-                - x["avg_age_from_report_year"],
+                age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
+                - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
             )
             .astype({k: float for k in wtavg_dict})
             .fillna({k: 0.0 for k in wtavg_dict})
@@ -1263,7 +1256,7 @@ class DataBySubplant:
                     subplant_id_col,
                     pd.Grouper(key="report_date", freq="YS"),
                 ],
-                sum_cols=["capacity_mw"],
+                agg_dict={"capacity_mw": "sum", "prime_mover": "first"},
                 wtavg_dict=wtavg_dict,
             )
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
@@ -1968,11 +1961,10 @@ class DataBySubplant:
             }
             | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
             | {
-                "age_from_report_year": Column(float),
-                "avg_age_from_report_year": Column(float),
-                "current_avg_age": Column(float, Check.in_range(0.0, 2e3)),
+                "age_in_report_year": Column(float),
+                "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
                 "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
-                "age_relative_to_avg": Column(float),
+                "age_relative_to_prime_avg": Column(float),
             }
             | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
             | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
