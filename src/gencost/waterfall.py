@@ -1274,9 +1274,15 @@ class DataBySubplant:
             merged = self.tech_cols_dummy(merged)
 
             if merge_only:
-                return merged
+                logger.warning(
+                    "when `subplant_id_col`='generator_id', `merge_only` has no effect"
+                )
 
-            return merged.query('_merge == "both"')[GET_860_GEN_COLS].pipe(add_ba_code)
+            return (
+                merged
+                # .query('_merge == "both"')
+                [GET_860_GEN_COLS].pipe(add_ba_code)
+            )
 
         else:
             xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
