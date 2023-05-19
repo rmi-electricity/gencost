@@ -73,10 +73,9 @@ GET_860_GEN_COLS = [
     "subcritical_tech",
     "supercritical_tech",
     "ultrasupercritical_tech",
-    "age_from_report_year",
-    "avg_age_from_report_year",
-    "current_avg_age",
+    "age_in_report_year",
+    "age_in_current_year",
     "age_of_observation",
-    "age_relative_to_avg",
+    "age_relative_to_prime_avg",
     "pollution_control_costs_per_kw",
 ]
