@@ -95,6 +95,7 @@ HR = {
 
 @lru_cache
 def dl_atb():
+    """Download and format ATBe data."""
     return (
         pd.read_parquet(
             "https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2022/ATBe.parquet"
@@ -139,23 +140,45 @@ def dl_atb():
     )
 
 
-def get_atb(proposed, years=(2008, 2021)):
-    atb = dl_atb().merge(
-        proposed.assign(
-            year_=lambda x: x.operating_date.dt.year,
+def get_atb(df: pd.DataFrame, years: tuple = (2008, 2021), how="inner"):
+    """Get ATB cost data for multiple years for provided plants.
+
+    Args:
+        df: plants to get ATB data for, columns must include:
+            - plant_id_eia
+            - generator_id
+            - operating_date / generator_operating_date
+            - technology_description
+            - final_ba_code / balancing_authority_code_eia
+        years: inputs to range to define years of data to get,
+            (the last year is not included)
+        how: how to merge on the ATB data (df is left, atb is right).
+
+    Returns:
+
+    """
+    _o = ("operating_date", "generator_operating_date")
+    _b = ("final_ba_code", "balancing_authority_code_eia")
+    op_col = [c for c in _o if c in df]
+    ba_col = [c for c in _b if c in df]
+    for col, opt in ((op_col, _o), (ba_col, _b)):
+        if not col:
+            raise ValueError(f"`df` must contain one of these columns: {opt}")
+    if missing := {"plant_id_eia", "generator_id", "technology_description"} - set(df):
+        raise ValueError(f"`df` is missing required columns: {missing}")
+
+    atb = (
+        df.assign(
+            year_=lambda x: x[op_col[0]].dt.year,
             year=lambda x: x.year_.mask(x.year_ < 2020, 2020),
-        ).reset_index()[
-            [
-                "plant_id_eia",
-                "generator_id",
-                "year",
-                "technology_description",
-                "final_ba_code",
-            ]
-        ],
-        on=["technology_description", "year"],
-        how="inner",
-        validate="1:m",
+        )
+        .reset_index()
+        .merge(
+            dl_atb(),
+            on=["technology_description", "year"],
+            how=how,
+            validate="1:m",
+        )
     )
     dt_range = pd.to_datetime(range(*years), format="%Y")
     return (
@@ -163,7 +186,7 @@ def get_atb(proposed, years=(2008, 2021)):
         .set_index(["plant_id_eia", "generator_id", "datetime"])
         .sort_index()[
             [
-                "final_ba_code",
+                ba_col[0],
                 "vom_per_mwh",
                 "fuel_per_mwh",
                 "fom_per_kw",
