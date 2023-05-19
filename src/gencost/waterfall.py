@@ -16,8 +16,9 @@ from etoolbox.utils.pudl_helpers import (
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
-from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP
+from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP, GET_860_GEN_COLS
 from gencost.crosswalk import Crosswalk
+from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
 
 pat_path = Path(__file__).parent
@@ -682,6 +683,58 @@ class DataBySubplant:
             self._dfs["waterfall"] = merged
         return self._dfs["waterfall"]
 
+    def get_exa_by_generator(self):
+        df_860 = self.get_860_by_x(subplant_id_col="generator_id")
+        df_923 = self.get_gf923_by_generator()
+        df_cems = self.get_cems_by_generator()
+
+        # merge cems and 923 for gen-fuel level allocation of gross gen
+        df = pd.merge(
+            df_923,
+            df_cems,
+            on=["plant_id_eia", "generator_id", "report_date"],
+            how="outer",
+            validate="1:1",
+            indicator="cems_923_merge",
+        )
+        # allocate cems gross gen using pivoted gf 923
+        cems_and_923 = allocate_col_by(
+            df,
+            to_allocate="cems_gross_mwh",
+            new_suffix="_gross_mwh",
+            old_suffix="_mmbtu",
+            rollup_by=["plant_id_eia", "generator_id"],
+            drop=False,
+        )
+
+        cems_and_923 = drop_zero_cols(cems_and_923)
+
+        merged = (
+            cems_and_923.merge(
+                df_860,
+                on=["plant_id_eia", "generator_id", "report_date"],
+                validate="1:1",
+                how="outer",
+                indicator="exa_merge",
+            )
+            .assign(
+                _merge=lambda x: x[["cems_923_merge", "exa_merge"]]
+                .astype("string")
+                .fillna("")
+                .agg(",".join, axis=1)
+                .replace(
+                    {
+                        "both,both": "all",
+                        "both,left_only": "cems_923_only",
+                        "right_only,both": "exa_860",
+                    }
+                )
+            )
+            .drop(columns=["cems_923_merge", "exa_merge"])
+        )
+
+        return merged.query('_merge == "all"').drop(columns=["_merge"])
+
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
         self.merge_all(clean=clean).to_parquet(user_documents_path() / name)
@@ -1089,15 +1142,18 @@ class DataBySubplant:
         Map capacity and sum to plant prime fuel subplant level
 
         """
-        xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
-            subplant_id_col
-        ]
+
         coi = (
             pd.read_parquet(PACKAGE_PATH / "unit_level_costs_with_flag.parquet.gzip")
             .pipe(simplify_columns)
             .pipe(month_year_to_date)
             .rename(columns={"plant_id": "plant_id_eia"})
         )[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]]
+
+        if age_year is not None:
+            reference_date = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
+        else:
+            reference_date = dt.utcnow()
 
         merged = (
             self.pudl_tabl.gens_eia860()
@@ -1109,68 +1165,25 @@ class DataBySubplant:
             )
             .copy()
             .merge(
-                xwalk[
-                    ["plant_id_eia", "generator_id", subplant_id_col]
-                ].drop_duplicates(),
-                on=["plant_id_eia", "generator_id"],
-                how="outer",
-                validate="m:1",
-                indicator=True,
-            )
-            .merge(
                 coi[["plant_id_eia", "generator_id", "pollution_control_costs_per_kw"]],
                 on=["plant_id_eia", "generator_id"],
                 how="left",
                 validate="m:1",
             )
-        )
-
-        test = (
-            merged.query(
-                "_merge != 'both' & prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
+            .merge(
+                self.pudl_tabl.gens_eia860m()[
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        "balancing_authority_code_eia",
+                        # "state",
+                    ]
+                ].drop_duplicates(),
+                on=["plant_id_eia", "generator_id"],
+                how="left",
+                # indicator=True,
+                validate="m:1",
             )
-            .replace(
-                {"_merge": {"left_only": "in_data_only", "right_only": "in_xwalk_only"}}
-            )
-            .groupby(["_merge", "prime_mover"], dropna=False)
-            .plant_id_eia.nunique()
-            .to_frame()
-            .query("plant_id_eia > 0")
-        )
-        logger.warning(
-            "860 %s: Unique plants that did not have matches in both "
-            "860 and the xwalk so will be dropped:\\n %s \\n",
-            {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
-            test.squeeze().to_dict(),
-        )
-        if merge_only:
-            return merged
-        wtavg_dict = {
-            "associated_combined_heat_power": "capacity_mw",
-            "duct_burners": "capacity_mw",
-            "bypass_heat_recovery": "capacity_mw",
-            "solid_fuel_gasification": "capacity_mw",
-            "carbon_capture": "capacity_mw",
-            "fluidized_bed_tech": "capacity_mw",
-            "pulverized_coal_tech": "capacity_mw",
-            "stoker_tech": "capacity_mw",
-            "other_combustion_tech": "capacity_mw",
-            "subcritical_tech": "capacity_mw",
-            "supercritical_tech": "capacity_mw",
-            "ultrasupercritical_tech": "capacity_mw",
-            "age_in_report_year": "capacity_mw",
-            "age_in_current_year": "capacity_mw",
-            "age_of_observation": "capacity_mw",
-            "age_relative_to_prime_avg": "capacity_mw",
-            "pollution_control_costs_per_kw": "capacity_mw",
-        }
-
-        if age_year is not None:
-            reference_date = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
-        else:
-            reference_date = dt.utcnow()
-        return (
-            merged.query("_merge == 'both'")
             .assign(
                 age_in_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
@@ -1185,21 +1198,123 @@ class DataBySubplant:
                 age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
                 - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
             )
-            .astype({k: float for k in wtavg_dict})
-            .fillna({k: 0.0 for k in wtavg_dict})
-            .drop(columns=["_merge"])
-            .pipe(
-                sum_and_weighted_average_agg,
-                by=[
-                    "plant_id_eia",
-                    subplant_id_col,
-                    pd.Grouper(key="report_date", freq="YS"),
-                ],
-                agg_dict={"capacity_mw": "sum", "prime_mover": "first"},
-                wtavg_dict=wtavg_dict,
-            )
-            .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
         )
+
+        if subplant_id_col == "generator_id":
+            # have to cast True, False, and NA from tech cols in 860 as 0 and 1
+            # since at the PF level, this is done in wt avg
+
+            merged = self.tech_cols_dummy(merged)
+
+            if merge_only:
+                logger.warning(
+                    "when `subplant_id_col`='generator_id', `merge_only` has no effect"
+                )
+
+            return (
+                merged
+                # .query('_merge == "both"')
+                [GET_860_GEN_COLS].pipe(add_ba_code)
+            )
+
+        else:
+            xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
+                subplant_id_col
+            ]
+
+            merged = merged.merge(
+                xwalk[
+                    ["plant_id_eia", "generator_id", subplant_id_col]
+                ].drop_duplicates(),
+                on=["plant_id_eia", "generator_id"],
+                how="outer",
+                validate="m:1",
+                indicator=True,
+            )
+
+            test = (
+                merged.query(
+                    "_merge != 'both' & prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
+                )
+                .replace(
+                    {
+                        "_merge": {
+                            "left_only": "in_data_only",
+                            "right_only": "in_xwalk_only",
+                        }
+                    }
+                )
+                .groupby(["_merge", "prime_mover_code"], dropna=False)
+                .plant_id_eia.nunique()
+                .to_frame()
+                .query("plant_id_eia > 0")
+            )
+            logger.warning(
+                "860 %s: Unique plants that did not have matches in both "
+                "860 and the xwalk so will be dropped:\\n %s \\n",
+                {"pf_subplant_id": "prime", "subplant_id": "subplant"}[subplant_id_col],
+                test.squeeze().to_dict(),
+            )
+            if merge_only:
+                return merged
+            wtavg_dict = {
+                "associated_combined_heat_power": "capacity_mw",
+                "duct_burners": "capacity_mw",
+                "bypass_heat_recovery": "capacity_mw",
+                "solid_fuel_gasification": "capacity_mw",
+                "carbon_capture": "capacity_mw",
+                "fluidized_bed_tech": "capacity_mw",
+                "pulverized_coal_tech": "capacity_mw",
+                "stoker_tech": "capacity_mw",
+                "other_combustion_tech": "capacity_mw",
+                "subcritical_tech": "capacity_mw",
+                "supercritical_tech": "capacity_mw",
+                "ultrasupercritical_tech": "capacity_mw",
+                "age_in_report_year": "capacity_mw",
+                "age_in_current_year": "capacity_mw",
+                "age_of_observation": "capacity_mw",
+                "age_relative_to_prime_avg": "capacity_mw",
+                "pollution_control_costs_per_kw": "capacity_mw",
+            }
+
+            return (
+                merged.query("_merge == 'both'")  # overwrite existing age columns
+                # AE - I don't think is required, the weighted average should already
+                # effectively be what we want here, I'm also removing average ages
+                # across subplants because that's what they all are
+                # by re-doing with group by at subplant level
+                # .assign(
+                #     avg_age_from_report_year=lambda x: x.groupby(
+                #         ["plant_id_eia", subplant_id_col]
+                #     )["age_from_report_year"].transform("mean"),
+                #     current_avg_age=lambda x: x.groupby(
+                #         ["plant_id_eia", subplant_id_col]
+                #     )["current_age"].transform("mean"),
+                #     age_relative_to_avg=lambda x: x["current_age"]
+                #     - x["avg_age_from_report_year"],
+                # )
+                .astype({k: float for k in wtavg_dict})
+                .fillna({k: 0.0 for k in wtavg_dict})
+                .drop(columns=["_merge"])
+                .pipe(
+                    sum_and_weighted_average_agg,
+                    by=[
+                        "plant_id_eia",
+                        subplant_id_col,
+                        pd.Grouper(key="report_date", freq="YS"),
+                    ],
+                    agg_dict={
+                        "capacity_mw": "sum",
+                        "prime_mover": "first",
+                        "balancing_authority_code_eia": "first",
+                        "state": "first",
+                        "utility_id_eia": "first",
+                    },
+                    wtavg_dict=wtavg_dict,
+                )
+                .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+                .pipe(add_ba_code)
+            )
 
     def get_gen923_by_subplant(self):
         """
@@ -1622,6 +1737,37 @@ class DataBySubplant:
             .assign(net_generation_mwh=lambda x: x.filter(like="_net_mwh").sum(axis=1))
         )
 
+    def get_gf923_by_generator(self):
+        gf_923 = (
+            self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
+            .pipe(add_fuel_group)
+            .rename(
+                columns={
+                    "net_generation_mwh": "net_mwh",
+                    "fuel_consumed_mmbtu": "mmbtu",
+                }
+            )
+            .pivot_table(
+                index=[
+                    "plant_id_eia",
+                    "generator_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                ],
+                columns="fuel_group",
+                values=["net_mwh", "mmbtu"],
+                aggfunc={
+                    "net_mwh": "sum",
+                    "mmbtu": "sum",
+                    # "hr_src": sorted_unique_cat,
+                },
+            )
+            .reorder_levels([1, 0], axis=1)
+        )
+
+        gf_923.columns = map("_".join, gf_923.columns)
+
+        return gf_923.reset_index()
+
     def get_cems_by_x(self, subplant_id_col, xwalk=None, merge_only=False):
         """
         Adding CEMS data to waterfall
@@ -1695,6 +1841,109 @@ class DataBySubplant:
             .reset_index()
             .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
         )
+
+    def get_cems_by_generator(self, xwalk=None):
+        if xwalk is None:
+            xwalk = self.xwalk
+
+        merged = (
+            self.get_cems()[
+                [
+                    "plant_id_epa",
+                    "emissions_unit_id_epa",
+                    "report_date",
+                    "generator_starts",
+                    "fuel_starts",
+                    "gross_generation_mwh",
+                    "camd_capacity_mw",
+                ]
+            ]
+            .merge(
+                xwalk[
+                    [
+                        "plant_id_epa",
+                        "plant_id_eia",
+                        "emissions_unit_id_epa",
+                        "generator_id",
+                        "capacity_xwalk",
+                        "subplant_id",
+                    ]
+                ]
+                .dropna(axis=0, subset=["plant_id_epa", "emissions_unit_id_epa"])
+                .drop_duplicates(),
+                on=["plant_id_epa", "emissions_unit_id_epa"],
+                how="outer",
+                validate="m:m",
+                indicator=True,
+            )
+            .query('_merge == "both"')
+            .groupby(
+                [
+                    "plant_id_eia",
+                    "subplant_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                ]
+            )
+            .agg(
+                {
+                    "gross_generation_mwh": "sum",
+                    "generator_starts": "sum",
+                    "fuel_starts": "sum",
+                }
+            )
+            .reset_index()
+        )
+
+        merged_with_gf_frac = (
+            self.pudl_tabl.gen_fuel_allocated_eia923()
+            .groupby(
+                [
+                    "plant_id_eia",
+                    "generator_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                ]
+            )
+            .agg({"fuel_consumed_mmbtu": "sum"})
+            .reset_index()
+            .merge(
+                xwalk[
+                    ["plant_id_eia", "generator_id", "subplant_id"]
+                ].drop_duplicates(),
+                on=["plant_id_eia", "generator_id"],
+                how="outer",
+                validate="m:1",
+                indicator=True,
+            )
+            .assign(
+                subplant_fuel_consumed_mmbtu=lambda x: x.groupby(
+                    ["plant_id_eia", "subplant_id", "report_date"]
+                )["fuel_consumed_mmbtu"].transform("sum"),
+                gen_fuel_consumed_frac=lambda x: x.fuel_consumed_mmbtu
+                / x.subplant_fuel_consumed_mmbtu,
+            )
+            .merge(
+                merged,
+                on=["plant_id_eia", "subplant_id", "report_date"],
+                how="outer",
+                validate="m:1",
+                indicator="exists",
+            )
+            .assign(
+                cems_gross_mwh=lambda x: x.gross_generation_mwh
+                * x.gen_fuel_consumed_frac
+            )
+        )
+
+        return merged_with_gf_frac.query('_merge == "both" & exists == "both"')[
+            [
+                "plant_id_eia",
+                "generator_id",
+                "report_date",
+                "generator_starts",
+                "fuel_starts",
+                "cems_gross_mwh",
+            ]
+        ]
 
     def add_costs(self, df: pd.DataFrame, on="subplant_id"):
         id_cols = ["plant_id_eia", "prime_mover", "report_date"]
@@ -1852,6 +2101,27 @@ class DataBySubplant:
         )
 
         return prime_fuel_heat_rates
+
+    def tech_cols_dummy(self, df):
+        techs = [
+            "associated_combined_heat_power",
+            "duct_burners",
+            "bypass_heat_recovery",
+            "solid_fuel_gasification",
+            "carbon_capture",
+            "fluidized_bed_tech",
+            "pulverized_coal_tech",
+            "stoker_tech",
+            "other_combustion_tech",
+            "subcritical_tech",
+            "supercritical_tech",
+            "ultrasupercritical_tech",
+        ]
+
+        for tech in techs:
+            df[tech] = np.where(df[tech].isna() | df[tech] is False, 0, 1)
+
+        return df
 
     @staticmethod
     def validate_merge_all_results(merge_all_df):
