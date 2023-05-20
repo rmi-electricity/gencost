@@ -1,13 +1,16 @@
+import logging
 from functools import lru_cache
 
 import pandas as pd
 
 from gencost.constants import CARB_INTENSITY, COST_FLOOR
 
+logger = logging.getLogger(__name__)
+
 TECH_MAP = {
     "Biopower_Dedicated": "Wood/Wood Waste Biomass",
     "Coal_FE_newAvgCF": "Conventional Steam Coal",
-    # "Geothermal_HydroFlash": "Geothermal",
+    "Geothermal_HydroFlash": "Geothermal",
     # "Hydropower_NPD1": "Conventional Hydroelectric",
     # "Hydropower_NPD2": "Conventional Hydroelectric",
     # "Hydropower_NPD3": "Conventional Hydroelectric",
@@ -20,7 +23,7 @@ TECH_MAP = {
     # "Hydropower_NSD2": "Conventional Hydroelectric",
     # "Hydropower_NSD3": "Conventional Hydroelectric",
     # "Hydropower_NSD4": "Conventional Hydroelectric",
-    # "LandbasedWind_Class1": "Onshore Wind Turbine",
+    "LandbasedWind_Class1": "Onshore Wind Turbine",
     # "LandbasedWind_Class10": "Onshore Wind Turbine",
     # "LandbasedWind_Class2": "Onshore Wind Turbine",
     # "LandbasedWind_Class3": "Onshore Wind Turbine",
@@ -32,8 +35,8 @@ TECH_MAP = {
     # "LandbasedWind_Class9": "Onshore Wind Turbine",
     "NaturalGas_FE_CCAvgCF": "Natural Gas Fired Combined Cycle",
     "NaturalGas_FE_CTAvgCF": "Natural Gas Fired Combustion Turbine",
-    # "Nuclear_Nuclear": "Nuclear",
-    # "OffShoreWind_Class1": "Offshore Wind Turbine",
+    "Nuclear_Nuclear": "Nuclear",
+    "OffShoreWind_Class1": "Offshore Wind Turbine",
     # "OffShoreWind_Class10": "Offshore Wind Turbine",
     # "OffShoreWind_Class11": "Offshore Wind Turbine",
     # "OffShoreWind_Class12": "Offshore Wind Turbine",
@@ -67,7 +70,7 @@ TECH_MAP = {
     # "Utility-Scale Battery Storage_4Hr Battery Storage": "Batteries",
     # "Utility-Scale Battery Storage_6Hr Battery Storage": "Batteries",
     # "Utility-Scale Battery Storage_8Hr Battery Storage": "Batteries",
-    # "UtilityPV_Class1": "Solar Photovoltaic",
+    "UtilityPV_Class1": "Solar Photovoltaic",
     # "UtilityPV_Class10": "Solar Photovoltaic",
     # "UtilityPV_Class2": "Solar Photovoltaic",
     # "UtilityPV_Class3": "Solar Photovoltaic",
@@ -90,7 +93,15 @@ HR = {
     "Natural Gas Fired Combined Cycle": 6.363,  # ATB 2022 v2 NG F-Frame CC
     "Natural Gas Fired Combustion Turbine": 9.717,  # ATB 2022 v2 NG F-Frame CT
     "Nuclear": 10.461,  # ATB 2022 v2
+    # convention heat rates, not really meaningfull
+    "Solar Photovoltaic": 10.0,
+    "Onshore Wind Turbine": 10.0,
+    "Offshore Wind Turbine": 10.0,
+    "Geothermal": 10.0,
 }
+"""
+NREL ATB 2022 v2
+"""
 
 
 @lru_cache
@@ -140,7 +151,12 @@ def dl_atb():
     )
 
 
-def get_atb(df: pd.DataFrame, years: tuple = (2008, 2021), how="inner"):
+def get_atb(
+    df: pd.DataFrame,
+    years: tuple = (2008, 2021),
+    how="inner",
+    operating_date_col="operating_date",
+):
     """Get ATB cost data for multiple years for provided plants.
 
     Args:
@@ -153,46 +169,30 @@ def get_atb(df: pd.DataFrame, years: tuple = (2008, 2021), how="inner"):
         years: inputs to range to define years of data to get,
             (the last year is not included)
         how: how to merge on the ATB data (df is left, atb is right).
+        operating_date_col: name of column containing the operating date
 
     Returns:
 
     """
-    _o = ("operating_date", "generator_operating_date")
-    _b = ("final_ba_code", "balancing_authority_code_eia")
-    op_col = [c for c in _o if c in df]
-    ba_col = [c for c in _b if c in df]
-    for col, opt in ((op_col, _o), (ba_col, _b)):
-        if not col:
-            raise ValueError(f"`df` must contain one of these columns: {opt}")
-    if missing := {"plant_id_eia", "generator_id", "technology_description"} - set(df):
-        raise ValueError(f"`df` is missing required columns: {missing}")
-
+    if missing := {"technology_description", operating_date_col} - set(df):
+        raise ValueError(f"`df` is missing required columns or index levels: {missing}")
+    if "Offshore Wind Turbine" in df.technology_description:
+        logger.warning(
+            "data for `technology_description` == Offshore Wind Turbine is not "
+            "reliable because it is not wind class-specific"
+        )
     atb = (
         df.assign(
-            year_=lambda x: x[op_col[0]].dt.year,
+            year_=lambda x: x[operating_date_col].dt.year,
             year=lambda x: x.year_.mask(x.year_ < 2020, 2020),
         )
-        .reset_index()
         .merge(
-            dl_atb(),
+            dl_atb().fillna({"vom_per_mwh": 0.0}),
             on=["technology_description", "year"],
             how=how,
-            validate="1:m",
+            validate="m:1",
         )
+        .drop(columns=["year", "year_"])
     )
     dt_range = pd.to_datetime(range(*years), format="%Y")
-    return (
-        pd.concat(atb.assign(datetime=dt) for dt in dt_range)
-        .set_index(["plant_id_eia", "generator_id", "datetime"])
-        .sort_index()[
-            [
-                ba_col[0],
-                "vom_per_mwh",
-                "fuel_per_mwh",
-                "fom_per_kw",
-                "start_per_kw",
-                "heat_rate",
-                "co2_factor",
-            ]
-        ]
-    )
+    return pd.concat(atb.assign(datetime=dt) for dt in dt_range)

@@ -77,6 +77,8 @@ CARB_INTENSITY = {
     "Landfill Gas": 0.04989,  # same as MSW
     "All Other": 0.06288,  # same as propane / other gases
     "Other Waste Biomass": 0.04989,  # same as MSW
+    "Nuclear": 0.0,
+    "Geothermal": 0.0,
 }
 """
 https://www.eia.gov/environment/emissions/co2_vol_mass.php
@@ -98,6 +100,12 @@ COST_FLOOR = pd.DataFrame(
         ("Petroleum Coke", 5.0, 15.0, 0.1, 30.0),
         ("Petroleum Liquids", 5.0, 15.0, 0.1, 40.0),
         ("Wood/Wood Waste Biomass", 4.0, 15.0, 0.1, 10.0),
+        # actual floor not needed because these costs come from ATB
+        ("Solar Photovoltaic", 0.0, 0.0, 0.0, 0.0),
+        ("Onshore Wind Turbine", 0.0, 0.0, 0.0, 0.0),
+        ("Offshore Wind Turbine", 0.0, 0.0, 0.0, 0.0),
+        ("Geothermal", 0.0, 0.0, 0.0, 0.0),
+        ("Nuclear", 0.0, 0.0, 0.0, 0.0),
     ],
     columns=[
         "technology_description",
