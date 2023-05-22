@@ -8,10 +8,6 @@ library(skimr)
 library(conflicted)
 library(psych)
 library(GGally)
-# library(polycor)
-# library(mclust)
-# library(mice)
-# library(readxl)
 conflict_prefer("map", "purrr")
 conflict_prefer("map2", "purrr")
 conflict_prefer("filter", "dplyr")
@@ -26,14 +22,6 @@ get_variables_with_variance <- function(X){
 		pull(variable)
 }
 
-# Function to return points and geom_smooth
-# allow for the method to be changed
-custom_function = function(data, mapping, method = "lm", ...){
-# https://stackoverflow.com/questions/22671686/how-to-draw-loess-estimation-in-ggally-using-ggpairs
-	p = ggplot(data = data, mapping = mapping) + 
-		geom_smooth(method=method, ...)
-	p
-}
 
 # Note the variables that are sensible to model:
 # https://rockmtnins.sharepoint.com/:x:/r/sites/UTF/_layouts/15/Doc.aspx?sourcedoc=%7B8CDB80F6-FB7E-4B3F-B58D-920C84572EC8%7D&file=data_classes__data_for_pf_subplants.xlsx&action=default&mobileredirect=true&DefaultItemOpen=1&login_hint=abartnof.contractor%40RMI.org&ct=1683136643816&wdOrigin=OFFICECOM-WEB.MAIN.EDGEWORTH&cid=314b8194-4bfb-4c41-a868-08742df6ba63&wdPreviousSessionSrc=HarmonyWeb&wdPreviousSession=1b8e11b9-febc-4c5d-9284-fffad50b6be7
@@ -81,7 +69,7 @@ RawData <-
 	rowid_to_column() %>%
 	mutate(rowid = as.character(rowid))
 
-write_rds(RawData, file = 'clean_data/RawData.RDS')
+write_rds(RawData, file = 'clean_data/RawDataForClusteringScript.RDS')
 
 # AS IS:
 # rowid
@@ -154,7 +142,7 @@ NestedForPcaEda <-
 		) %>%
 	select(prime_mover, resample_num, data_scaled)
 saveRDS(NestedForPcaEda, 'clean_data/nested_for_pca_eda.RDS')
-# NestedForPcaEda <- readRDS('clean_data/nested_for_pca_eda.RDS')
+NestedForPcaEda <- readRDS('clean_data/nested_for_pca_eda.RDS')
 
 PcaEda <-
 	NestedForPcaEda %>%
@@ -372,6 +360,7 @@ ClsOptions <-
 		) %>%
 		select(prime_mover, rowid, num_clusters, cls) %>%
 		unnest(c(rowid, cls))
+saveRDS(ClsOptions, file = 'clean_data/cls_options.RDS')
 
 ExpectedValuesPerCls <-
 	# Find the aggregate values per cluster, per clustering schema
@@ -471,37 +460,3 @@ X %>%
 		strip.text.y.right = element_text(angle = 0)
 	) +
 	labs(title = 'CC, 2 clusters')
-
-# Same thing but with 3 clusters
-X <-
-	EncodedData %>%
-		filter(prime_mover == 'CC') %>%
-		select(rowid, all_of(variables_to_select)) %>%
-		# mutate_if(is.numeric, ~as.vector(scale(.))) %>%
-		inner_join(ClsOptions, by = 'rowid') %>%
-		filter(num_clusters == 3) %>%
-		select(-prime_mover, -rowid, -num_clusters) %>%
-		mutate(cls = factor(cls))
-
-variables_to_plot <- X %>%
-		select(-cls) %>%
-		colnames %>%
-		sort
-
-X %>%
-	ggpairs(aes(color = cls, group = cls), 
-					columns = variables_to_plot,
-					# switch = 'y',
-					diag = list(continuous = wrap('densityDiag', alpha = 0.75)),
-					# lower = list(continuous = wrap(lm_and_density)),
-					upper = list(continuous = wrap(
-						'cor', stars = T, digits = 1, use = 'pairwise.complete.obs')),
-					lower = list(continuous = custom_lm)
-					) +
-	theme(
-		text = element_text(family = 'serif'),
-		axis.ticks = element_blank(),
-		strip.text.y.right = element_text(angle = 0)
-	) +
-	labs(title = 'CC, 3 clusters')
-

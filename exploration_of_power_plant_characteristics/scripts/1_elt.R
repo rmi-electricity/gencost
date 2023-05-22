@@ -14,9 +14,9 @@ set.seed(1)
 # load data
 # select only variables that we want to model
 # rename columns to legacy names
-setwd('~/Documents/rmi/power_plant_characteristics/')
+setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 RawData <- read_parquet('input_data/data_for_pf_subplants.parquet')
-write_rds(RawData, file = 'clean_data/RawData.RDS')
+# write_rds(RawData, file = 'clean_data/RawData.RDS')
 
 
 #### Collect the right-hand variables from the upstream synthetic variables ####
@@ -247,10 +247,18 @@ AgeObsAdj <-
 
 CumStarts <-
 	RawData %>%
-		arrange(report_year) %>%
-		group_by(prime_mover, plant_id_eia) %>%
-		summarize(cum_starts = cumsum(generator_starts)) %>%
-		ungroup
+		select(plant_id_eia, prime_mover, report_year, generator_starts) %>%
+		arrange(plant_id_eia, prime_mover, report_year) %>%
+		group_by(plant_id_eia, prime_mover) %>%
+		mutate(cum_starts = cumsum(generator_starts)) %>%
+		ungroup 
+
+# CumStarts <-
+# 	RawData %>%
+# 		arrange(report_year) %>%
+# 		group_by(prime_mover, plant_id_eia) %>%
+# 		summarize(cum_starts = cumsum(generator_starts)) %>%
+# 		ungroup
 
 # deselect the dummy codes
 # mask <- variables_to_select %in% 

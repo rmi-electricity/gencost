@@ -9,10 +9,8 @@ library(skimr)
 library(tidyverse)
 conflict_prefer('select', 'dplyr')
 conflict_prefer('filter', 'dplyr')
-setwd('~/Documents/rmi/power_plant_characteristics/')
-
+setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 Data <- readRDS('clean_data/Data.RDS')
-#RawData <- readRDS('clean_data/RawData.RDS')
 
 #### Prepare data for modelling (aggregated variables) ####
 ModellableData <-
@@ -133,8 +131,11 @@ ModellableData <-
 		gas_age_variable_adj = natural_gas * age_relative_to_average * gen_adj,
 		oil_pollution_variable_adj = petroleum * real_pollution_control_costs_per_kw * gen_adj,
 		oil_age_variable_adj = petroleum * age_relative_to_average * gen_adj
-	)
-write_rds(ModellableData, file = 'clean_data/modellable_data.RDS')
+	) %>%
+	rowid_to_column %>%
+	mutate(rowid = as.character(rowid))
+
+# write_rds(ModellableData, file = 'clean_data/modellable_data.RDS')
 
 #### Subsets for linear models ####	
 STopex <-
@@ -157,9 +158,3 @@ GTopex <-
 		filter(gt == 1, outlier_flag==0, 
 					 real_opex_percentile<=0.97, real_opex_percentile >=0.03)
 write_rds(GTopex, file = 'clean_data/gtopex.RDS')
-
-# IC <- 
-# 	ModellableData %>%
-# 	filter(ic == 1, outlier_flag==0, real_opex_percentile <= 0.99,
-# 				 real_opex_percentile >= 0.01)
-
