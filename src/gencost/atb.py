@@ -2,8 +2,10 @@ import logging
 from functools import lru_cache
 
 import pandas as pd
+from etoolbox.utils.misc import download
 
 from gencost.constants import CARB_INTENSITY, COST_FLOOR
+from gencost.data_setup import CACHE_PATH, make_cache_path
 
 logger = logging.getLogger(__name__)
 
@@ -104,13 +106,23 @@ NREL ATB 2022 v2
 """
 
 
-@lru_cache
 def dl_atb():
+    make_cache_path()
+    atb_path = CACHE_PATH / "ATBe2022.parquet"
+    if not atb_path.exists():
+        download(
+            "https://oedi-data-lake.s3.amazonaws.com/ATB/"
+            "electricity/parquet/2022/ATBe.parquet",
+            atb_path,
+        )
+    return pd.read_parquet(atb_path)
+
+
+@lru_cache
+def cleaned_atb():
     """Download and format ATBe data."""
     return (
-        pd.read_parquet(
-            "https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2022/ATBe.parquet"
-        )
+        dl_atb()
         .query(
             "core_metric_case == 'Market' "
             "& core_metric_parameter in @VAR_MAP "
@@ -187,7 +199,7 @@ def get_atb(
             year=lambda x: x.year_.mask(x.year_ < 2020, 2020),
         )
         .merge(
-            dl_atb().fillna({"vom_per_mwh": 0.0}),
+            cleaned_atb().fillna({"vom_per_mwh": 0.0}),
             on=["technology_description", "year"],
             how=how,
             validate="m:1",
