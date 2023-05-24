@@ -700,7 +700,7 @@ class DataBySubplant:
         # allocate cems gross gen using pivoted gf 923
         cems_and_923 = allocate_col_by(
             df,
-            to_allocate="cems_gross_mwh",
+            to_allocate="gross_generation_mwh",
             new_suffix="_gross_mwh",
             old_suffix="_mmbtu",
             rollup_by=["plant_id_eia", "generator_id"],
@@ -1929,7 +1929,7 @@ class DataBySubplant:
                 indicator="exists",
             )
             .assign(
-                cems_gross_mwh=lambda x: x.gross_generation_mwh
+                gross_generation_mwh=lambda x: x.gross_generation_mwh
                 * x.gen_fuel_consumed_frac
             )
         )
@@ -1941,7 +1941,7 @@ class DataBySubplant:
                 "report_date",
                 "generator_starts",
                 "fuel_starts",
-                "cems_gross_mwh",
+                "gross_generation_mwh",
             ]
         ]
 
