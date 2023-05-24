@@ -2256,3 +2256,32 @@ class DataBySubplant:
         df = schema.validate(merge_all_df[columns])
 
         return df
+
+    def find_missing_data(self):
+        """
+        Args:
+
+
+        """
+        hist_data = self.get_exa_by_generator()
+
+        (
+            hist_data.assign(
+                n_years_gen=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
+                    "report_date"
+                ].transform("nunique"),
+                report_year=lambda x: x.report_date.dt.year,
+            )
+            .query("n_years_gen != 15")
+            .groupby(["plant_id_eia", "generator_id"])["report_year"]
+            .agg(list)
+            .reset_index()
+            .assign(
+                needed_years=lambda x: x.apply(
+                    lambda _: [*range(2006, 2020, 1)], axis=1
+                ),
+                missing_years=lambda x: (
+                    x["needed_years"].map(set) - x["report_year"].map(set)
+                ),
+            )
+        )
