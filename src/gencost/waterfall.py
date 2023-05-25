@@ -2265,6 +2265,19 @@ class DataBySubplant:
         """
         hist_data = self.get_exa_by_generator()
 
+        # list of cols we need for melt
+        generation_cols = [
+            "biofuel_net_mwh",
+            "coal_net_mwh",
+            "natural_gas_net_mwh",
+            "nuclear_net_mwh",
+            "other_net_mwh",
+            "other_gas_net_mwh",
+            "petroleum_net_mwh",
+            "petroleum_coke_net_mwh",
+            "renew_net_mwh",
+        ]
+
         (
             hist_data.assign(
                 n_years_gen=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
@@ -2284,4 +2297,33 @@ class DataBySubplant:
                     x["needed_years"].map(set) - x["report_year"].map(set)
                 ),
             )
+        )
+
+        (
+            hist_data.melt(
+                id_vars=["plant_id_eia", "generator_id", "report_date"],
+                value_vars=generation_cols,
+                var_name="fuel_mwh",
+                value_name="net_generation",
+            )
+            .assign(
+                net_generation=lambda x: x["net_generation"].abs(),
+                percent_of_gen=lambda x: (
+                    x["net_generation"]
+                    / x.groupby(["plant_id_eia", "generator_id", "report_date"])[
+                        "net_generation"
+                    ].transform("sum")
+                ),
+                single_fuel=lambda x: np.where(x["percent_of_gen"] >= 0.9, 1, 0),
+                single_fuel_present=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id", "report_date"]
+                )["single_fuel"].transform("sum"),
+            )
+            .query("single_fuel_present == 1 & percent_of_gen >= .9")
+            .assign(
+                n_fuels=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
+                    "fuel_mwh"
+                ].transform("nunique")
+            )
+            .query("n_fuels > 1")
         )
