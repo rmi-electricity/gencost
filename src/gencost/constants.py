@@ -124,6 +124,7 @@ GET_860_GEN_COLS = [
     "generator_id",
     "report_date",
     "capacity_mw",
+    "prime_mover",
     "associated_combined_heat_power",
     "duct_burners",
     "bypass_heat_recovery",

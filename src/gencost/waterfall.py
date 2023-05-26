@@ -731,6 +731,13 @@ class DataBySubplant:
                 )
             )
             .drop(columns=["cems_923_merge", "exa_merge"])
+            .merge(
+                self.get_wage_scale(),
+                on=["report_date", "state"],
+                how="left",
+                validate="m:1",
+            )
+            .fillna({"wage_scale": 1})
         )
 
         return merged.query('_merge == "all"').drop(columns=["_merge"])
@@ -1737,7 +1744,7 @@ class DataBySubplant:
             .assign(net_generation_mwh=lambda x: x.filter(like="_net_mwh").sum(axis=1))
         )
 
-    def get_gf923_by_generator(self):
+    def get_gf923_by_generator(self, counterfactuals=False):
         gf_923 = (
             self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
             .pipe(add_fuel_group)
@@ -1747,7 +1754,10 @@ class DataBySubplant:
                     "fuel_consumed_mmbtu": "mmbtu",
                 }
             )
-            .pivot_table(
+        )
+
+        if counterfactuals is False:
+            gf_923 = gf_923.pivot_table(
                 index=[
                     "plant_id_eia",
                     "generator_id",
@@ -1760,13 +1770,14 @@ class DataBySubplant:
                     "mmbtu": "sum",
                     # "hr_src": sorted_unique_cat,
                 },
-            )
-            .reorder_levels([1, 0], axis=1)
-        )
+            ).reorder_levels([1, 0], axis=1)
 
-        gf_923.columns = map("_".join, gf_923.columns)
+            gf_923.columns = map("_".join, gf_923.columns)
 
-        return gf_923.reset_index()
+            return gf_923.reset_index()
+
+        else:
+            return gf_923
 
     def get_cems_by_x(self, subplant_id_col, xwalk=None, merge_only=False):
         """
@@ -2257,6 +2268,55 @@ class DataBySubplant:
 
         return df
 
+    def filter_to_single_fuel_generators(self, df):
+        """
+        Args:
+
+        df (DataFrame): data frame with historical information on generators
+        filtered_df (Dataframe): data frame with only single-fuel generators
+        by our definition (>= 90 percent of fuel consumption reported in
+        GF 923, pudl allocated)
+
+
+        """
+        # list of cols we need for melt
+        fuel_consump_cols = [
+            "biofuel_mmbtu",
+            "coal_mmbtu",
+            "natural_gas_mmbtu",
+            "nuclear_mmbtu",
+            "other_mmbtu",
+            "other_gas_mmbtu",
+            "petroleum_mmbtu",
+            "petroleum_coke_mmbtu",
+            "renew_mmbtu",
+        ]
+
+        filtered_df = (
+            df.melt(
+                id_vars=["plant_id_eia", "generator_id", "report_date"],
+                value_vars=fuel_consump_cols,
+                var_name="mmbtu",
+                value_name="fuel_consumption",
+            )
+            .assign(
+                # net_generation=lambda x: x["mmbtu"].abs(),
+                percent_of_gen=lambda x: (
+                    x["fuel_consumption"]
+                    / x.groupby(["plant_id_eia", "generator_id", "report_date"])[
+                        "fuel_consumption"
+                    ].transform("sum")
+                ),
+                single_fuel=lambda x: np.where(x["percent_of_gen"] >= 0.9, 1, 0),
+                single_fuel_present=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id", "report_date"]
+                )["single_fuel"].transform("sum"),
+            )
+            .query("single_fuel_present == 1 & percent_of_gen >= .9")
+        )
+
+        return filtered_df
+
     def find_missing_data(self):
         """
         Args:
@@ -2265,20 +2325,20 @@ class DataBySubplant:
         """
         hist_data = self.get_exa_by_generator()
 
-        # list of cols we need for melt
-        generation_cols = [
-            "biofuel_net_mwh",
-            "coal_net_mwh",
-            "natural_gas_net_mwh",
-            "nuclear_net_mwh",
-            "other_net_mwh",
-            "other_gas_net_mwh",
-            "petroleum_net_mwh",
-            "petroleum_coke_net_mwh",
-            "renew_net_mwh",
-        ]
+        xwalk = self.xwalk
 
-        (
+        # list of cols we need for melt
+
+        """
+        missing data type #1: find generators that don't repeat for complete year range
+        and spit out plant / gen / missing year / prime / fuel
+
+        prime and fuel based on latest reported (and highest mmbtu) PF
+        observation in allocated GF923
+
+        """
+
+        missing_years = (
             hist_data.assign(
                 n_years_gen=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
                     "report_date"
@@ -2296,34 +2356,99 @@ class DataBySubplant:
                 missing_years=lambda x: (
                     x["needed_years"].map(set) - x["report_year"].map(set)
                 ),
+                years_to_fill_in=lambda x: x["missing_years"].apply(list),
             )
         )
 
-        (
-            hist_data.melt(
-                id_vars=["plant_id_eia", "generator_id", "report_date"],
-                value_vars=generation_cols,
-                var_name="fuel_mwh",
-                value_name="net_generation",
+        # create a row for each year that needs to be filled in
+        split = pd.DataFrame([pd.Series(x) for x in missing_years.years_to_fill_in])
+        split.columns = [f"year_{x + 1}" for x in split.columns]
+
+        missing_years_clean = pd.concat([missing_years, split], axis=1)
+
+        missing_years_clean = (
+            missing_years_clean.melt(
+                id_vars=["plant_id_eia", "generator_id"],
+                value_vars=[
+                    "year_1",
+                    "year_2",
+                    "year_3",
+                    "year_4",
+                    "year_5",
+                    "year_6",
+                    "year_7",
+                    "year_8",
+                    "year_9",
+                    "year_10",
+                    "year_11",
+                    "year_12",
+                    "year_13",
+                    "year_14",
+                ],
+                value_name="year",
+            )
+            .query("year.notnull()")
+            .assign(
+                year=lambda x: x["year"].astype("Int64"), fuss=lambda x: "missing_years"
+            )
+            .merge(
+                self.get_gf923_by_generator(counterfactuals=True)
+                .groupby(
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        pd.Grouper(key="report_date", freq="YS"),
+                        "prime_mover_code",
+                        "fuel_group",
+                    ]
+                )
+                .agg({"mmbtu": "sum", "net_mwh": "sum"})
+                .reset_index()  # keep latest prime fuel observation in gf 923 (largest single fuel)
+                # .query('report_date == "2020-01-01"')
+                # .query("mmbtu > 0 & net_mwh > 0") do we want to put prime/fuel of gens in GF
+                # reporting zeros?
+                .sort_values(
+                    by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
+                    ascending=True,
+                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        "report_date",
+                        "prime_mover_code",
+                        "fuel_group",
+                    ]
+                ],
+                on=["plant_id_eia", "generator_id"],
+                how="left",
             )
             .assign(
-                net_generation=lambda x: x["net_generation"].abs(),
-                percent_of_gen=lambda x: (
-                    x["net_generation"]
-                    / x.groupby(["plant_id_eia", "generator_id", "report_date"])[
-                        "net_generation"
-                    ].transform("sum")
-                ),
-                single_fuel=lambda x: np.where(x["percent_of_gen"] >= 0.9, 1, 0),
-                single_fuel_present=lambda x: x.groupby(
-                    ["plant_id_eia", "generator_id", "report_date"]
-                )["single_fuel"].transform("sum"),
+                prime_mover=lambda x: x.prime_mover_code.replace(FOSSIL_PRIME_MOVER_MAP)
             )
-            .query("single_fuel_present == 1 & percent_of_gen >= .9")
+        )[["plant_id_eia", "generator_id", "year", "fuss", "prime_mover", "fuel_group"]]
+
+        # create data frame of generators that switch fuels
+        single_fuel_switch = (
+            hist_data.pipe(self.filter_to_single_fuel_generators)
             .assign(
                 n_fuels=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
-                    "fuel_mwh"
+                    "mmbtu"
                 ].transform("nunique")
             )
             .query("n_fuels > 1")
-        )
+            .assign(
+                fuss=lambda x: "fuel_switch",
+                year=lambda x: x["report_date"].dt.year,
+                fuel=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
+                    "mmbtu"
+                ].transform("last"),
+                fuel_reported_is_latest_fuel=lambda x: np.where(
+                    x["mmbtu"] == x["fuel"], True, False
+                ),
+            )
+            .query("fuel_reported_is_latest_fuel == False")
+            .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
+            .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
+        )[["plant_id_eia", "generator_id", "year", "fuss", "prime_mover", "fuel_group"]]
+
+        return single_fuel_switch
