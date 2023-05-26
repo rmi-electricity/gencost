@@ -2454,6 +2454,15 @@ class DataBySubplant:
                 how="left",
                 # indicator=True,
             )
+            .drop_duplicates(
+                subset=[
+                    "plant_id_eia",
+                    "generator_id",
+                    "year",
+                    "prime_mover",
+                    "fuel_group",
+                ]
+            )
         )[
             [
                 "plant_id_eia",
@@ -2520,3 +2529,65 @@ class DataBySubplant:
         ]
 
         return pd.concat([missing_years_clean, single_fuel_switch])
+
+    def create_fill_in_ep_thresholds(self, df):
+        bins = [0, 10, 20, 30, 40, 50, 60, 70, 100]
+
+        labels = [1, 2, 3, 4, 5, 6, 7, 8]
+
+        return df.assign(
+            essentials=lambda x: x["year"].astype(str)
+            + "_"
+            + x["prime_mover"]
+            + "_"
+            + x["fuel_group"],
+            ba_plus_essentials=lambda x: x["essentials"] + "_" + x["final_ba_code"],
+            age_range=lambda x: pd.cut(
+                x["age_in_current_year"], bins=bins, labels=labels
+            ),
+            ba_plus_age=lambda x: x["ba_plus_essentials"] + "_" + x["age_range"],
+        )
+
+        # def check_if_ep_thresholds_are_met(self, historical_data):
+        return self.assign()
+
+    def fill_in_ep_data(self):
+        xwalk = self.xwalk
+
+        hist_data = (
+            self.get_exa_by_generator()
+            .merge(
+                xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
+                on=["plant_id_eia", "generator_id", "prime_mover"],
+                how="left",
+            )
+            .assign(year=lambda x: x["report_date"].dt.year)
+            .pipe(self.create_fill_in_ep_thresholds)
+        )
+
+        missing_data = (
+            self.find_missing_data()
+            .pipe(self.create_fill_in_ep_thresholds)
+            .assign(
+                essentials_present=lambda x: np.where(
+                    x["essentials"].isin(hist_data["essentials"]), 1, 0
+                ),
+                ba_plus_present=lambda x: np.where(
+                    x["ba_plus_essentials"].isin(hist_data["ba_plus_essentials"]),
+                    1,
+                    0,
+                ),
+                ba_plus_age_present=lambda x: np.where(
+                    x["ba_plus_age"].isin(hist_data["ba_plus_age"]),
+                    1,
+                    0,
+                ),
+                fill_in_score=lambda x: x[
+                    "essentials", "ba_plus_essentials", "ba_plus_age"
+                ],
+            )
+        )
+
+        # some sort of for loop that sets prioritizes merging based
+
+        return missing_data
