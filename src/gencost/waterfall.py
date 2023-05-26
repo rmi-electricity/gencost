@@ -2508,13 +2508,24 @@ class DataBySubplant:
 
     def find_missing_data(self):
         """
-        Args:
+        objective:
+        identify generators with missing data, that we need to fill in historical data
+        for
 
+        process:
+        1) instances when a generator doesn't report for entire patio range
+        2) instances when a single fuel generator switches fuel
+        3) zeroes reported (tbd)
+
+        output: df with plant / gen / year / prime / fuel / ba code / age / fuss
+        that we want to fill in with similar plants
 
         """
         hist_data = self.get_exa_by_generator()
 
         xwalk = self.xwalk
+
+        df_860 = self.get_860_by_x(subplant_id_col="generator_id")
 
         # list of cols we need for melt
 
@@ -2614,9 +2625,41 @@ class DataBySubplant:
             .assign(
                 prime_mover=lambda x: x.prime_mover_code.replace(FOSSIL_PRIME_MOVER_MAP)
             )
-        )[["plant_id_eia", "generator_id", "year", "fuss", "prime_mover", "fuel_group"]]
+            .merge(
+                df_860.sort_values(
+                    by=["plant_id_eia", "generator_id", "report_date"], ascending=True
+                ).drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "report_date"]
+                )[
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        # "report_date",
+                        "final_ba_code",
+                        # "age_in_current_year", not sure what we wanna do about age in this scenario
+                    ]
+                ],
+                on=["plant_id_eia", "generator_id"],
+                how="left",
+                # indicator=True,
+            )
+        )[
+            [
+                "plant_id_eia",
+                "generator_id",
+                "year",
+                "fuss",
+                "prime_mover",
+                "fuel_group",
+                "final_ba_code",
+            ]
+        ]
 
-        # create data frame of generators that switch fuels
+        """
+        create data frame of generators that switch fuels
+
+        """
+
         single_fuel_switch = (
             hist_data.pipe(self.filter_to_single_fuel_generators)
             .assign(
@@ -2638,6 +2681,31 @@ class DataBySubplant:
             .query("fuel_reported_is_latest_fuel == False")
             .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
             .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
-        )[["plant_id_eia", "generator_id", "year", "fuss", "prime_mover", "fuel_group"]]
+            .merge(
+                df_860.assign(year=lambda x: x["report_date"].dt.year)[
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        "year",
+                        "final_ba_code",
+                        "age_in_current_year",
+                    ]
+                ],
+                on=["plant_id_eia", "generator_id", "year"],
+                how="left",
+                # indicator=True,
+            )
+        )[
+            [
+                "plant_id_eia",
+                "generator_id",
+                "year",
+                "fuss",
+                "prime_mover",
+                "fuel_group",
+                "final_ba_code",
+                "age_in_current_year",
+            ]
+        ]
 
-        return single_fuel_switch
+        return pd.concat([missing_years_clean, single_fuel_switch])
