@@ -88,8 +88,10 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
         552,  # Cooperative Energy (MISO, TVA)
         554,  # Dairyland Power Coop (MISO)
         556,  # East Kentucky Power Coop, Inc (LGEE, PJM)
-        560,  # Great River Energy (MISO)
-        562,  # Hoosier Energy R E C, Inc (MISO)
+        # transfering 560 to MISO because nearly half of gen there already
+        # 560,  # Great River Energy (MISO)
+        # getting rid of 562 because too small, generation goes to MISO and PJM
+        # 562,  # Hoosier Energy R E C, Inc (MISO)
         # 567,  # North Carolina El Member Corp (too limited)
         58,  # Golden Spread Electric Coop., Inc. (SWPP)
         656,  # Nebraska Public Power District (SWPP)
@@ -105,6 +107,7 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
         "GVL": "FPC",  # GVL is very small, EIA 930 shows it connected to FPC
         "DUK": "DUKE",  # combine Duke Carolinas and Duke Progress
         "CPLE": "DUKE",  # combine Duke Carolinas and Duke Progress
+        "CPLW": "DUKE",  # combine Duke Carolinas and Duke Progress
         "BPAT": "PNW",
         "AVA": "PNW",
         "SCL": "PNW",
