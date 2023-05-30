@@ -2545,7 +2545,9 @@ class DataBySubplant:
             age_range=lambda x: pd.cut(
                 x["age_in_current_year"], bins=bins, labels=labels
             ),
-            ba_plus_age=lambda x: x["ba_plus_essentials"] + "_" + x["age_range"],
+            ba_plus_age=lambda x: x["ba_plus_essentials"]
+            + "_"
+            + x["age_range"].astype(str),
         )
 
         # def check_if_ep_thresholds_are_met(self, historical_data):
@@ -2572,7 +2574,7 @@ class DataBySubplant:
                 essentials_present=lambda x: np.where(
                     x["essentials"].isin(hist_data["essentials"]), 1, 0
                 ),
-                ba_plus_present=lambda x: np.where(
+                ba_plus_essentials_present=lambda x: np.where(
                     x["ba_plus_essentials"].isin(hist_data["ba_plus_essentials"]),
                     1,
                     0,
@@ -2582,12 +2584,102 @@ class DataBySubplant:
                     1,
                     0,
                 ),
-                fill_in_score=lambda x: x[
-                    "essentials", "ba_plus_essentials", "ba_plus_age"
-                ],
+            )  # make an exception of when there is no ba code or age
+            .assign(
+                ba_plus_age_present=lambda x: np.where(
+                    (x["final_ba_code"].isnull())
+                    | (x["final_ba_code"].isna())
+                    | (x["age_in_current_year"].isna())
+                    | (x["age_in_current_year"].isnull()),
+                    0,
+                    x["ba_plus_age_present"],
+                ),
+                ba_plus_essentials_present=lambda x: np.where(
+                    (x["final_ba_code"].isnull()) | (x["final_ba_code"].isna()),
+                    0,
+                    x["ba_plus_essentials_present"],
+                ),
+                fill_in_score=lambda x: x["essentials_present"]
+                + x["ba_plus_essentials_present"]
+                + x["ba_plus_age_present"],
             )
         )
 
-        # some sort of for loop that sets prioritizes merging based
+        # some sort of for loop that sets prioritizes merging based on fill in score
+
+        (
+            missing_data.query("fill_in_score ==3")
+            .merge(
+                hist_data.drop(
+                    columns=[
+                        "plant_id_eia",
+                        "generator_id",
+                        "year",
+                        "prime_mover",
+                        "fuel_group",
+                        "final_ba_code",
+                        "age_in_current_year",
+                        "age_range",
+                        "essentials",
+                        "ba_plus_essentials",
+                    ]
+                ),
+                on=["ba_plus_age"],
+                how="left",
+                indicator=True,
+            )
+            .query('_merge == "both"')
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
+        )
+
+        (
+            missing_data.query("fill_in_score ==2")
+            .merge(
+                hist_data.drop(
+                    columns=[
+                        "plant_id_eia",
+                        "generator_id",
+                        "year",
+                        "prime_mover",
+                        "fuel_group",
+                        "final_ba_code",
+                        "age_in_current_year",
+                        "age_range",
+                        "ba_plus_age",
+                        "essentials",
+                    ]
+                ),
+                on=["ba_plus_essentials"],
+                how="left",
+                indicator=True,
+            )
+            .query('_merge == "both"')
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
+        )
+
+        (
+            missing_data.query("fill_in_score ==1")
+            .merge(
+                hist_data.drop(
+                    columns=[
+                        "plant_id_eia",
+                        "generator_id",
+                        "year",
+                        "prime_mover",
+                        "fuel_group",
+                        "final_ba_code",
+                        "age_in_current_year",
+                        "age_range",
+                        "ba_plus_age",
+                        "ba_plus_essentials",
+                    ]
+                ),
+                on=["essentials"],
+                how="left",
+                indicator=True,
+            )
+            .query('_merge == "both"')
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
+        )
 
         return missing_data
