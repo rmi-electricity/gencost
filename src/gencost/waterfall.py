@@ -2690,7 +2690,38 @@ class DataBySubplant:
             .query("fuel_reported_is_latest_fuel == False")
             .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
             .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
-            .merge(
+        )
+        """
+        Missing data type #3: identify plant, gen, prime, fuel observations
+        reporting zero net gen and fuel consumption
+
+        """
+        zero_reported = (
+            self.get_gf923_by_generator(counterfactuals=True)
+            .groupby(
+                [
+                    "plant_id_eia",
+                    "generator_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                    "prime_mover_code",
+                    "fuel_group",
+                ]
+            )
+            .agg({"net_mwh": "sum", "mmbtu": "sum"})
+            .reset_index()
+            .query(
+                'net_mwh == 0 & mmbtu == 0 & report_date >= "2006-01-01" & report_date <= "2020-01-01"'
+            )
+            .assign(
+                prime_mover=lambda x: x.prime_mover_code.replace(
+                    FOSSIL_PRIME_MOVER_MAP
+                ),
+                year=lambda x: x["report_date"].dt.year,
+                fuss="zeroes",
+            )
+        )
+        zero_and_fuel_switch = (
+            pd.concat([zero_reported, single_fuel_switch]).merge(
                 df_860.assign(year=lambda x: x["report_date"].dt.year)[
                     [
                         "plant_id_eia",
@@ -2717,7 +2748,7 @@ class DataBySubplant:
             ]
         ]
 
-        return pd.concat([missing_years_clean, single_fuel_switch])
+        return pd.concat([missing_years_clean, zero_and_fuel_switch])
 
     def create_fill_in_ep_thresholds(self, df):
         bins = [0, 10, 20, 30, 40, 50, 60, 70, 100]
@@ -2738,9 +2769,6 @@ class DataBySubplant:
             + "_"
             + x["age_range"].astype(str),
         )
-
-        # def check_if_ep_thresholds_are_met(self, historical_data):
-        return self.assign()
 
     def fill_in_ep_data(self):
         xwalk = self.xwalk
@@ -2796,7 +2824,7 @@ class DataBySubplant:
 
         # some sort of for loop that sets prioritizes merging based on fill in score
 
-        (
+        three = (
             missing_data.query("fill_in_score ==3")
             .merge(
                 hist_data.drop(
@@ -2821,7 +2849,7 @@ class DataBySubplant:
             .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
         )
 
-        (
+        two = (
             missing_data.query("fill_in_score ==2")
             .merge(
                 hist_data.drop(
@@ -2846,7 +2874,7 @@ class DataBySubplant:
             .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
         )
 
-        (
+        one = (
             missing_data.query("fill_in_score ==1")
             .merge(
                 hist_data.drop(
@@ -2871,4 +2899,22 @@ class DataBySubplant:
             .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
         )
 
-        return missing_data
+        return (
+            pd.concat([three, two, one])
+            .sort_values(by=["plant_id_eia", "generator_id", "year"], ascending=True)
+            .drop(
+                columns=[
+                    "prime_mover",
+                    "fuel_group",
+                    "essentials",
+                    "ba_plus_essentials",
+                    "age_range",
+                    "ba_plus_age",
+                    "essentials_present",
+                    "ba_plus_essentials_present",
+                    "ba_plus_age_present",
+                    "fill_in_score",
+                    "_merge",
+                ]
+            )
+        )
