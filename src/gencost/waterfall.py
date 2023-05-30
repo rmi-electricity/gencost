@@ -2901,7 +2901,17 @@ class DataBySubplant:
 
         return (
             pd.concat([three, two, one])
-            .sort_values(by=["plant_id_eia", "generator_id", "year"], ascending=True)
+            .assign(
+                report_date=lambda x: pd.to_datetime(x["year"], format="%Y"),
+                fill_in_match=lambda x: np.where(
+                    x["fill_in_score"] == 3,
+                    "essentials_ba_age_group",
+                    (np.where(x["fill_in_score"] == 2, "essentials_ba", "essentials")),
+                ),
+            )
+            .sort_values(
+                by=["plant_id_eia", "generator_id", "report_date"], ascending=True
+            )
             .drop(
                 columns=[
                     "prime_mover",
@@ -2915,6 +2925,7 @@ class DataBySubplant:
                     "ba_plus_age_present",
                     "fill_in_score",
                     "_merge",
+                    "year",
                 ]
             )
         )
