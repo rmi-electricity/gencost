@@ -81,6 +81,11 @@ class TestFullWaterfall:
         df = databysubplant.get_exa_by_generator()
         assert not df.empty
 
+    def test_fill_in_eternals(self, databysubplant):
+        """Perfunctory test that the method produces something."""
+        df = databysubplant.fill_in_ep_data()
+        assert not df.empty
+
     def test_compare_capacity_fig(self, databysubplant):
         go = pytest.importorskip("plotly.graph_objects")
 
