@@ -201,7 +201,6 @@ supercritical_fixed_adj +
 supercritical_variable_adj'
 
 # removed:
-# CHP_fixed_adj +
 # high_median_CF_adj +
 # high_median_CF_fixed_adj +
 # low_median_CF_adj +
@@ -211,6 +210,7 @@ supercritical_variable_adj'
 # mid_median_CF_adj +
 # mid_median_CF_fixed_adj +
 formula_cc_real_opex <- 'real_opex ~ 0 +
+CHP_fixed_adj +
 age_obs_variable_adj +
 age_variable_adj +
 capacity_adj +
@@ -260,8 +260,16 @@ variables_for_regressions <-
 
 
 #### Subset to only the necessary variables, and write the dataset to disk ####
+RawData %>%
+	select(contains('cf')) %>%
+	colnames %>%
+	sort
+
 variables_for_sanity_check <- c('gross_cf', 'generator_starts', 'capacity_mw',
-	'age_relative_to_prime_avg')
+	'age_relative_to_prime_avg', 'capacity_mw', 'generator_starts', 'age_in_report_year',
+	"biofuel_gross_cf", "coal_gross_cf", "gross_cf", "natural_gas_gross_cf",
+	"net_cf", "other_gas_gross_cf", "other_gross_cf", "petroleum_coke_gross_cf",
+	"petroleum_gross_cf")
 
 variables_all <- 
 	c('rowid', 'plant_id_eia', 'prime_mover', variables_for_regressions, 
@@ -284,3 +292,6 @@ FormulasRealOpex %>%
 
 saveRDS(variables_for_regressions, 'clean_data/variables_for_regressions.RDS')
 saveRDS(variables_for_sanity_check, 'clean_data/variables_for_sanity_check.RDS')
+
+variables_for_clusters <- variables_for_regressions[variables_for_regressions != 'real_opex']
+saveRDS(variables_for_clusters, 'clean_data/variables_for_clusters.RDS')

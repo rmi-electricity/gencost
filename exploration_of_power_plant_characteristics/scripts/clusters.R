@@ -23,7 +23,10 @@ Data <- read_csv('clean_data/data.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f', 
 	consolidated_regression_filter = 'l', .default = 'd')) %>%
 	filter(consolidated_regression_filter)  # regressions will be on filtered data.
+WeightedScores <- read_csv('clean_data/weighted_scores.csv')
 variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
+variables_for_clusters <- readRDS('clean_data/variables_for_clusters.RDS')
+variables_for_sanity_check <- readRDS('clean_data/variables_for_sanity_check.RDS')
 
 # Test to see how well each cluster model fits
 KmeansComparisons <-
@@ -33,7 +36,7 @@ KmeansComparisons <-
 		group_by(prime_mover) %>%
 		nest %>%
 		expand_grid(
-			resample_i = seq(1, 10),
+			resample_i = seq(1, 200),
 			num_clusters = seq(2, 10)
 		) %>%
 		mutate(
@@ -85,9 +88,11 @@ KmeansComparisons	%>%
 	facet_wrap(~prime_mover, ncol = 3) +
 	theme(
 		axis.ticks = element_blank(),
-		panel.grid.minor.x = element_blank()
+		panel.grid.minor.x = element_blank(),
+		text = element_text(family = 'serif')
 		) +
-	labs(x = 'Number of clusters', y = 'total within SS / total SS')
+	labs(x = 'Number of clusters', y = 'total within SS / total SS',
+			 caption = '200 resamples; pairwise t-tests with Bonferroni correction')
 
 
 	# Count how many rows are in each cluster, to make sure we don't have wildly
@@ -124,11 +129,12 @@ SizeOfClusters %>%
 	mutate(cluster = as.factor(cluster)) %>%
 	ggplot(aes(x = cluster, y = n)) +
 	geom_hline(aes(yintercept = num_rows_evenly_split), linetype = 'dashed') +
-	geom_col() +
+	geom_col(fill = '#20A2E3') +
 	facet_wrap(~num_clusters, nrow = 1, scales = 'free_x') +
 	theme(
 		axis.ticks = element_blank(),
-		panel.grid.major.x = element_blank()
+		panel.grid.major.x = element_blank(),
+		text = element_text(family = 'serif')
 	) +
 	labs(x = 'Clusters', y = 'Number of observations', title = 'CC')
 
@@ -137,12 +143,13 @@ SizeOfClusters %>%
 	mutate(cluster = as.factor(cluster)) %>%
 	ggplot(aes(x = cluster, y = n)) +
 	geom_hline(aes(yintercept = num_rows_evenly_split), linetype = 'dashed') +
-	geom_col() +
+	geom_col(fill = '#20A2E3') +
 	scale_y_continuous(labels = scales::comma_format()) +
 	facet_wrap(~num_clusters, nrow = 1, scales = 'free_x') +
 	theme(
 		axis.ticks = element_blank(),
-		panel.grid.major.x = element_blank()
+		panel.grid.major.x = element_blank(),
+		text = element_text(family = 'serif')
 	) +
 	labs(x = 'Clusters', y = 'Number of observations', title = 'GT')
 
@@ -151,16 +158,18 @@ SizeOfClusters %>%
 	mutate(cluster = as.factor(cluster)) %>%
 	ggplot(aes(x = cluster, y = n)) +
 	geom_hline(aes(yintercept = num_rows_evenly_split), linetype = 'dashed') +
-	geom_col() +
+	geom_col(fill = '#20A2E3') +
 	scale_y_continuous(labels = scales::comma_format()) +
 	facet_wrap(~num_clusters, nrow = 1, scales = 'free_x') +
 	theme(
 		axis.ticks = element_blank(),
-		panel.grid.major.x = element_blank()
+		panel.grid.major.x = element_blank(),
+		text = element_text(family = 'serif')
 	) +
 	labs(x = 'Clusters', y = 'Number of observations', title = 'ST')
 
 # Look at the cluster-level characteristics
+variables_for_sanity_check
 variables_for_sanity_check <- c('gross_cf', 'generator_starts', 'capacity_mw',
 																'age_relative_to_prime_avg')
 
@@ -183,7 +192,7 @@ show_cluster_splot <- function(prime_mover_var, num_clusters_var) {
 		select(prime_mover, num_clusters, cluster, real_opex, all_of(variables_for_sanity_check)) %>%
 		filter(prime_mover == prime_mover_var, num_clusters == num_clusters_var) %>%
 		select(cluster, real_opex, gross_cf, generator_starts) %>%
-		mutate_at(c('real_opex', 'gross_cf', 'generator_starts'), ~as.vector(scale(.))) %>%
+		# mutate_at(c('real_opex', 'gross_cf', 'generator_starts'), ~as.vector(scale(.))) %>%
 		mutate_at('cluster', factor) %>%
 		ggpairs(., columns = c(2,3, 4), 
 						ggplot2::aes(color = cluster,
@@ -193,12 +202,16 @@ show_cluster_splot <- function(prime_mover_var, num_clusters_var) {
 			upper = list(continuous =
 									 	wrap('cor', use = 'pairwise.complete.obs', digits = 1))) +
 		theme(
-			axis.ticks = element_blank()
+			axis.ticks = element_blank(),
+			text = element_text(family = 'serif')
 		) +
 		labs(title = str_c(prime_mover_var, num_clusters_var, sep = ' '))
 }
 
+show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 2)												 	
 show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 3)												 	
+show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 4)												 	
+show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 5)												 	
 	
 write_csv(PairwiseTTests, file = 'clean_data/pairwise_ttests.csv')
 write_csv(Clusters, file = 'clean_data/clusters.csv')
