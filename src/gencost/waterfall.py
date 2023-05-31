@@ -2499,7 +2499,10 @@ class DataBySubplant:
                 ),
             )
             .query("fuel_reported_is_latest_fuel == False")
-            .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
+            .assign(
+                fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""),
+                age_in_current_year=lambda x: 1,
+            )
             .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
         )
         """
