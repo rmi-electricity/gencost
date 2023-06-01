@@ -2434,7 +2434,10 @@ class DataBySubplant:
                 how="left",
             )
             .assign(
-                prime_mover=lambda x: x.prime_mover_code.replace(FOSSIL_PRIME_MOVER_MAP)
+                prime_mover=lambda x: x.prime_mover_code.replace(
+                    FOSSIL_PRIME_MOVER_MAP
+                ),
+                age_in_current_year=lambda x: 1,
             )
             .merge(
                 df_860.sort_values(
@@ -2472,6 +2475,7 @@ class DataBySubplant:
                 "prime_mover",
                 "fuel_group",
                 "final_ba_code",
+                "age_in_current_year",
             ]
         ]
 
@@ -2499,10 +2503,7 @@ class DataBySubplant:
                 ),
             )
             .query("fuel_reported_is_latest_fuel == False")
-            .assign(
-                fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""),
-                age_in_current_year=lambda x: 1,
-            )
+            .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
             .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
         )
         """
