@@ -379,21 +379,24 @@ class DataBySubplant:
                 - x[core_fuels].sum(axis=1)
             )
 
-            self._dfs["merge_all"] = self.validate_merge_all_results(
-                out.drop(columns=["ferc_merge", "hrs_in_yr", "true_multi_fuel"])
+            # add core validation step
+
+            # validate merge all specifics
+            self._dfs["merge_all"] = self.core_validation(
+                out.drop(columns=["ferc_merge", "hrs_in_yr", "true_multi_fuel"]),
+                level="subplant",
             )
 
-        if clean:
-            return (
-                self._dfs["merge_all"]
-                # numexpr / query cannot deal with nullable floats
-                .astype({"parasitic_load_pct": float, "gross_cf": float})
-                .query("0.0 < parasitic_load_pct < 0.2 & 0.0 <= gross_cf <= 1.5")
-                .astype({"parasitic_load_pct": "Float64", "gross_cf": "Float64"})
-                .copy()
-            )
+            if clean:
+                return (
+                    self._dfs["merge_all"]
+                    .astype({"parasitic_load_pct": float, "gross_cf": float})
+                    .query("0.0 < parasitic_load_pct < 0.2 & 0.0 <= gross_cf <= 1.5")
+                    .astype({"parasitic_load_pct": "Float64", "gross_cf": "Float64"})
+                    .copy()
+                )
 
-        return self._dfs["merge_all"]
+        return out
 
     def get_exa_all(self, by_fuel=True):
         """
@@ -730,9 +733,51 @@ class DataBySubplant:
                 )
             )
             .drop(columns=["cems_923_merge", "exa_merge"])
+            .merge(
+                self.get_wage_scale(),
+                on=["report_date", "state"],
+                how="left",
+                validate="m:1",
+            )
+            .fillna({"wage_scale": 1})
+            .assign(
+                hrs_in_yr=lambda x: np.where(x.report_date.dt.is_leap_year, 8784, 8760),
+                gross_cf=lambda x: x.gross_generation_mwh
+                / (x.capacity_mw * x.hrs_in_yr),
+            )
+            .merge(
+                pd.read_parquet(
+                    PACKAGE_PATH / "860_FERC_matching_cost_regressions.parquet.gzip",
+                )[["report_year", "inflator_to_2021"]]
+                .drop_duplicates()
+                .assign(
+                    report_date=lambda x: pd.to_datetime(x["report_year"], format="%Y")
+                ),
+                on=["report_date"],
+                how="left",
+            )
+            .assign(
+                real_pollution_control_costs_per_kw=lambda x: x.pollution_control_costs_per_kw
+                * x.inflator_to_2021
+            )  # pandera caught 3 observations w/null prime movers
+            .query("prime_mover.notnull()")
+            .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
         )
 
-        return merged.query('_merge == "all"').drop(columns=["_merge"])
+        # fuel fraction calcs from merge all
+        gross_mwh_cols = merged.filter(like="_gross_mwh").columns
+
+        merged[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
+            merged[gross_mwh_cols]
+            .divide(merged[gross_mwh_cols].sum(axis=1), axis=0)
+            .fillna(0.0)
+        )
+
+        out = merged.query('_merge == "all"').drop(columns=["_merge", "hrs_in_yr"])
+
+        self._dfs = self.core_validation(out, level="generator")
+
+        return self._dfs
 
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
@@ -1168,6 +1213,11 @@ class DataBySubplant:
                 on=["plant_id_eia", "generator_id"],
                 how="left",
                 validate="m:1",
+            )
+            .assign(
+                pollution_control_costs_per_kw=lambda x: x[
+                    "pollution_control_costs_per_kw"
+                ].fillna(0.0)
             )
             .merge(
                 self.pudl_tabl.gens_eia860m()[
@@ -1765,7 +1815,29 @@ class DataBySubplant:
 
         gf_923.columns = map("_".join, gf_923.columns)
 
-        return gf_923.reset_index()
+        return gf_923.reset_index().merge(
+            (
+                self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
+                .groupby(
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        pd.Grouper(key="report_date", freq="YS"),
+                    ]
+                )
+                .agg({"net_generation_mwh": "sum"})
+                .reset_index()[
+                    [
+                        "plant_id_eia",
+                        "generator_id",
+                        "report_date",
+                        "net_generation_mwh",
+                    ]
+                ]
+            ),
+            on=["plant_id_eia", "generator_id", "report_date"],
+            how="left",
+        )
 
     def get_cems_by_x(self, subplant_id_col, xwalk=None, merge_only=False):
         """
@@ -1930,6 +2002,9 @@ class DataBySubplant:
             .assign(
                 gross_generation_mwh=lambda x: x.gross_generation_mwh
                 * x.gen_fuel_consumed_frac
+            )
+            .assign(
+                gross_generation_mwh=lambda x: x["gross_generation_mwh"].fillna(0.0)
             )
         )
 
@@ -2123,7 +2198,7 @@ class DataBySubplant:
         return df
 
     @staticmethod
-    def validate_merge_all_results(merge_all_df):
+    def core_validation(df, level):
         """
 
         Args:
@@ -2134,125 +2209,269 @@ class DataBySubplant:
 
 
         """
-        fuels = (
-            "biofuel",
-            "coal",
-            "natural_gas",
-            "other",
-            "other_gas",
-            "petroleum",
-            "petroleum_coke",
-        )
-        techs = (
-            "associated_combined_heat_power",
-            "duct_burners",
-            "bypass_heat_recovery",
-            "solid_fuel_gasification",
-            "carbon_capture",
-            "fluidized_bed_tech",
-            "pulverized_coal_tech",
-            "stoker_tech",
-            "other_combustion_tech",
-            "subcritical_tech",
-            "supercritical_tech",
-            "ultrasupercritical_tech",
-        )
-        columns = (
-            {
-                "plant_id_eia": Column(int),
-                "pf_subplant_id": Column(int),
-                "subplant_id": Column("Int64", nullable=True),
-                "report_date": Column(dt),
-                "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
-                "step": Column(int, Check.isin((1, 2, 3))),
-                "report_year": Column(int, nullable=True),
-                "fuel_category": Column(str),
-                "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
-                "gross_cf": Column(float, Check.ge(0.0), nullable=True),
-                "generator_starts": Column(int, Check.ge(0)),
-                "cum_starts": Column(int, Check.ge(0)),
-                "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
-                "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
-                "wage_scale": Column(float),
-            }
-            | {
-                "age_of_observation_secular_adj": Column(float),
-                "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
-                "age_relative_to_prime_avg": Column(float),
-            }
-            | {f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0)) for k in fuels}
-            | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 1.0))}
-            | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
-            | {
-                k: Column(float, Check.gt(0.0), nullable=True)
-                for k in ("capex", "real_opex")
-            }
-            # not used in regression
-            | {
-                "age_in_report_year": Column(float),
-                "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
-                "parasitic_load_pct": Column(float),
-                "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
-                "gross_generation_mwh": Column(float, Check.ge(0.0)),
-                "gross_hr": Column(float, Check.ge(0.0), nullable=True),
-                "heat_in_mmbtu": Column(float, Check.ge(0.0)),
-                "net_generation_mwh": Column(float),
-                "net_cf": Column(float, nullable=True),
-                "arc": Column(float, nullable=True),
-                "inflator_to_2021": Column(float),
-                "fuel_starts": Column(int, Check.ge(0)),
-                "opex": Column(float, Check.ge(0.0), nullable=True),
-                "real_capex": Column(float, Check.ge(0.0), nullable=True),
-                "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
-                "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
-            }
-            | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
-            | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
-            | {
-                f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
-                for k in fuels
-            }
-            | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
-        )
 
-        def gross_ge_net(df_):
-            return df_.gross_generation_mwh >= df_.net_generation_mwh
-
-        def x_gen_allocation(df_, kind):
-            return pd.Series(
-                np.isclose(
-                    df_.filter(like=f"_{kind}_mwh").sum(axis=1),
-                    df_[f"{kind}_generation_mwh"],
-                    rtol=2e-2,
-                ),
-                index=df_.index,
+        if level == "generator":
+            fuels = (
+                "biofuel",
+                "coal",
+                "natural_gas",
+                "other",
+                "other_gas",
+                "petroleum",
+                "petroleum_coke",
+            )
+            techs = (
+                "associated_combined_heat_power",
+                "duct_burners",
+                "bypass_heat_recovery",
+                "solid_fuel_gasification",
+                "carbon_capture",
+                "fluidized_bed_tech",
+                "pulverized_coal_tech",
+                "stoker_tech",
+                "other_combustion_tech",
+                "subcritical_tech",
+                "supercritical_tech",
+                "ultrasupercritical_tech",
+            )
+            core_columns = (
+                {
+                    "plant_id_eia": Column(int),
+                    # "pf_subplant_id": Column(int),
+                    # "subplant_id": Column("Int64", nullable=True),
+                    "generator_id": Column(str),
+                    "report_date": Column(dt),
+                    "prime_mover": Column(
+                        str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))
+                    ),
+                    # "step": Column(int, Check.isin((1, 2, 3))),
+                    "report_year": Column(int, nullable=True),
+                    # "fuel_category": Column(str),
+                    "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
+                    "gross_cf": Column(float, Check.ge(0.0), nullable=True),
+                    "generator_starts": Column(int, Check.ge(0)),
+                    # "cum_starts": Column(int, Check.ge(0)),
+                    "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                    "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                    "wage_scale": Column(float),
+                }
+                | {
+                    "age_of_observation_secular_adj": Column(float),
+                    "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
+                    "age_relative_to_prime_avg": Column(float),
+                }
+                | {
+                    f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0))
+                    for k in fuels
+                }
+                | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
+                # not used in regression
+                | {
+                    "age_in_report_year": Column(float),
+                    "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
+                    # "parasitic_load_pct": Column(float),
+                    # "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
+                    "gross_generation_mwh": Column(float, Check.ge(0.0)),
+                    # "gross_hr": Column(float, Check.ge(0.0), nullable=True),
+                    # "heat_in_mmbtu": Column(float, Check.ge(0.0)),
+                    "net_generation_mwh": Column(float),
+                    # "net_cf": Column(float, nullable=True),
+                    # "arc": Column(float, nullable=True),
+                    "inflator_to_2021": Column(float),
+                    "fuel_starts": Column(int, Check.ge(0)),
+                    # "opex": Column(float, Check.ge(0.0), nullable=True),
+                    # "real_capex": Column(float, Check.ge(0.0), nullable=True),
+                    # "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
+                    # "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
+                }
+                | {
+                    f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True)
+                    for k in fuels
+                }
+                | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
+                | {
+                    f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
+                    for k in fuels
+                }
+                # {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
             )
 
-        def valid_generation(df_):
-            hrs = np.where(df_.report_date.dt.is_leap_year, 8784, 8760)
-            return df_.net_generation_mwh <= df_.capacity_mw * hrs * 1.3
+            def gross_ge_net(df_):
+                return df_.gross_generation_mwh >= df_.net_generation_mwh
 
-        schema = pa.DataFrameSchema(
-            columns=columns,
-            checks=[
-                Check(
-                    gross_ge_net,
-                    title="net_gen >= gross_gen",
-                    description="Gross generation should always be greater than net",
+            def x_gen_allocation(df_, kind):
+                return pd.Series(
+                    np.isclose(
+                        df_.filter(like=f"_{kind}_mwh").sum(axis=1),
+                        df_[f"{kind}_generation_mwh"],
+                        rtol=1,
+                    ),
+                    index=df_.index,
+                )
+
+            def valid_generation(df_):
+                hrs = np.where(df_.report_date.dt.is_leap_year, 8784, 8760)
+                return df_.net_generation_mwh <= df_.capacity_mw * hrs * 1.3
+
+            schema = pa.DataFrameSchema(
+                columns=core_columns,
+                checks=[
+                    Check(
+                        gross_ge_net,
+                        title="net_gen >= gross_gen",
+                        description="Gross generation should always be greater than net",
+                        # I don't think we want to error here yet, so just raise a warning
+                        raise_warning=True,
+                    ),
+                    Check(x_gen_allocation, title="net_gen aggregation", kind="net"),
+                    # Check(
+                    # x_gen_allocation, title="gross_gen aggregation", kind="gross"
+                    # ),
                     # I don't think we want to error here yet, so just raise a warning
-                    raise_warning=True,
-                ),
-                Check(x_gen_allocation, title="net_gen aggregation", kind="net"),
-                Check(x_gen_allocation, title="gross_gen aggregation", kind="gross"),
-                # I don't think we want to error here yet, so just raise a warning
-                Check(valid_generation, title="valid net gen", raise_warning=True),
-            ],
-            unique=["plant_id_eia", "subplant_id", "pf_subplant_id", "report_date"],
-            index=pa.Index(int),
-            strict=False,
-            coerce=True,
-            ordered=True,
-        )
-        df = schema.validate(merge_all_df[columns])
+                    Check(valid_generation, title="valid net gen", raise_warning=True),
+                ],
+                unique=["plant_id_eia", "generator_id", "report_date"],
+                index=pa.Index(int),
+                strict=False,
+                coerce=True,
+                ordered=True,
+            )
+            df = schema.validate(df[core_columns])
 
-        return df
+            return df
+
+        else:
+            fuels = (
+                "biofuel",
+                "coal",
+                "natural_gas",
+                "other",
+                "other_gas",
+                "petroleum",
+                "petroleum_coke",
+            )
+            techs = (
+                "associated_combined_heat_power",
+                "duct_burners",
+                "bypass_heat_recovery",
+                "solid_fuel_gasification",
+                "carbon_capture",
+                "fluidized_bed_tech",
+                "pulverized_coal_tech",
+                "stoker_tech",
+                "other_combustion_tech",
+                "subcritical_tech",
+                "supercritical_tech",
+                "ultrasupercritical_tech",
+            )
+            merge_all_columns = (
+                {
+                    "plant_id_eia": Column(int),
+                    "pf_subplant_id": Column(int),
+                    "subplant_id": Column("Int64", nullable=True),
+                    "report_date": Column(dt),
+                    "prime_mover": Column(
+                        str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))
+                    ),
+                    "step": Column(int, Check.isin((1, 2, 3))),
+                    "report_year": Column(int, nullable=True),
+                    "fuel_category": Column(str),
+                    "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
+                    "gross_cf": Column(float, Check.ge(0.0), nullable=True),
+                    "generator_starts": Column(int, Check.ge(0)),
+                    "cum_starts": Column(int, Check.ge(0)),
+                    "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                    "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
+                    "wage_scale": Column(float),
+                }
+                | {
+                    "age_of_observation_secular_adj": Column(float),
+                    "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
+                    "age_relative_to_prime_avg": Column(float),
+                }
+                | {
+                    f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0))
+                    for k in fuels
+                }
+                | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
+                | {
+                    k: Column(float, Check.gt(0.0), nullable=True)
+                    for k in ("capex", "real_opex")
+                }
+                # not used in regression
+                | {
+                    "age_in_report_year": Column(float),
+                    "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
+                    "parasitic_load_pct": Column(float),
+                    "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
+                    "gross_generation_mwh": Column(float, Check.ge(0.0)),
+                    "gross_hr": Column(float, Check.ge(0.0), nullable=True),
+                    "heat_in_mmbtu": Column(float, Check.ge(0.0)),
+                    "net_generation_mwh": Column(float),
+                    "net_cf": Column(float, nullable=True),
+                    "arc": Column(float, nullable=True),
+                    "inflator_to_2021": Column(float),
+                    "fuel_starts": Column(int, Check.ge(0)),
+                    "opex": Column(float, Check.ge(0.0), nullable=True),
+                    "real_capex": Column(float, Check.ge(0.0), nullable=True),
+                    "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
+                    "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
+                }
+                | {
+                    f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True)
+                    for k in fuels
+                }
+                | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
+                | {
+                    f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
+                    for k in fuels
+                }
+                | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
+            )
+
+            def gross_ge_net(df_):
+                return df_.gross_generation_mwh >= df_.net_generation_mwh
+
+            def x_gen_allocation(df_, kind):
+                return pd.Series(
+                    np.isclose(
+                        df_.filter(like=f"_{kind}_mwh").sum(axis=1),
+                        df_[f"{kind}_generation_mwh"],
+                        rtol=2e-2,
+                    ),
+                    index=df_.index,
+                )
+
+            def valid_generation(df_):
+                hrs = np.where(df_.report_date.dt.is_leap_year, 8784, 8760)
+                return df_.net_generation_mwh <= df_.capacity_mw * hrs * 1.3
+
+            schema = pa.DataFrameSchema(
+                # columns=core_columns,
+                columns=merge_all_columns,
+                checks=[
+                    Check(
+                        gross_ge_net,
+                        title="net_gen >= gross_gen",
+                        description="Gross generation should always be greater than net",
+                        # I don't think we want to error here yet, so just raise a warning
+                        raise_warning=True,
+                    ),
+                    Check(x_gen_allocation, title="net_gen aggregation", kind="net"),
+                    Check(
+                        x_gen_allocation, title="gross_gen aggregation", kind="gross"
+                    ),
+                    # I don't think we want to error here yet, so just raise a warning
+                    Check(valid_generation, title="valid net gen", raise_warning=True),
+                ],
+                unique=["plant_id_eia", "subplant_id", "pf_subplant_id", "report_date"],
+                index=pa.Index(int),
+                strict=False,
+                coerce=True,
+                ordered=True,
+            )
+
+            # df = schema.validate(df[core_columns])
+            df = schema.validate(df[merge_all_columns])
+
+            return df
