@@ -773,7 +773,16 @@ class DataBySubplant:
             .fillna(0.0)
         )
 
-        out = merged.query('_merge == "all"').drop(columns=["_merge", "hrs_in_yr"])
+        core_fuels = ["coal_fraction", "natural_gas_fraction", "petroleum_fraction"]
+
+        out = (
+            merged.assign(
+                minor_fuels_fraction=lambda x: x.filter(like="_fraction").sum(axis=1)
+                - x[core_fuels].sum(axis=1)
+            )
+            .query('_merge == "all"')
+            .drop(columns=["_merge", "hrs_in_yr"])
+        )
 
         self._dfs = self.core_validation(out, level="generator")
 
@@ -2264,6 +2273,7 @@ class DataBySubplant:
                     f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0))
                     for k in fuels
                 }
+                | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 1.0))}
                 | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
                 # not used in regression
                 | {
