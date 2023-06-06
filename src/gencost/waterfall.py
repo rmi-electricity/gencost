@@ -2420,7 +2420,7 @@ class DataBySubplant:
                 subset=[
                     "plant_id_eia",
                     "generator_id",
-                    "year",
+                    "report_date",
                     "prime_mover",
                     "fuel_group",
                 ]
@@ -2429,7 +2429,7 @@ class DataBySubplant:
             [
                 "plant_id_eia",
                 "generator_id",
-                "year",
+                "report_date",
                 "fuss",
                 "prime_mover",
                 "fuel_group",
@@ -2453,7 +2453,7 @@ class DataBySubplant:
             .query("n_fuels > 1")
             .assign(
                 fuss=lambda x: "fuel_switch",
-                year=lambda x: x["report_date"].dt.year,
+                # year=lambda x: x["report_date"].dt.year,
                 fuel=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
                     "mmbtu"
                 ].transform("last"),
@@ -2486,17 +2486,17 @@ class DataBySubplant:
                 prime_mover=lambda x: x.prime_mover_code.replace(
                     FOSSIL_PRIME_MOVER_MAP
                 ),
-                year=lambda x: x["report_date"].dt.year,
+                # year=lambda x: x["report_date"].dt.year,
                 fuss="zeroes",
             )
         )
         zero_and_fuel_switch = (
             pd.concat([zero_reported, single_fuel_switch]).merge(
-                df_860.assign(year=lambda x: x["report_date"].dt.year)[
+                df_860[
                     [
                         "plant_id_eia",
                         "generator_id",
-                        "year",
+                        "report_date",
                         "final_ba_code",
                         "age_in_current_year",
                     ]
@@ -2509,7 +2509,7 @@ class DataBySubplant:
             [
                 "plant_id_eia",
                 "generator_id",
-                "year",
+                "report_date",
                 "fuss",
                 "prime_mover",
                 "fuel_group",
@@ -2526,7 +2526,7 @@ class DataBySubplant:
         labels = [1, 2, 3, 4, 5, 6, 7, 8]
 
         return df.assign(
-            essentials=lambda x: x["year"].astype(str)
+            essentials=lambda x: x["report_date"].astype(str)
             + "_"
             + x["prime_mover"]
             + "_"
@@ -2544,13 +2544,12 @@ class DataBySubplant:
         xwalk = self.xwalk
 
         hist_data = (
-            self.get_exa_by_generator()
-            .merge(
+            self.get_exa_by_generator().merge(
                 xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
                 on=["plant_id_eia", "generator_id", "prime_mover"],
                 how="left",
             )
-            .assign(year=lambda x: x["report_date"].dt.year)
+            # .assign(year=lambda x: x["report_date"].dt.year)
             .pipe(self.create_fill_in_ep_thresholds)
         )
 
@@ -2601,7 +2600,7 @@ class DataBySubplant:
                     columns=[
                         "plant_id_eia",
                         "generator_id",
-                        "year",
+                        "report_date",
                         "prime_mover",
                         "fuel_group",
                         "final_ba_code",
@@ -2616,7 +2615,7 @@ class DataBySubplant:
                 indicator=True,
             )
             .query('_merge == "both"')
-            .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
         )
 
         two = (
@@ -2625,7 +2624,7 @@ class DataBySubplant:
                     columns=[
                         "plant_id_eia",
                         "generator_id",
-                        "year",
+                        "report_date",
                         "prime_mover",
                         "fuel_group",
                         "final_ba_code",
@@ -2640,7 +2639,7 @@ class DataBySubplant:
                 indicator=True,
             )
             # .query('_merge == "both"')
-            .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
         )
 
         one = (
@@ -2650,7 +2649,7 @@ class DataBySubplant:
                     columns=[
                         "plant_id_eia",
                         "generator_id",
-                        "year",
+                        "report_date",
                         "prime_mover",
                         "fuel_group",
                         "final_ba_code",
@@ -2665,13 +2664,13 @@ class DataBySubplant:
                 indicator=True,
             )
             .query('_merge == "both"')
-            .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
         )
 
         return (
             pd.concat([three, two, one])
             .assign(
-                report_date=lambda x: pd.to_datetime(x["year"], format="%Y"),
+                # report_date=lambda x: pd.to_datetime(x["year"], format="%Y"),
                 fill_in_match=lambda x: np.where(
                     x["fill_in_score"] == 3,
                     "essentials_ba_age_group",
@@ -2694,7 +2693,6 @@ class DataBySubplant:
                     "ba_plus_age_present",
                     "fill_in_score",
                     "_merge",
-                    "year",
                 ]
             )
         )
