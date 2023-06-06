@@ -792,10 +792,9 @@ class DataBySubplant:
                 .drop(columns=["_merge", "hrs_in_yr"])
             )
 
-            self._dfs["exa_by_gen"] = out
-            # self.core_validation(out, level="generator")
+            self._dfs["exa_by_gen"] = self.core_validation(out, level="generator")
 
-        return self._dfs["exa_by_gen"]
+        return self._dfs["exa_by_gen"].copy()
 
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
@@ -2309,7 +2308,7 @@ class DataBySubplant:
 
         merge_all_columns = (
             {
-                "plant_id_eia": Column(int),
+                # "plant_id_eia": Column(int),
                 "pf_subplant_id": Column(int),
                 "subplant_id": Column("Int64", nullable=True),
                 # "report_date": Column(dt),
