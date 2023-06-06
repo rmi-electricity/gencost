@@ -2363,6 +2363,7 @@ class DataBySubplant:
                 indicator="exists",
             )
             .query('exists == "left_only"')
+            .assign(fuss=lambda x: "missing_years")
             .merge(
                 df_923_cf.groupby(
                     [
@@ -2385,7 +2386,7 @@ class DataBySubplant:
                     [
                         "plant_id_eia",
                         "generator_id",
-                        "report_date",
+                        # "report_date",
                         "prime_mover_code",
                         "fuel_group",
                     ]
@@ -2501,7 +2502,7 @@ class DataBySubplant:
                         "age_in_current_year",
                     ]
                 ],
-                on=["plant_id_eia", "generator_id", "year"],
+                on=["plant_id_eia", "generator_id", "report_date"],
                 how="left",
                 # indicator=True,
             )
