@@ -2338,6 +2338,8 @@ class DataBySubplant:
 
         df_860 = self.get_860_by_x(subplant_id_col="generator_id")
 
+        df_923_cf = self.get_gf923_by_generator(counterfactuals=True)
+
         # list of cols we need for melt
 
         """
@@ -2348,63 +2350,21 @@ class DataBySubplant:
         observation in allocated GF923
 
         """
+        _h = hist_data[["plant_id_eia", "generator_id"]].drop_duplicates()
 
         missing_years = (
-            hist_data.assign(
-                n_years_gen=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
-                    "report_date"
-                ].transform("nunique"),
-                report_year=lambda x: x.report_date.dt.year,
-            )
-            .query("n_years_gen != 15")
-            .groupby(["plant_id_eia", "generator_id"])["report_year"]
-            .agg(list)
-            .reset_index()
-            .assign(
-                needed_years=lambda x: x.apply(
-                    lambda _: [*range(2006, 2020, 1)], axis=1
-                ),
-                missing_years=lambda x: (
-                    x["needed_years"].map(set) - x["report_year"].map(set)
-                ),
-                years_to_fill_in=lambda x: x["missing_years"].apply(list),
-            )
-        )
-
-        # create a row for each year that needs to be filled in
-        split = pd.DataFrame([pd.Series(x) for x in missing_years.years_to_fill_in])
-        split.columns = [f"year_{x + 1}" for x in split.columns]
-
-        missing_years_clean = pd.concat([missing_years, split], axis=1)
-
-        missing_years_clean = (
-            missing_years_clean.melt(
-                id_vars=["plant_id_eia", "generator_id"],
-                value_vars=[
-                    "year_1",
-                    "year_2",
-                    "year_3",
-                    "year_4",
-                    "year_5",
-                    "year_6",
-                    "year_7",
-                    "year_8",
-                    "year_9",
-                    "year_10",
-                    "year_11",
-                    "year_12",
-                    "year_13",
-                    "year_14",
-                ],
-                value_name="year",
-            )
-            .query("year.notnull()")
-            .assign(
-                year=lambda x: x["year"].astype("Int64"), fuss=lambda x: "missing_years"
+            pd.concat(
+                _h.assign(report_date=rd) for rd in hist_data.report_date.unique()
             )
             .merge(
-                self.get_gf923_by_generator(counterfactuals=True)
-                .groupby(
+                hist_data[["plant_id_eia", "generator_id", "report_date"]],
+                on=["plant_id_eia", "generator_id", "report_date"],
+                how="outer",
+                indicator="exists",
+            )
+            .query('exists == "left_only"')
+            .merge(
+                df_923_cf.groupby(
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2442,9 +2402,7 @@ class DataBySubplant:
             .merge(
                 df_860.sort_values(
                     by=["plant_id_eia", "generator_id", "report_date"], ascending=True
-                ).drop_duplicates(
-                    subset=["plant_id_eia", "generator_id", "report_date"]
-                )[
+                ).drop_duplicates(subset=["plant_id_eia", "generator_id"])[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2455,6 +2413,7 @@ class DataBySubplant:
                 ],
                 on=["plant_id_eia", "generator_id"],
                 how="left",
+                validate="m:1"
                 # indicator=True,
             )
             .drop_duplicates(
@@ -2498,11 +2457,8 @@ class DataBySubplant:
                 fuel=lambda x: x.groupby(["plant_id_eia", "generator_id"])[
                     "mmbtu"
                 ].transform("last"),
-                fuel_reported_is_latest_fuel=lambda x: np.where(
-                    x["mmbtu"] == x["fuel"], True, False
-                ),
             )
-            .query("fuel_reported_is_latest_fuel == False")
+            .query("mmbtu != fuel")
             .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
             .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
         )
@@ -2512,8 +2468,7 @@ class DataBySubplant:
 
         """
         zero_reported = (
-            self.get_gf923_by_generator(counterfactuals=True)
-            .groupby(
+            df_923_cf.groupby(
                 [
                     "plant_id_eia",
                     "generator_id",
@@ -2563,7 +2518,7 @@ class DataBySubplant:
             ]
         ]
 
-        return pd.concat([missing_years_clean, zero_and_fuel_switch])
+        return pd.concat([missing_years, zero_and_fuel_switch])
 
     def create_fill_in_ep_thresholds(self, df):
         bins = [0, 10, 20, 30, 40, 50, 60, 70, 100]
@@ -2627,7 +2582,7 @@ class DataBySubplant:
                     x["ba_plus_age_present"],
                 ),
                 ba_plus_essentials_present=lambda x: np.where(
-                    (x["final_ba_code"].isnull()) | (x["final_ba_code"].isna()),
+                    (x["final_ba_code"].isnull()),
                     0,
                     x["ba_plus_essentials_present"],
                 ),
@@ -2665,8 +2620,7 @@ class DataBySubplant:
         )
 
         two = (
-            missing_data.query("fill_in_score ==2")
-            .merge(
+            missing_data.query("fill_in_score ==2").merge(
                 hist_data.drop(
                     columns=[
                         "plant_id_eia",
@@ -2682,10 +2636,10 @@ class DataBySubplant:
                     ]
                 ),
                 on=["ba_plus_essentials"],
-                how="left",
+                how="inner",
                 indicator=True,
             )
-            .query('_merge == "both"')
+            # .query('_merge == "both"')
             .drop_duplicates(subset=["plant_id_eia", "generator_id", "year"])
         )
 
