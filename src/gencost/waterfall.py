@@ -2587,7 +2587,7 @@ class DataBySubplant:
                 prime_mover=lambda x: x.prime_mover_code.replace(
                     FOSSIL_PRIME_MOVER_MAP
                 ),
-                age_in_current_year=lambda x: 1,
+                # age_in_current_year=lambda x: 1,
             )
             .merge(
                 df_860.sort_values(
@@ -2598,6 +2598,7 @@ class DataBySubplant:
                         "generator_id",
                         # "report_date",
                         "final_ba_code",
+                        "generator_operating_date"
                         # "age_in_current_year", not sure what we wanna do about age in this scenario
                     ]
                 ],
@@ -2624,7 +2625,8 @@ class DataBySubplant:
                 "prime_mover",
                 "fuel_group",
                 "final_ba_code",
-                "age_in_current_year",
+                # "age_in_current_year",
+                "generator_operating_date",
             ]
         ]
 
@@ -2650,7 +2652,11 @@ class DataBySubplant:
             )
             .query("mmbtu != fuel")
             .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
-            .merge(xwalk, on=["plant_id_eia", "generator_id", "fuel_group"], how="left")
+            .merge(
+                xwalk.drop(columns="generator_operating_date"),
+                on=["plant_id_eia", "generator_id", "fuel_group"],
+                how="left",
+            )
         )
         """
         Missing data type #3: identify plant, gen, prime, fuel observations
@@ -2680,35 +2686,27 @@ class DataBySubplant:
                 fuss="zeroes",
             )
         )
-        zero_and_fuel_switch = (
-            pd.concat([zero_reported, single_fuel_switch]).merge(
-                df_860[
-                    [
-                        "plant_id_eia",
-                        "generator_id",
-                        "report_date",
-                        "final_ba_code",
-                        "age_in_current_year",
-                    ]
-                ],
-                on=["plant_id_eia", "generator_id", "report_date"],
-                how="left",
-                # indicator=True,
-            )
-        )[
-            [
-                "plant_id_eia",
-                "generator_id",
-                "report_date",
-                "fuss",
-                "prime_mover",
-                "fuel_group",
-                "final_ba_code",
-                "age_in_current_year",
-            ]
-        ]
+        zero_and_fuel_switch = pd.concat([zero_reported, single_fuel_switch]).merge(
+            df_860[
+                [
+                    "plant_id_eia",
+                    "generator_id",
+                    "report_date",
+                    "final_ba_code",
+                    # "age_in_current_year",
+                    "generator_operating_date",
+                ]
+            ],
+            on=["plant_id_eia", "generator_id", "report_date"],
+            how="left",
+            # indicator=True,
+        )
 
-        return pd.concat([missing_years, zero_and_fuel_switch])
+        return pd.concat([missing_years, zero_and_fuel_switch]).assign(
+            age=lambda x: (
+                ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
+            ).round(2)
+        )
 
     def create_fill_in_ep_thresholds(self, df):
         bins = [0, 10, 20, 30, 40, 50, 60, 70, 100]
@@ -2722,71 +2720,77 @@ class DataBySubplant:
             + "_"
             + x["fuel_group"],
             ba_plus_essentials=lambda x: x["essentials"] + "_" + x["final_ba_code"],
-            age_range=lambda x: pd.cut(
-                x["age_in_current_year"], bins=bins, labels=labels
-            ),
+            age_range=lambda x: pd.cut(x["age"], bins=bins, labels=labels),
             ba_plus_age=lambda x: x["ba_plus_essentials"]
             + "_"
             + x["age_range"].astype(str),
         )
 
-    def fill_in_ep_data(self):
+    def get_ep_data(self):
         xwalk = self.xwalk
 
-        hist_data = (
-            self.get_exa_by_generator().merge(
+        return (
+            self.get_exa_by_generator()
+            .merge(
                 xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
                 on=["plant_id_eia", "generator_id", "prime_mover"],
                 how="left",
             )
+            .assign(
+                age=lambda x: (
+                    ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
+                ).round(2)
+            )
             # .assign(year=lambda x: x["report_date"].dt.year)
             .pipe(self.create_fill_in_ep_thresholds)
         )
+
+    def fill_in_ep_data(self):
+        ep = self.get_ep_data()
 
         missing_data = (
             self.find_missing_data()
             .pipe(self.create_fill_in_ep_thresholds)
             .assign(
                 essentials_present=lambda x: np.where(
-                    x["essentials"].isin(hist_data["essentials"]), 1, 0
+                    x["essentials"].isin(ep["essentials"]),
+                    "report_date,prime_mover,fuel_group",
+                    np.nan,
                 ),
                 ba_plus_essentials_present=lambda x: np.where(
-                    x["ba_plus_essentials"].isin(hist_data["ba_plus_essentials"]),
-                    1,
-                    0,
+                    x["ba_plus_essentials"].isin(ep["ba_plus_essentials"]),
+                    "report_date,prime_mover,fuel_group,final_ba_code",
+                    np.nan,
                 ),
                 ba_plus_age_present=lambda x: np.where(
-                    x["ba_plus_age"].isin(hist_data["ba_plus_age"]),
-                    1,
-                    0,
+                    x["ba_plus_age"].isin(ep["ba_plus_age"]),
+                    "report_date,prime_mover,fuel_group,final_ba_code,age_range",
+                    np.nan,
                 ),
             )  # make an exception of when there is no ba code or age
             .assign(
                 ba_plus_age_present=lambda x: np.where(
-                    (x["final_ba_code"].isnull())
-                    | (x["final_ba_code"].isna())
-                    | (x["age_in_current_year"].isna())
-                    | (x["age_in_current_year"].isnull()),
-                    0,
+                    (x["final_ba_code"].isnull()) | (x["age"].isnull()),
+                    np.nan,
                     x["ba_plus_age_present"],
                 ),
                 ba_plus_essentials_present=lambda x: np.where(
                     (x["final_ba_code"].isnull()),
-                    0,
+                    np.nan,
                     x["ba_plus_essentials_present"],
                 ),
-                fill_in_score=lambda x: x["essentials_present"]
-                + x["ba_plus_essentials_present"]
-                + x["ba_plus_age_present"],
+                # fill_in_score=lambda x: np.where(x['ba_plus_age_present'].notnull(),x['ba_plus_age_present']),
             )
         )
+
+        return missing_data
 
         # some sort of for loop that sets prioritizes merging based on fill in score
 
         three = (
             missing_data.query("fill_in_score ==3")
             .merge(
-                hist_data.drop(
+                ep.drop(
                     columns=[
                         "plant_id_eia",
                         "generator_id",
@@ -2794,7 +2798,7 @@ class DataBySubplant:
                         "prime_mover",
                         "fuel_group",
                         "final_ba_code",
-                        "age_in_current_year",
+                        # "age_in_current_year",
                         "age_range",
                         "essentials",
                         "ba_plus_essentials",
@@ -2810,7 +2814,7 @@ class DataBySubplant:
 
         two = (
             missing_data.query("fill_in_score ==2").merge(
-                hist_data.drop(
+                ep.drop(
                     columns=[
                         "plant_id_eia",
                         "generator_id",
@@ -2818,7 +2822,7 @@ class DataBySubplant:
                         "prime_mover",
                         "fuel_group",
                         "final_ba_code",
-                        "age_in_current_year",
+                        # "age_in_current_year",
                         "age_range",
                         "ba_plus_age",
                         "essentials",
@@ -2835,7 +2839,7 @@ class DataBySubplant:
         one = (
             missing_data.query("fill_in_score ==1")
             .merge(
-                hist_data.drop(
+                ep.drop(
                     columns=[
                         "plant_id_eia",
                         "generator_id",
@@ -2843,7 +2847,7 @@ class DataBySubplant:
                         "prime_mover",
                         "fuel_group",
                         "final_ba_code",
-                        "age_in_current_year",
+                        # "age_in_current_year",
                         "age_range",
                         "ba_plus_age",
                         "ba_plus_essentials",
