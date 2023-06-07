@@ -2409,9 +2409,9 @@ class DataBySubplant:
                 index=pa.Index(int),
                 strict=False,
                 coerce=True,
-                ordered=True,
+                ordered=False,
             )
-            df = schema.validate(df[core_columns])
+            df = schema.validate(df[core_columns | gen_columns])
 
             return df
 
@@ -2438,10 +2438,10 @@ class DataBySubplant:
                 index=pa.Index(int),
                 strict=False,
                 coerce=True,
-                ordered=True,
+                ordered=False,
             )
 
             # df = schema.validate(df[core_columns])
-            df = schema.validate(df[merge_all_columns])
+            df = schema.validate(df[core_columns | merge_all_columns])
 
             return df
