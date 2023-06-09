@@ -16,7 +16,13 @@ from etoolbox.utils.pudl_helpers import (
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
-from gencost.constants import FOSSIL_PRIME_MOVER_MAP, FUEL_GROUP_MAP, GET_860_GEN_COLS
+from gencost.constants import (
+    FILL_IN_EP_COLS,
+    FOSSIL_PRIME_MOVER_MAP,
+    FUEL_GROUP_MAP,
+    GET_860_GEN_COLS,
+    HIST_EP_COLS,
+)
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
@@ -2597,8 +2603,14 @@ class DataBySubplant:
                         "plant_id_eia",
                         "generator_id",
                         # "report_date",
+                        "utility_id_eia",
+                        "respondent_id",
+                        "respondent_id_purchaser",
+                        "state",
                         "final_ba_code",
-                        "generator_operating_date"
+                        "generator_operating_date",
+                        "final_respondent_id",
+                        "balancing_authority_code_eia"
                         # "age_in_current_year", not sure what we wanna do about age in this scenario
                     ]
                 ],
@@ -2620,6 +2632,10 @@ class DataBySubplant:
             [
                 "plant_id_eia",
                 "generator_id",
+                "utility_id_eia",
+                "respondent_id",
+                "respondent_id_purchaser",
+                "state",
                 "report_date",
                 "fuss",
                 "prime_mover",
@@ -2627,6 +2643,8 @@ class DataBySubplant:
                 "final_ba_code",
                 # "age_in_current_year",
                 "generator_operating_date",
+                "final_respondent_id",
+                "balancing_authority_code_eia",
             ]
         ]
 
@@ -2692,9 +2710,15 @@ class DataBySubplant:
                     "plant_id_eia",
                     "generator_id",
                     "report_date",
+                    "utility_id_eia",
+                    "respondent_id",
+                    "respondent_id_purchaser",
+                    "state",
                     "final_ba_code",
-                    # "age_in_current_year",
                     "generator_operating_date",
+                    "final_respondent_id",
+                    "balancing_authority_code_eia"
+                    # "age_in_current_year", not sure what we w
                 ]
             ],
             on=["plant_id_eia", "generator_id", "report_date"],
@@ -2754,139 +2778,90 @@ class DataBySubplant:
             .assign(
                 essentials_present=lambda x: np.where(
                     x["essentials"].isin(ep["essentials"]),
-                    "report_date,prime_mover,fuel_group",
-                    np.nan,
+                    "essentials",
+                    pd.NA,
                 ),
                 ba_plus_essentials_present=lambda x: np.where(
                     x["ba_plus_essentials"].isin(ep["ba_plus_essentials"]),
-                    "report_date,prime_mover,fuel_group,final_ba_code",
-                    np.nan,
+                    "ba_plus_essentials",
+                    pd.NA,
                 ),
                 ba_plus_age_present=lambda x: np.where(
                     x["ba_plus_age"].isin(ep["ba_plus_age"]),
-                    "report_date,prime_mover,fuel_group,final_ba_code,age_range",
-                    np.nan,
+                    "ba_plus_age",
+                    pd.NA,
                 ),
             )  # make an exception of when there is no ba code or age
             .assign(
                 ba_plus_age_present=lambda x: np.where(
                     (x["final_ba_code"].isnull()) | (x["age"].isnull()),
-                    np.nan,
+                    pd.NA,
                     x["ba_plus_age_present"],
                 ),
                 ba_plus_essentials_present=lambda x: np.where(
                     (x["final_ba_code"].isnull()),
-                    np.nan,
+                    pd.NA,
                     x["ba_plus_essentials_present"],
                 ),
-                # fill_in_score=lambda x: np.where(x['ba_plus_age_present'].notnull(),x['ba_plus_age_present']),
+                # fill_in_score=lambda x: np.where(
+                # x["ba_plus_age_present"].notnull(), x["ba_plus_age_present"]
+                # ),
+                match=lambda x: x["ba_plus_age_present"]
+                .fillna(x["ba_plus_essentials_present"])
+                .fillna(x["essentials_present"]),
             )
         )
 
-        return missing_data
+        """
+        Merge missing data df with historical data
+        1) Loop based on unique values in match column
+        2) Query based on value (list with different kind of matches)
+        3) Merge
+        4) Append to a list
+        5) drop duplicates since they're might be multiple matches
 
-        # some sort of for loop that sets prioritizes merging based on fill in score
+        """
 
-        three = (
-            missing_data.query("fill_in_score ==3")
-            .merge(
-                ep.drop(
-                    columns=[
-                        "plant_id_eia",
-                        "generator_id",
-                        "report_date",
-                        "prime_mover",
-                        "fuel_group",
-                        "final_ba_code",
-                        # "age_in_current_year",
-                        "age_range",
-                        "essentials",
-                        "ba_plus_essentials",
-                    ]
-                ),
-                on=["ba_plus_age"],
-                how="left",
-                indicator=True,
-            )
-            .query('_merge == "both"')
-            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
-        )
+        cols = ["ba_plus_age", "ba_plus_essentials", "essentials"]
+        filled_in = []
 
-        two = (
-            missing_data.query("fill_in_score ==2").merge(
-                ep.drop(
-                    columns=[
-                        "plant_id_eia",
-                        "generator_id",
-                        "report_date",
-                        "prime_mover",
-                        "fuel_group",
-                        "final_ba_code",
-                        # "age_in_current_year",
-                        "age_range",
-                        "ba_plus_age",
-                        "essentials",
-                    ]
-                ),
-                on=["ba_plus_essentials"],
-                how="inner",
-                indicator=True,
+        for col in cols:
+            # core columns we want to get from historical, append column we're going to merge on
+            HIST_EP_COLS.append(col)
+            # keep plant specific id columns - plant/gen/utility/ba ids (don't want to fill that in with historical)
+            df = (
+                missing_data[FILL_IN_EP_COLS]
+                .query("match == @col")
+                .merge(ep[HIST_EP_COLS], on=[col], how="inner")
+                .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
             )
-            # .query('_merge == "both"')
-            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
-        )
 
-        one = (
-            missing_data.query("fill_in_score ==1")
-            .merge(
-                ep.drop(
-                    columns=[
-                        "plant_id_eia",
-                        "generator_id",
-                        "report_date",
-                        "prime_mover",
-                        "fuel_group",
-                        "final_ba_code",
-                        # "age_in_current_year",
-                        "age_range",
-                        "ba_plus_age",
-                        "ba_plus_essentials",
-                    ]
-                ),
-                on=["essentials"],
-                how="left",
-                indicator=True,
-            )
-            .query('_merge == "both"')
-            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
-        )
+            filled_in.append(df)
+            HIST_EP_COLS.remove(col)
 
-        return (
-            pd.concat([three, two, one])
-            .assign(
-                # report_date=lambda x: pd.to_datetime(x["year"], format="%Y"),
-                fill_in_match=lambda x: np.where(
-                    x["fill_in_score"] == 3,
-                    "essentials_ba_age_group",
-                    (np.where(x["fill_in_score"] == 2, "essentials_ba", "essentials")),
-                ),
-            )
-            .sort_values(
-                by=["plant_id_eia", "generator_id", "report_date"], ascending=True
-            )
-            .drop(
+            # remove columns not in historical df for future concat, excpt mtch and fuss
+            test = pd.concat(filled_in).drop(
                 columns=[
-                    "prime_mover",
-                    "fuel_group",
-                    "essentials",
-                    "ba_plus_essentials",
-                    "age_range",
                     "ba_plus_age",
-                    "essentials_present",
-                    "ba_plus_essentials_present",
-                    "ba_plus_age_present",
-                    "fill_in_score",
-                    "_merge",
+                    "ba_plus_essentials",
+                    "essentials",
+                    "fuel_group",
                 ]
             )
-        )
+
+        return test.sort_values(
+            by=["plant_id_eia", "generator_id", "report_date"], ascending=True
+        ).query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
+
+    def get_epd():
+        """
+        Objective: combine historical and counterfactual dataframes
+
+        Process:
+        Three types of counterfactuals
+        1) missing years (can add directly)
+        2) fuel switch (combine with existing generator observation
+        since each observation is at generator-level)
+        3) zeroes reported (have to replace where there are zeroes)
+
+        """
