@@ -2496,7 +2496,8 @@ class DataBySubplant:
 
         """
         zero_reported = (
-            df_923_cf.groupby(
+            df_923_cf.query('energy_source_code_num == "energy_source_code_1"')
+            .groupby(
                 [
                     "plant_id_eia",
                     "generator_id",
@@ -2517,6 +2518,7 @@ class DataBySubplant:
                 # year=lambda x: x["report_date"].dt.year,
                 fuss="zeroes",
             )
+            # .drop(columns=["percent_of_gen", "single_fuel", "single_fuel_present"])
         )
         zero_and_fuel_switch = pd.concat([single_fuel_switch, zero_reported]).merge(
             df_860[
@@ -2549,7 +2551,7 @@ class DataBySubplant:
                     "generator_id",
                     "report_date",
                     "prime_mover",
-                    "fuel_group",
+                    # "fuel_group",
                 ],
                 keep="first",
             ).assign(
@@ -2680,15 +2682,24 @@ class DataBySubplant:
             by=["plant_id_eia", "generator_id", "report_date"], ascending=True
         ).query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
 
-    def get_epd():
+    def get_epd(self):
         """
         Objective: combine historical and counterfactual dataframes
 
         Process:
+
+        Notes:
         Three types of counterfactuals
-        1) missing years (can add directly)
-        2) fuel switch (combine with existing generator observation
-        since each observation is at generator-level)
-        3) zeroes reported (have to replace where there are zeroes)
+        1) missing years
+        2) fuel switch
+        3) zeroes reported
+
+        There will be duplicates for instances a generator switched fuel or
+        reported zero fuel consumption or generation
 
         """
+
+        historical = self.get_exa_by_generator().assign(type=lambda x: "historical")
+        cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactal")
+
+        return pd.concat([historical, cf])
