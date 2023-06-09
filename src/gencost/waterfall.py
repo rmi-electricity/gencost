@@ -379,15 +379,14 @@ class DataBySubplant:
                 .divide(out.capacity_mw * out.hrs_in_yr, axis=0)
                 .fillna(0.0)
             )
+            core_fuels = ["coal_fraction", "natural_gas_fraction", "petroleum_fraction"]
+            out = out.assign(
+                minor_fuels_fraction=lambda x: x.filter(like="_fraction").sum(axis=1)
+                - x[core_fuels].sum(axis=1)
+            )
 
             self._dfs["merge_all"] = self.validate_merge_all_results(
-                out.drop(
-                    columns=[
-                        "ferc_merge",
-                        "hrs_in_yr",
-                        "true_multi_fuel",
-                    ]
-                )
+                out.drop(columns=["ferc_merge", "hrs_in_yr", "true_multi_fuel"])
             )
 
         if clean:
@@ -2199,6 +2198,7 @@ class DataBySubplant:
                 "age_relative_to_prime_avg": Column(float),
             }
             | {f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0)) for k in fuels}
+            | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 1.0))}
             | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
             | {
                 k: Column(float, Check.gt(0.0), nullable=True)
