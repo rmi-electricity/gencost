@@ -2671,9 +2671,12 @@ class DataBySubplant:
             .query("mmbtu != fuel")
             .assign(fuel_group=lambda x: x["fuel"].str.replace("_mmbtu", ""))
             .merge(
-                xwalk.drop(columns="generator_operating_date"),
+                xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
                 on=["plant_id_eia", "generator_id", "fuel_group"],
                 how="left",
+            )
+            .drop_duplicates(
+                subset=["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]
             )
         )
         """
@@ -2704,7 +2707,7 @@ class DataBySubplant:
                 fuss="zeroes",
             )
         )
-        zero_and_fuel_switch = pd.concat([zero_reported, single_fuel_switch]).merge(
+        zero_and_fuel_switch = pd.concat([single_fuel_switch, zero_reported]).merge(
             df_860[
                 [
                     "plant_id_eia",
@@ -2726,10 +2729,23 @@ class DataBySubplant:
             # indicator=True,
         )
 
-        return pd.concat([missing_years, zero_and_fuel_switch]).assign(
-            age=lambda x: (
-                ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
-            ).round(2)
+        return (
+            pd.concat([missing_years, zero_and_fuel_switch])
+            # drop duplicates and keep first since we don't want zeroes
+            .drop_duplicates(
+                subset=[
+                    "plant_id_eia",
+                    "generator_id",
+                    "report_date",
+                    "prime_mover",
+                    "fuel_group",
+                ],
+                keep="first",
+            ).assign(
+                age=lambda x: (
+                    ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
+                ).round(2)
+            )
         )
 
     def create_fill_in_ep_thresholds(self, df):
