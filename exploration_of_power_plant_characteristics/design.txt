@@ -1,0 +1,16 @@
+Descriptive statistics
+- nrow
+- missing data
+- means per group
+- corelations between variables
+
+Set clusters
+- PCA
+- (note variance explained by each component)
+- show key metrics per cluster for n2:5
+
+Model GoF
+- linear regressions v glm
+- clustered v not
+
+use gross_cf  by fuel for clustering/models

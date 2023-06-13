@@ -10,6 +10,7 @@ library(psych)
 library(conflicted)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
+conflicted::conflict_prefer('filter', 'dplyr')
 
 get_variable_names_with_variance <- function(X){
 # Note which columns have variance
@@ -125,6 +126,9 @@ NestedPcaMods <-
 		) %>%
 	ungroup
 
+
+
+
 # Get scores
 VarianceExplainedPerComponent <-
 	# note how much variance was explained by each component for each prime mover class
@@ -140,6 +144,7 @@ VarianceExplainedPerComponent <-
 		select(-pca_fit, -variable) %>%
 		gather(component, variance_explained, -prime_mover) %>%
 		drop_na(variance_explained)
+
 
 VarianceExplainedPerComponent %>%
 	# visualize variance explained per component
@@ -173,3 +178,9 @@ WeightedScores <-
 
 WeightedScores %>%
 	write_csv('clean_data/weighted_scores.csv')
+
+
+NestedPcaMods %>%
+	select(prime_mover, pca_fit) %>%
+	write_rds(., 'clean_data/nested_pca_mods.RDS')
+write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')

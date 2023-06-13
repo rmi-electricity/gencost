@@ -3,6 +3,8 @@ library(skimr)
 library(psych)
 library(conflicted)
 library(GGally)
+library(ggrepel)
+library(flexclust)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
@@ -19,14 +21,31 @@ get_variable_names_with_variance <- function(X){
 
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
+
 Data <- read_csv('clean_data/data.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f', 
 	consolidated_regression_filter = 'l', .default = 'd')) %>%
 	filter(consolidated_regression_filter)  # regressions will be on filtered data.
+
 WeightedScores <- read_csv('clean_data/weighted_scores.csv')
+
 variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
 variables_for_clusters <- readRDS('clean_data/variables_for_clusters.RDS')
-variables_for_sanity_check <- readRDS('clean_data/variables_for_sanity_check.RDS')
+variables_for_sanity_check_cc <- readRDS('clean_data/variables_for_sanity_check_cc.RDS')
+variables_for_sanity_check_gt <- readRDS('clean_data/variables_for_sanity_check_gt.RDS')
+variables_for_sanity_check_st <- readRDS('clean_data/variables_for_sanity_check_st.RDS')
+
+VariablesForSanityCheck <-
+	tribble(
+		~prime_mover, ~variable,
+		'CC', variables_for_sanity_check_cc,
+		'GT', variables_for_sanity_check_gt,
+		'ST', variables_for_sanity_check_st,
+	) %>%
+		unnest(variable)
+#
+
+
 
 # Test to see how well each cluster model fits
 KmeansComparisons <-
@@ -91,7 +110,7 @@ KmeansComparisons	%>%
 		panel.grid.minor.x = element_blank(),
 		text = element_text(family = 'serif')
 		) +
-	labs(x = 'Number of clusters', y = 'total within SS / total SS',
+	labs(x = 'Number of clusters', y = 'Total within-cluster SS / total SS',
 			 caption = '200 resamples; pairwise t-tests with Bonferroni correction')
 
 
@@ -108,7 +127,10 @@ Clusters <-
 		data = map(data, select, -'rowid'),
 		variables = map(data, get_variable_names_with_variance),
 		data = map2(data, variables, select),
-		kmeans_mod = map2(data, num_clusters, kmeans),
+		# kmeans_mod = map2(data, num_clusters, kmeans),
+		kmeans_mod = map2(data, num_clusters, 
+											~kcca(x = .x, k = .y, kccaFamily('kmeans'))),
+			# kcca(dat[dat[["train"]]==TRUE, 1:2], k=4, kccaFamily("kmeans"))
 		cluster = map(kmeans_mod, 'cluster')
 	)
 	
@@ -168,51 +190,171 @@ SizeOfClusters %>%
 	) +
 	labs(x = 'Clusters', y = 'Number of observations', title = 'ST')
 
-# Look at the cluster-level characteristics
-variables_for_sanity_check
-variables_for_sanity_check <- c('gross_cf', 'generator_starts', 'capacity_mw',
-																'age_relative_to_prime_avg')
 
-custom_smooth <- function(data, mapping, ...) {
-	p <- ggplot(data = data, mapping = mapping) +
-		geom_smooth(method = "lm", ...)
-}
-custom_hist <- function(data, mapping, ...) {
-	p <- ggplot(data = data, mapping = mapping) +
-		geom_histogram(alpha = 0.3, aes(y=..count../sum(..count..)))
-}
+# As we cluster, look at the explanatory power of clustering on different
+# variables. Pull out the top 5 from each prime_mover type, and visualize!
 
-show_cluster_splot <- function(prime_mover_var, num_clusters_var) {
-	# Show a scatterplot matrix of the cluster characteristics given whatever
-	# prime mover and number of clusters
+variables_for_alternate_sanity_check <-
+	sort(unique(c(variables_for_regressions,
+	variables_for_sanity_check_cc, 
+	variables_for_sanity_check_gt, 
+	variables_for_sanity_check_st)))
+
+ModsFit <-
 	Clusters %>%
-		select(rowid, num_clusters, cluster) %>%
-		unnest(c(rowid, cluster)) %>%
-		left_join(Data, by = c('rowid')) %>%
-		select(prime_mover, num_clusters, cluster, real_opex, all_of(variables_for_sanity_check)) %>%
-		filter(prime_mover == prime_mover_var, num_clusters == num_clusters_var) %>%
-		select(cluster, real_opex, gross_cf, generator_starts) %>%
-		# mutate_at(c('real_opex', 'gross_cf', 'generator_starts'), ~as.vector(scale(.))) %>%
-		mutate_at('cluster', factor) %>%
-		ggpairs(., columns = c(2,3, 4), 
-						ggplot2::aes(color = cluster,
-												 fill = cluster),
-			diag = list(continuous = custom_hist),
-			lower = list(continuous = custom_smooth),
-			upper = list(continuous =
-									 	wrap('cor', use = 'pairwise.complete.obs', digits = 1))) +
+		select(prime_mover, num_clusters, cluster, rowid) %>%
+		unnest(c(cluster, rowid)) %>%
+		inner_join(Data, by = c('prime_mover', 'rowid')) %>%
+		select(prime_mover, num_clusters, cluster, 
+					 all_of(variables_for_alternate_sanity_check)) %>%
+		mutate_at(c('prime_mover', 'cluster'), factor, ordered = F) %>%
+		gather(variable, value, -prime_mover, -num_clusters, -cluster) %>%
+		group_by(prime_mover, variable, num_clusters) %>%
+		mutate(value = as.vector(scale(value))) %>%
+		drop_na(value)  %>% # I think some variables didn't have variance so the scaling didn't work
+		nest %>%
+		mutate(
+			mod1 = map(data, lm, formula = 'value ~ cluster'),
+			mod0 = map(data, lm, formula = 'value ~ 1')
+		) %>% 
+	ungroup
+
+GOFFull <-
+	ModsFit %>%
+		mutate(residuals = map(mod1, 'residuals')) %>%
+		select(prime_mover, num_clusters, variable, residuals) %>%
+		unnest(residuals) %>% 
+		group_by(prime_mover, num_clusters, variable) %>%
+		summarize(
+			rmse = sqrt(mean(residuals**2))
+		) %>%
+		ungroup
+
+RankedVariables <-
+	GOFFull %>%
+		group_by(prime_mover, variable) %>%
+		summarize(delta = max(rmse) - min(rmse)) %>%
+		ungroup %>%
+		group_by(prime_mover) %>%
+		slice_max(order_by = delta, n = 5) %>%  # NB this is where we limit to top 5
+		ungroup
+	
+GOFNull <-
+	ModsFit %>%
+		group_by(prime_mover, variable) %>%
+		filter(num_clusters == min(num_clusters)) %>%  # we only need one null model per prime mover
+		ungroup %>%
+		mutate(residuals = map(mod0, 'residuals')) %>%
+		select(prime_mover, variable, residuals) %>%
+		unnest(residuals) %>%
+		group_by(prime_mover, variable) %>%
+		summarize(
+			rmse = sqrt(mean(residuals**2))
+		) %>%
+		ungroup %>%
+		mutate(num_clusters = 1)
+
+plot_rmse_by_cluster <- function(var_prime_mover){
+	x_labels <- c('Unclustered', str_c(seq(2, 5)))
+	GOFFull %>%
+		bind_rows(GOFNull) %>%
+		inner_join(RankedVariables, by = c('prime_mover', 'variable')) %>%
+		filter(prime_mover == var_prime_mover) %>%
+		# mutate(variable = fct_reorder(variable, delta)) %>%
+		ggplot(aes(x = num_clusters, y = rmse)) +#, group = variable, color = variable)) +
+		geom_line() +
+		facet_wrap(~variable) +
+		scale_x_continuous(labels = x_labels, breaks = seq(1, 5)) +
+		labs(x = 'Clusters', y = 'RMSE (standard deviations)', color = '',
+				 title = 'Variables with the greatest change in RMSE',
+				 subtitle = var_prime_mover) +
 		theme(
 			axis.ticks = element_blank(),
 			text = element_text(family = 'serif')
+		)
+}
+plot_rmse_by_cluster('CC')
+plot_rmse_by_cluster('GT')
+plot_rmse_by_cluster('ST')
+
+CollectedVariables <-
+	RankedVariables %>%
+		bind_rows(VariablesForSanityCheck) %>%
+		distinct(prime_mover, variable)
+
+
+# Look at the cluster-level characteristics
+show_cluster_splot <- function(prime_mover_var, num_clusters_var) {
+	# Custom scatterplot matrix using GGally
+	
+	custom_density <- function(data, mapping, ...) {
+		p <- ggplot(data = data, mapping = mapping) +
+			geom_density(alpha = 0.25, aes(fill = cluster, ...))
+	}
+	custom_lower <- function(data, mapping, ...) {
+		p <- ggplot(data = data, mapping = mapping) +
+			geom_smooth(method = 'lm', formula = 'y~x', aes(color = cluster, ...))
+	}
+	
+	variables_to_select <-
+		CollectedVariables %>%
+			filter(prime_mover == prime_mover_var) %>%
+			arrange(variable) %>%
+			pull(variable)
+		
+	# num_clusters_var = 2 
+	# prime_mover_var = 'CC'
+	title_var = str_c(prime_mover_var, num_clusters_var, sep = ': ')
+	Clusters %>%
+		filter((num_clusters == num_clusters_var) & (prime_mover == prime_mover_var)) %>%
+		select(rowid, cluster) %>%
+		unnest(everything()) %>%
+		inner_join(Data, by = 'rowid') %>%
+		select(cluster, all_of(variables_to_select)) %>%
+		mutate(cluster = factor(cluster)) %>%
+		ggpairs(., columns = seq(2, length(.)), 
+						ggplot2::aes(color = cluster),
+												 # fill = cluster),
+			diag = list(continuous = custom_density),
+			lower = list(continuous = custom_lower),
+			upper = list(continuous =
+									 	wrap('cor', use = 'pairwise.complete.obs', digits = 1, size = 3))) +
+		scale_x_continuous(n.breaks = 3) +
+		theme(
+			axis.ticks = element_blank(),
+			text = element_text(family = 'serif'),
+			strip.text.y.right = element_text(angle = 0)
 		) +
-		labs(title = str_c(prime_mover_var, num_clusters_var, sep = ' '))
+		labs(title = title_var)
 }
 
-show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 2)												 	
-show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 3)												 	
-show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 4)												 	
-show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 5)												 	
-	
+# Loop through all clusters and plot the results
+expand_grid(
+	prime_mover_var = c('CC', 'GT', 'ST'),
+	num_clusters_var = seq(2, 5)) %>%
+	mutate(
+		fn = map2_chr(prime_mover_var, num_clusters_var, ~str_c(
+			'results/', 'clusters_', .x, '_', .y, '.png', sep = '')),
+		img = map2(prime_mover_var, num_clusters_var, show_cluster_splot),
+		wrt = map2(img, fn, ~ggsave(filename = .y, plot = .x, units = 'in', width = 20, height = 9))
+		)
+#
+
+# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 2)
+# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 3)
+# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 4)
+# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 5)
+# 
+# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 2)
+# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 3)
+# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 4)
+# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 5)
+# 
+# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 2)
+# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 3)
+# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 4)
+# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 5)
+
 write_csv(PairwiseTTests, file = 'clean_data/pairwise_ttests.csv')
 write_csv(Clusters, file = 'clean_data/clusters.csv')
 
@@ -224,6 +366,7 @@ NumClusters <-
 		'GT', 3,
 		'ST', 3	
 	)
+write_csv(NumClusters, 'clean_data/num_clusters.csv')
 
 ClusteredData <-
 	Clusters %>%
@@ -232,3 +375,4 @@ ClusteredData <-
 		unnest(c(rowid, cluster)) %>%
 		full_join(Data, by = 'rowid')
 write_csv(ClusteredData, 'clean_data/clustered_data.csv')
+

@@ -10,7 +10,7 @@ library(arrow)
 library(conflicted)
 conflicted::conflict_prefer('filter', 'dplyr')
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-RawData <- read_parquet('input_data/data_for_pf_subplants.parquet')
+RawData <- read_parquet('input_data/data_by_subplant.parquet')
 
 Data <-
 	RawData %>%
@@ -265,15 +265,22 @@ RawData %>%
 	colnames %>%
 	sort
 
-variables_for_sanity_check <- c('gross_cf', 'generator_starts', 'capacity_mw',
-	'age_relative_to_prime_avg', 'capacity_mw', 'generator_starts', 'age_in_report_year',
-	"biofuel_gross_cf", "coal_gross_cf", "gross_cf", "natural_gas_gross_cf",
-	"net_cf", "other_gas_gross_cf", "other_gross_cf", "petroleum_coke_gross_cf",
-	"petroleum_gross_cf")
+variables_for_sanity_check_cc <- c('age_in_report_year', 'capacity_mw', 
+	'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction', 
+	'minor_fuels_fraction')
+
+variables_for_sanity_check_gt <- c('age_in_report_year', 'capacity_mw', 
+	'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction',  
+	'minor_fuels_fraction')
+
+variables_for_sanity_check_st <- c('age_in_report_year', 'capacity_mw', 
+	'generator_starts', 'gross_cf', 'coal_fraction', 'natural_gas_fraction', 
+	'petroleum_fraction', 'minor_fuels_fraction')
 
 variables_all <- 
 	c('rowid', 'plant_id_eia', 'prime_mover', variables_for_regressions, 
-		variables_for_sanity_check, 'consolidated_regression_filter')
+		variables_for_sanity_check_cc, variables_for_sanity_check_gt, 
+		variables_for_sanity_check_st, 'consolidated_regression_filter')
 
 variables_all %>%
 	# Make sure all variables are present in the dataset!
@@ -291,7 +298,10 @@ FormulasRealOpex %>%
 	write_csv(file = 'clean_data/formulas_real_opex.csv')
 
 saveRDS(variables_for_regressions, 'clean_data/variables_for_regressions.RDS')
-saveRDS(variables_for_sanity_check, 'clean_data/variables_for_sanity_check.RDS')
+saveRDS(variables_for_sanity_check_cc, 'clean_data/variables_for_sanity_check_cc.RDS')
+saveRDS(variables_for_sanity_check_gt, 'clean_data/variables_for_sanity_check_gt.RDS')
+saveRDS(variables_for_sanity_check_st, 'clean_data/variables_for_sanity_check_st.RDS')
 
-variables_for_clusters <- variables_for_regressions[variables_for_regressions != 'real_opex']
+variables_for_clusters <- 
+	variables_for_regressions[variables_for_regressions != 'real_opex']
 saveRDS(variables_for_clusters, 'clean_data/variables_for_clusters.RDS')
