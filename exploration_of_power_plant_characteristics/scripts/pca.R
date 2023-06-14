@@ -89,11 +89,11 @@ common_variables_and_clusters <- intersect(common_variables, variables_for_clust
 all(variables_for_clusters %in% common_variables_and_clusters)
 variables_to_select <- c('rowid', 'prime_mover', common_variables_and_clusters)
 
-# Need:
-prime mover
-rowid
-variables for clusters
-...that have variance
+# NEED:
+# prime mover
+# rowid
+# variables for clusters
+# ...that have variance
 
 
 VariablesToSelect <-
@@ -187,43 +187,56 @@ VarianceExplainedPerComponent <-
 		gather(component, variance_explained, -prime_mover) %>%
 		drop_na(variance_explained)
 
-VarianceExplainedPerComponent %>%
-	# visualize variance explained per component
-	ggplot(aes(x = component, y = variance_explained)) +
-	geom_col() +
-	facet_wrap(~prime_mover, scales = 'free_x') +
-	scale_y_continuous(labels = scales::percent_format()) +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.major.x = element_blank()
-	) +
-	labs(x = 'Component', y = 'Variance explained')
+# Scale the Data scores, multiply by variance explained per component
+# Note the mean and sd for each component!
+MeansAndSds <-
+	NestedPcaMods %>%
+		select(prime_mover, scores) %>%
+		mutate(scores = map(scores, as.data.frame)) %>%
+		unnest(scores) %>%
+		gather(component, score, -prime_mover) %>%
+		drop_na(score) %>%
+		group_by(prime_mover, component) %>%
+		summarize(mean = mean(score), sd = sd(score)) %>%
+		ungroup
 
-# Scale scores; then, multiply scores by prop variance explained to 
-# weight them		
-WeightedScores <-
+WeightedDataScores <-
 	NestedPcaMods %>%
 		select(prime_mover, rowid, scores) %>%
 		mutate(scores = map(scores, as.data.frame)) %>%
 		unnest(c(rowid, scores)) %>%
 		gather(component, score, -prime_mover, -rowid) %>%
-		drop_na(component, score) %>%
-		left_join(VarianceExplainedPerComponent, by = c('prime_mover', 'component')) %>%
 		group_by(prime_mover, component) %>%
-		mutate(
-			score = as.vector(scale(score)),
-			weighted_score = score * variance_explained
-		) %>%
+		mutate(scaled_score = as.vector(scale(score))) %>%
 		ungroup %>%
-		select(prime_mover, rowid, component, weighted_score)
+		left_join(VarianceExplainedPerComponent, by = c('prime_mover', 'component')) %>%
+		mutate(weighted_scaled_score = variance_explained * scaled_score) %>%
+		select(prime_mover, rowid, component, weighted_scaled_score) %>%
+		spread(component, weighted_scaled_score)
 
-WeightedScores %>%
-	write_csv('clean_data/weighted_scores.csv')
+# Scale the Historic data according to Data mean and sd; weight acc'd to variance
+# explained per PCA component
+WeightedHistScores <-
+	HistoricPcaScores %>%
+		mutate(scores = map(scores, as.data.frame)) %>%
+		unnest(c(rowid, scores)) %>%
+		gather(component, score, -prime_mover, -rowid) %>%
+		left_join(MeansAndSds, by = c('prime_mover', 'component')) %>%
+		mutate(scaled_score = (score - mean)/ sd) %>%
+		left_join(VarianceExplainedPerComponent, by = c('prime_mover', 'component')) %>%
+		mutate(weighted_scaled_score = variance_explained * scaled_score) %>%
+		select(prime_mover, component, rowid, weighted_scaled_score) %>%
+		spread(component, weighted_scaled_score)
+
+WeightedDataScores %>%
+	write_csv('clean_data/weighted_data_scores.csv')
+WeightedHistScores %>%
+	write_csv('clean_data/weighted_hist_scores.csv')
 
 NumPcaComponents %>%
 	write_csv('clean_data/num_pca_components.csv')
 
-NestedPcaMods %>%
-	select(prime_mover, pca_fit) %>%
-	write_rds(., 'clean_data/nested_pca_mods.RDS')
+# NestedPcaMods %>%
+# 	select(prime_mover, pca_fit) %>%
+# 	write_rds(., 'clean_data/nested_pca_mods.RDS')
 write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')
