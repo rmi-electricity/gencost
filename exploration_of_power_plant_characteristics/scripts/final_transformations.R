@@ -148,7 +148,8 @@ YWeightedScaledScores <-
 		select(rowid, component, weighted_scaled_score) %>%
 		spread(component, weighted_scaled_score)
 # https://stackoverflow.com/questions/20621250/simple-approach-to-assigning-clusters-for-new-data-after-k-means-clustering
-kmeans_fit <- kcca(x = XWeightedScaledScores, k = 4, kccaFamily("kmeans"))
+kmeans_fit <- kmeans(XWeightedScaledScores, 4)
+# kmeans_fit <- kcca(x = XWeightedScaledScores, k = 4, kccaFamily("kmeans"))
 y_cls <- predict(kmeans_fit, YWeightedScaledScores)
 #
 

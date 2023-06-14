@@ -127,9 +127,9 @@ Clusters <-
 		data = map(data, select, -'rowid'),
 		variables = map(data, get_variable_names_with_variance),
 		data = map2(data, variables, select),
-		# kmeans_mod = map2(data, num_clusters, kmeans),
-		kmeans_mod = map2(data, num_clusters, 
-											~kcca(x = .x, k = .y, kccaFamily('kmeans'))),
+		kmeans_mod = map2(data, num_clusters, kmeans),
+		# kmeans_mod = map2(data, num_clusters, 
+											# ~kcca(x = .x, k = .y, kccaFamily('kmeans'))),
 			# kcca(dat[dat[["train"]]==TRUE, 1:2], k=4, kccaFamily("kmeans"))
 		cluster = map(kmeans_mod, 'cluster')
 	)
@@ -338,22 +338,6 @@ expand_grid(
 		img = map2(prime_mover_var, num_clusters_var, show_cluster_splot),
 		wrt = map2(img, fn, ~ggsave(filename = .y, plot = .x, units = 'in', width = 20, height = 9))
 		)
-#
-
-# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 2)
-# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 3)
-# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 4)
-# show_cluster_splot(prime_mover_var = 'CC', num_clusters_var = 5)
-# 
-# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 2)
-# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 3)
-# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 4)
-# show_cluster_splot(prime_mover_var = 'GT', num_clusters_var = 5)
-# 
-# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 2)
-# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 3)
-# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 4)
-# show_cluster_splot(prime_mover_var = 'ST', num_clusters_var = 5)
 
 write_csv(PairwiseTTests, file = 'clean_data/pairwise_ttests.csv')
 write_csv(Clusters, file = 'clean_data/clusters.csv')

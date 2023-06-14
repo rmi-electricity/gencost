@@ -12,46 +12,24 @@ conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 
-get_variable_names_with_variance <- function(X){
-# Note which columns have variance
-	X %>%
-		select_if(is.numeric) %>%
-		apply(., 2, var, na.rm = T) %>%
-		enframe(name = 'variable', value = 'variance') %>%
-		filter(!is.na(variance) & (variance > 0)) %>%
-		pull(variable)
-}
-
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
+
 Data <- read_csv('clean_data/data.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f', 
 	consolidated_regression_filter = 'l', .default = 'd')) 
+
+Historic <- read_csv('clean_data/historic_for_clustering.csv', col_types = c(
+	prime_mover = 'c', plant_id_eia = 'f',  .default = 'd'))
+
 variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
 variables_for_clusters <- readRDS('clean_data/variables_for_clusters.RDS')
+get_variable_names_with_variance <- readRDS('clean_Data/get_variable_names_with_variance.RDS')
 
-# Make sure each variable doesn't have a lot of missing instances
-
-# we'll exclude real_opex for having missing data
-Data %>%
-	select(prime_mover, all_of(variables_for_regressions)) %>%
-	gather(variable, value, -prime_mover) %>%
-	group_by(prime_mover, variable) %>%
-	summarize(prop_missing = mean(is.na(value))) %>%
-	ungroup %>%
-	ggplot(aes(x = variable, y = prop_missing, fill = prime_mover, group = prime_mover)) +
-	geom_col(position = 'dodge') +
-	coord_flip() +
-	scale_y_continuous(labels = scales::percent_format()) +
-	scale_x_discrete(limits = rev) +
-	theme(
-		axis.ticks = element_blank()
-	) +
-	labs(x = 'Variable', y = 'Missing data')
-
-
+#### Find number of components necessary for the PCA ####
 # Use parallel test to see how many components the pca will use.
-# Exclude real_opex; use spearman's rho rank-correlation, accounting for outliers
+# Break out the data by prime mover; resample data with replacement, 
+# and run the test x200 (takes a few moments)
 ParallelTests <-
 	Data %>%
 		select(prime_mover, all_of(variables_for_clusters)) %>%
@@ -69,6 +47,7 @@ ParallelTests <-
 			num_components = map_dbl(parallel_test, 'ncomp')
 		)
 
+# Plot findings
 ParallelTests %>%
 	select(prime_mover, resample_i, num_components) %>%
 	count(prime_mover, num_components) %>%
@@ -91,7 +70,8 @@ ParallelTests %>%
 			 fill = 'Is modal?',
 			 caption = '200 resamples'
 	)
-#
+
+# Put the outcome in a table, so we know how many PCA components per prime_mover
 NumPcaComponents <-
 	ParallelTests %>%
 		count(prime_mover, num_components) %>%
@@ -100,35 +80,97 @@ NumPcaComponents <-
 		ungroup %>%
 		select(prime_mover, num_components)
 
-NumPcaComponents %>%
-	write_csv('clean_data/num_pca_components.csv')
-
 # Fit PCA
+
+# Note the variables that exist in the historic data, the fitted data, and the variables
+# we want for our clustering!
+common_variables <- intersect(colnames(Data), colnames(Historic))
+common_variables_and_clusters <- intersect(common_variables, variables_for_clusters)
+all(variables_for_clusters %in% common_variables_and_clusters)
+variables_to_select <- c('rowid', 'prime_mover', common_variables_and_clusters)
+
+# Need:
+prime mover
+rowid
+variables for clusters
+...that have variance
+
+
+VariablesToSelect <-
+	bind_rows(
+		mutate(Data, data_type = 'Data'),
+		mutate(Historic, data_type = 'Historic')
+	) %>%
+	group_by(data_type, prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			variables_with_variance = map(data, get_variable_names_with_variance),
+		) %>%
+		select(-data) %>%
+		spread(data_type, variables_with_variance) %>%
+		rename(variables_with_variance_data = Data, variables_with_variance_historic = Historic) %>%
+		mutate(
+			common_variables_with_variance = map2(
+				variables_with_variance_data, 
+				variables_with_variance_historic, 
+				intersect
+			),
+			variables_to_select = map(common_variables_with_variance, 
+																~intersect(., variables_for_clusters)
+			)
+		) %>%
+		select(prime_mover, variables_to_select)
+
+# Now that we know which variables we can fit the PCA models to, fit them on the
+# Data table.
+# By using spearman's rho, we're robust to outliers. This means we have
+# to assign scores in a separate step (you can't return scores in the pca
+# fit step if you only input a correlation matrix!)
 NestedPcaMods <-
-	# By using spearman's rho, we're robust to outliers. This means we have
-	# to assign scores in a separate step (you can't return scores in the pca
-	# fit step if you only input a correlation matrix!)
 	Data %>%
-		select(prime_mover, rowid, all_of(variables_for_clusters)) %>%
+	group_by(prime_mover) %>%
+	nest %>%
+	ungroup %>%
+	left_join(VariablesToSelect, by = 'prime_mover') %>%
+	mutate(
+		rowid = map(data, ~select(., 'rowid')),
+		data = map2(data, variables_to_select, select)
+	) %>%
+	left_join(NumPcaComponents, by = 'prime_mover') %>%
+	select(prime_mover, rowid, data, num_components) %>%
+	mutate(
+		cor = map(data, cor, method = 's', use = 'pairwise.complete.obs'),
+		n_obs = map_int(data, nrow),
+		pca_fit = pmap(list(r = cor, nfactors = num_components, n.obs = n_obs), 
+									 pca, rotate = 'promax'),
+		scores = map2(pca_fit, data, predict.psych)
+	)
+
+# Apply these pca models to the Historic data to get the scores for those data.
+JoinablePcaMods <-
+	NestedPcaMods %>%
+		select(prime_mover, pca_fit, data)
+
+HistoricPcaScores <-
+	Historic %>%
 		group_by(prime_mover) %>%
 		nest %>%
-		inner_join(NumPcaComponents, by = 'prime_mover') %>%
-	mutate(
-			rowid = map(data, ~select(., 'rowid')),
-			data = map(data, ~select(., -'rowid')),
-			variables = map(data, get_variable_names_with_variance),
-			data = map2(data, variables, select),
-			cor = map(data, cor, method = 's', use = 'pairwise.complete.obs'),
-			n_obs = map_int(data, nrow),
-			pca_fit = pmap(list(r = cor, nfactors = num_components, n.obs = n_obs), 
-										 pca, rotate = 'promax'),
-			scores = map2(pca_fit, data, predict.psych)
+		ungroup %>%
+		left_join(VariablesToSelect, by = 'prime_mover') %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			data = map2(data, variables_to_select, select)) %>%
+		select(prime_mover, rowid, new_data = data) %>%
+		left_join(JoinablePcaMods, by = 'prime_mover') %>%
+		mutate(
+			scores = pmap(
+				list(object = pca_fit, data = new_data, old.data = data), 
+				predict.psych
+			)
 		) %>%
-	ungroup
-
-
-
-
+		select(prime_mover, rowid, scores)
+	
 # Get scores
 VarianceExplainedPerComponent <-
 	# note how much variance was explained by each component for each prime mover class
@@ -144,7 +186,6 @@ VarianceExplainedPerComponent <-
 		select(-pca_fit, -variable) %>%
 		gather(component, variance_explained, -prime_mover) %>%
 		drop_na(variance_explained)
-
 
 VarianceExplainedPerComponent %>%
 	# visualize variance explained per component
@@ -179,6 +220,8 @@ WeightedScores <-
 WeightedScores %>%
 	write_csv('clean_data/weighted_scores.csv')
 
+NumPcaComponents %>%
+	write_csv('clean_data/num_pca_components.csv')
 
 NestedPcaMods %>%
 	select(prime_mover, pca_fit) %>%

@@ -1,8 +1,24 @@
 # Power plant clustering and regressions project:
-# Initial descriptive statistics 
+# 1. Perform preliminary data transformations.
 # 2023 Andrew Bartnof for RMI
 
+# 	Ingest data_by_subplant and historic_data_gen_level datasets; 
+# 	the former will be used to define the PCA and Clusters; the latter will have
+#   those qualities applied.
+#		Conduct all of the transformations that are necessary for the regressions.
+
+#### Define custom functions, load packages, read local files ####
 percentile <- function(xx){rank(xx)/length(xx)}
+
+get_variable_names_with_variance <- function(X){
+	# Note which columns have variance
+	X %>%
+		select_if(is.numeric) %>%
+		sapply(., var) %>%
+		enframe(name = 'variable', value = 'variance') %>%
+		filter(!is.na(variance) & (variance > 0)) %>%
+		pull(variable)
+}
 
 library(tidyverse)
 library(skimr)
@@ -11,7 +27,9 @@ library(conflicted)
 conflicted::conflict_prefer('filter', 'dplyr')
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 RawData <- read_parquet('input_data/data_by_subplant.parquet')
+HistoricRaw <- read_parquet('input_data/historic_data_gen_level.parquet')
 
+#### Perform initial data transformations ####
 Data <-
 	RawData %>%
 	rowid_to_column %>%
@@ -168,8 +186,42 @@ Data <-
 			T ~ as.logical(NA_real_)
 		)
 	)
+#
+Historic <-
+	HistoricRaw %>%
+	rowid_to_column %>%
+	mutate(
+		capacity_adj = wage_scale * capacity_mw,
+		age_fixed_adj = age_relative_to_prime_avg * capacity_adj,
+		age_obs_fixed_adj = age_of_observation * capacity_adj,
+		report_year = lubridate::year(report_date),
+		duct_burners_fixed_adj = duct_burners * capacity_adj,
+		starts_adj = generator_starts * capacity_adj,
+		supercritical_fixed_adj = supercritical_tech * capacity_adj,
+		CHP_fixed_adj = associated_combined_heat_power * capacity_adj,
+		gen = gross_cf * capacity_mw * ifelse(report_year %% 4 ==0,8784,8760),
+		gen_adj = wage_scale * gen,
+		age_obs_variable_adj = age_of_observation * gen_adj,
+		age_variable_adj = age_relative_to_prime_avg * gen_adj,
+		fluidized_bed_variable_adj = fluidized_bed_tech * gen_adj,
+		gas_age_fixed_adj = natural_gas_fraction * age_relative_to_prime_avg * capacity_adj,
+		gas_age_variable_adj = natural_gas_fraction * age_relative_to_prime_avg * gen_adj,
+		gas_fixed_adj = natural_gas_fraction * capacity_adj,
+		gas_starts_adj = natural_gas_fraction * starts_adj,
+		gas_pollution_fixed_adj = natural_gas_fraction * real_pollution_control_costs_per_kw * capacity_adj,
+		oil_age_fixed_adj = petroleum_fraction * age_relative_to_prime_avg * capacity_adj,
+		oil_fixed_adj = petroleum_fraction * capacity_adj,
+		oil_starts_adj = petroleum_fraction * starts_adj,
+		pollution_fixed_adj = real_pollution_control_costs_per_kw * capacity_adj,
+		pollution_variable_adj = real_pollution_control_costs_per_kw * gen_adj,
+		supercritical_variable_adj = supercritical_tech * gen_adj,
+		CHP_variable_adj = associated_combined_heat_power * gen_adj,  # for final manipulations
+		oil_age_variable_adj = petroleum_fraction * age_relative_to_prime_avg * gen_adj,
+		pulverized_coal_fixed_adj = pulverized_coal_tech * capacity_adj,
+		oil_variable_adj = petroleum_fraction * gen_adj
+	)
 
-# Establish the formulas that we'll use for regressions
+#### Establish the formulas that we'll use for regressions ####
 # added gross_cf to all formulas
 	
 # removed:
@@ -260,11 +312,6 @@ variables_for_regressions <-
 
 
 #### Subset to only the necessary variables, and write the dataset to disk ####
-RawData %>%
-	select(contains('cf')) %>%
-	colnames %>%
-	sort
-
 variables_for_sanity_check_cc <- c('age_in_report_year', 'capacity_mw', 
 	'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction', 
 	'minor_fuels_fraction')
@@ -294,6 +341,11 @@ Data %>%
 	select(all_of(variables_all)) %>%
 	write_csv(file = 'clean_data/data.csv')
 
+Historic %>%
+	filter(prime_mover %in% c('ST', 'CC', 'GT')) %>%
+	select(all_of(intersect(variables_all, colnames(.)))) %>%
+	write_csv(file = 'clean_data/historic_for_clustering.csv')
+
 FormulasRealOpex %>%
 	write_csv(file = 'clean_data/formulas_real_opex.csv')
 
@@ -305,3 +357,4 @@ saveRDS(variables_for_sanity_check_st, 'clean_data/variables_for_sanity_check_st
 variables_for_clusters <- 
 	variables_for_regressions[variables_for_regressions != 'real_opex']
 saveRDS(variables_for_clusters, 'clean_data/variables_for_clusters.RDS')
+saveRDS(get_variable_names_with_variance, 'clean_data/get_variable_names_with_variance.RDS')
