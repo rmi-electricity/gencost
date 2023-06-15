@@ -297,9 +297,9 @@ starts_adj
 '
 FormulasRealOpex <- tribble(
 	~prime_mover, ~formula,
-	'cc', formula_cc_real_opex,
-	'gt', formula_gt_real_opex,
-	'st', formula_st_real_opex
+	'CC', formula_cc_real_opex,
+	'GT', formula_gt_real_opex,
+	'ST', formula_st_real_opex
 )
 
 variables_for_regressions <-

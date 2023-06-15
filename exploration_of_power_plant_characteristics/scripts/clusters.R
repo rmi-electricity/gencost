@@ -3,21 +3,11 @@ library(skimr)
 library(psych)
 library(conflicted)
 library(GGally)
-library(ggrepel)
+# library(ggrepel)
 library(flexclust)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
-
-get_variable_names_with_variance <- function(X){
-	# Note which columns have variance
-	X %>%
-		select_if(is.numeric) %>%
-		apply(., 2, var, na.rm = T) %>%
-		enframe(name = 'variable', value = 'variance') %>%
-		filter(!is.na(variance) & (variance > 0)) %>%
-		pull(variable)
-}
 
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
@@ -26,8 +16,71 @@ Data <- read_csv('clean_data/data.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f', 
 	consolidated_regression_filter = 'l', .default = 'd')) %>%
 	filter(consolidated_regression_filter)  # regressions will be on filtered data.
+Hist <- read_csv('clean_data/historic_for_clustering.csv', col_types = c(
+	prime_mover = 'c', plant_id_eia = 'f', .default = 'd'))
 
-WeightedScores <- read_csv('clean_data/weighted_scores.csv')
+WeightedDataScores <- read_csv('clean_data/weighted_data_scores.csv', 
+															 col_types = c(prime_mover = 'c', .default = 'd'))
+WeightedHistScores <- read_csv('clean_data/weighted_hist_scores.csv', 
+															 col_types = c(prime_mover = 'c', .default = 'd'))
+get_variable_names_with_variance <- readRDS('clean_data/get_variable_names_with_variance.RDS')
+
+#### Step 1: fit 2:5 clusters for each prime_mover type to the Data ####
+# Convert kmeans mod to flexclust type as well, because this can predict on
+# new data.
+KmeansFit <-
+	WeightedDataScores %>%
+		select(-rowid) %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			variables = map(data, get_variable_names_with_variance),
+			data = map2(data, variables, select),
+			) %>%
+		expand_grid(num_clusters = 2:5) %>%
+		mutate(
+			cls_fit = map2(data, num_clusters, kmeans),
+			cls_flexclust = map2(cls_fit, data, as.kcca)) %>%
+		select(prime_mover, num_clusters, cls_fit, cls_flexclust)
+
+#### Step 2: assign the Data table to these clusters ####
+ClusteredData <-
+	WeightedDataScores %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			data = map(data, select, -'rowid'),
+			variables = map(data, get_variable_names_with_variance),
+			data = map2(data, variables, select)
+		) %>%
+		left_join(KmeansFit, by = 'prime_mover') %>%
+		mutate(cluster = map2(cls_flexclust, data, predict)) %>%
+		select(prime_mover, rowid, num_clusters, cluster)
+	
+#### Step 3: assign the Hist table to these clusters using the same steps. ####
+ClusteredHist <-
+	WeightedHistScores %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			data = map(data, select, -'rowid'),
+			variables = map(data, get_variable_names_with_variance),
+			data = map2(data, variables, select)
+		) %>%
+		left_join(KmeansFit, by = 'prime_mover') %>%
+		mutate(cluster = map2(cls_flexclust, data, predict)) %>%
+		select(prime_mover, rowid, num_clusters, cluster)
+
+saveRDS(ClusteredData, 'clean_data/clustered_data.RDS')
+saveRDS(ClusteredHist, 'clean_data/clustered_hist.RDS')
+
+# end here for now
+
 
 variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
 variables_for_clusters <- readRDS('clean_data/variables_for_clusters.RDS')

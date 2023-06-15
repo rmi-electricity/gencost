@@ -8,24 +8,81 @@ conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 
-get_variable_names_with_variance <- function(X){
-	# Note which columns have variance
-	X %>%
-		select_if(is.numeric) %>%
-		apply(., 2, var, na.rm = T) %>%
-		enframe(name = 'variable', value = 'variance') %>%
-		filter(!is.na(variance) & (variance > 0)) %>%
-		pull(variable)
-}
 
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-ClusteredData <- read_csv('clean_data/clustered_data.csv', col_types = c(
-	prime_mover = 'c', plant_id_eia = 'f', cluster = 'f', 
+# ClusteredHist <- readRDS('clean_data/clustered_hist.RDS')
+Data <- read_csv('clean_data/data.csv', col_types = c(
+	prime_mover = 'c', plant_id_eia = 'f', 
 	consolidated_regression_filter = 'l', .default = 'd')) %>%
 	filter(consolidated_regression_filter)  # regressions will be on filtered data.
+ClusteredData <- readRDS('clean_data/clustered_data.RDS')
+get_variable_names_with_variance <- readRDS('clean_data/get_variable_names_with_variance.RDS')
+FormulasRealOpex <- read_csv('clean_data/formulas_real_opex.csv', col_types = 'cc')
+# variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
 
-variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
+#### 1. Get actual coefficients ####
+ModsFit <-
+	ClusteredData %>%
+		select(-prime_mover) %>%
+		unnest(c(rowid, cluster)) %>%
+		inner_join(Data, by = 'rowid') %>%
+		drop_na(real_opex) %>%
+		select(-rowid) %>%
+		group_by(prime_mover, num_clusters, cluster) %>%
+		nest %>%
+		ungroup %>%
+		left_join(FormulasRealOpex, by = 'prime_mover') %>%
+		mutate(lm_fit = map2(formula, data, lm)) %>%
+		select(prime_mover, num_clusters, cluster, lm_fit)
+print(ModsFit)
+
+NestedCoefficients <-
+	ModsFit %>%
+		mutate(
+			coefficients = map(lm_fit, ~(summary(.))$coefficients),
+			coefficients = map(coefficients, as.data.frame),
+			coefficients = map(coefficients, rownames_to_column, 'measure'),
+			coefficients = map(coefficients, select, c('measure', 'estimate' = 'Estimate', 'se' = 'Std. Error'))
+			)
+print(NestedCoefficients)
+
+#### 2. Get measures of accuracy ####
+ModsFit %>%
+	mutate(residuals = map(lm_fit, 'residuals')) %>%
+	unnest(residuals) %>%
+	group_by(prime_mover, num_clusters) %>%
+	summarize(rmse = sqrt(mean(residuals**2))) %>%
+	ungroup %>%
+	group_by(prime_mover) %>%
+	mutate(my_label = if_else(num_clusters == min(num_clusters), prime_mover, NA_character_)) %>%
+	ggplot(aes(x = num_clusters, y = rmse, group = prime_mover, color = prime_mover)) +
+	geom_path() +
+	geom_label(aes(label = my_label), family = 'serif') +
+	expand_limits(y = 0) +
+	# scale_y_continuous(labels = scales::comma_format(1)) +
+	theme(
+		axis.ticks = element_blank(),
+		legend.position = 'none',
+		panel.grid.minor.x = element_blank(),
+		text = element_text(family = 'serif')
+	) +
+	labs(x = 'Number of clusters', y = 'Square-root mean squared error')
+
+saveRDS(NestedCoefficients, 'clean_data/nested_coefficients.RDS')	
+#### End here for now ####
+
+temp <- lm(weight ~ feed, chickwts)
+data.frame(
+	resid = temp$residuals,
+	y_fit = temp$fitted.values,
+	y = chickwts$weight
+) %>%
+	as_tibble %>%
+	print
+#
+
+
 
 # Test different regression models, cross-validated
 ModsFit <-
