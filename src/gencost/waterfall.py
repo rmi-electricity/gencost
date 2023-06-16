@@ -18,12 +18,9 @@ from platformdirs import user_cache_path, user_documents_path
 
 from gencost.constants import (
     FILL_IN_EP_COLS,
-    
     FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
-   
     FUEL_GROUP_MAP,
-   
     GET_860_GEN_COLS,
     HIST_EP_COLS,
 )
@@ -750,12 +747,7 @@ class DataBySubplant:
                     on=["report_date", "state"],
                     how="left",
                     validate="m:1",
-                    .merge(
-                self.get_wage_scale(),
-                on=["report_date", "state"],
-                how="left",
-                validate="m:1",
-            )
+                )
                 .fillna({"wage_scale": 1})
                 .assign(
                     hrs_in_yr=lambda x: np.where(
@@ -785,10 +777,7 @@ class DataBySubplant:
                 .query("prime_mover.notnull()")
                 .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
             )
-            .fillna({"wage_scale": 1})
-        )
 
-  
             # fuel fraction calcs from merge all
             gross_mwh_cols = merged.filter(like="_gross_mwh").columns
 
@@ -1853,28 +1842,28 @@ class DataBySubplant:
             gf_923.columns = map("_".join, gf_923.columns)
 
             return gf_923.reset_index().merge(
-            (
-                self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
-                .groupby(
-                    [
-                        "plant_id_eia",
-                        "generator_id",
-                        pd.Grouper(key="report_date", freq="YS"),
+                (
+                    self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
+                    .groupby(
+                        [
+                            "plant_id_eia",
+                            "generator_id",
+                            pd.Grouper(key="report_date", freq="YS"),
+                        ]
+                    )
+                    .agg({"net_generation_mwh": "sum"})
+                    .reset_index()[
+                        [
+                            "plant_id_eia",
+                            "generator_id",
+                            "report_date",
+                            "net_generation_mwh",
+                        ]
                     ]
-                )
-                .agg({"net_generation_mwh": "sum"})
-                .reset_index()[
-                    [
-                        "plant_id_eia",
-                        "generator_id",
-                        "report_date",
-                        "net_generation_mwh",
-                    ]
-                ]
-            ),
-            on=["plant_id_eia", "generator_id", "report_date"],
-            how="left",
-        )
+                ),
+                on=["plant_id_eia", "generator_id", "report_date"],
+                how="left",
+            )
 
         else:
             return gf_923
