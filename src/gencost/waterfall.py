@@ -18,7 +18,6 @@ from platformdirs import user_cache_path, user_documents_path
 
 from gencost.constants import (
     FILL_IN_EP_COLS,
-    FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
