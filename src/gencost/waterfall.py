@@ -18,11 +18,16 @@ from platformdirs import user_cache_path, user_documents_path
 
 from gencost.constants import (
     FILL_IN_EP_COLS,
+    
+    FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
+   
     FUEL_GROUP_MAP,
+   
     GET_860_GEN_COLS,
     HIST_EP_COLS,
 )
+
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
@@ -783,6 +788,7 @@ class DataBySubplant:
             .fillna({"wage_scale": 1})
         )
 
+  
             # fuel fraction calcs from merge all
             gross_mwh_cols = merged.filter(like="_gross_mwh").columns
 
