@@ -404,6 +404,159 @@ class DataBySubplant:
 
         return self._dfs["merge_all"]
 
+    def get_eternally_present_by_generator(self):
+        """
+        Objective: combine historical and counterfactual dataframes
+
+        Process:
+
+        Notes:
+        Three types of counterfactuals
+        1) missing years
+        2) fuel switch
+        3) zeroes reported
+
+        For instances a generator switched fuel or
+        reported zero fuel consumption or generation,
+        the counterfactual observation replaces the
+        historical one
+
+        """
+
+        historical = self.get_historical_by_generator().assign(
+            type=lambda x: "historical",
+            mmbtu=lambda x: x.filter(like="_fraction").sum(axis=1),
+        )
+        # take out where mmbtu and net gen are zero, for cf to replace
+        historical_clean = historical.loc[
+            ~((historical["mmbtu"] == 0) & (historical["net_generation_mwh"] == 0))
+        ]
+
+        cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactual")
+
+        """only plant / gen / year duplicates at this stage are
+            for fuel switches,  so let's keep counterfactual observation
+            by keeping last row appeared in duplicates
+            """
+        return (
+            pd.concat([historical_clean, cf])
+            .drop(columns=["mmbtu"])
+            .drop_duplicates(
+                subset=["plant_id_eia", "generator_id", "report_date"], keep="last"
+            )
+        )
+
+    def get_historical_by_generator(self):
+        if "exa_by_gen" not in self._dfs:
+            df_860 = self.get_860_by_x(subplant_id_col="generator_id")
+            df_923 = self.get_gf923_by_generator()
+            df_cems = self.get_cems_by_generator()
+
+            # merge cems and 923 for gen-fuel level allocation of gross gen
+            df = pd.merge(
+                df_923,
+                df_cems,
+                on=["plant_id_eia", "generator_id", "report_date"],
+                how="outer",
+                validate="1:1",
+                indicator="cems_923_merge",
+            )
+            # allocate cems gross gen using pivoted gf 923
+            cems_and_923 = allocate_col_by(
+                df,
+                to_allocate="gross_generation_mwh",
+                new_suffix="_gross_mwh",
+                old_suffix="_mmbtu",
+                rollup_by=["plant_id_eia", "generator_id"],
+                drop=False,
+            )
+
+            cems_and_923 = drop_zero_cols(cems_and_923)
+
+            merged = (
+                cems_and_923.merge(
+                    df_860,
+                    on=["plant_id_eia", "generator_id", "report_date"],
+                    validate="1:1",
+                    how="outer",
+                    indicator="exa_merge",
+                )
+                .assign(
+                    _merge=lambda x: x[["cems_923_merge", "exa_merge"]]
+                    .astype("string")
+                    .fillna("")
+                    .agg(",".join, axis=1)
+                    .replace(
+                        {
+                            "both,both": "all",
+                            "both,left_only": "cems_923_only",
+                            "right_only,both": "exa_860",
+                        }
+                    )
+                )
+                .drop(columns=["cems_923_merge", "exa_merge"])
+                .merge(
+                    self.get_wage_scale(),
+                    on=["report_date", "state"],
+                    how="left",
+                    validate="m:1",
+                )
+                .fillna({"wage_scale": 1})
+                .assign(
+                    hrs_in_yr=lambda x: np.where(
+                        x.report_date.dt.is_leap_year, 8784, 8760
+                    ),
+                    gross_cf=lambda x: x.gross_generation_mwh
+                    / (x.capacity_mw * x.hrs_in_yr),
+                )
+                .merge(
+                    pd.read_parquet(
+                        PACKAGE_PATH
+                        / "860_FERC_matching_cost_regressions.parquet.gzip",
+                    )[["report_year", "inflator_to_2021"]]
+                    .drop_duplicates()
+                    .assign(
+                        report_date=lambda x: pd.to_datetime(
+                            x["report_year"], format="%Y"
+                        )
+                    ),
+                    on=["report_date"],
+                    how="left",
+                )
+                .assign(
+                    real_pollution_control_costs_per_kw=lambda x: x.pollution_control_costs_per_kw
+                    * x.inflator_to_2021
+                )  # pandera caught 3 observations w/null prime movers
+                .query("prime_mover.notnull()")
+                .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
+            )
+
+            # fuel fraction calcs from merge all
+            gross_mwh_cols = merged.filter(like="_gross_mwh").columns
+
+            merged[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
+                merged[gross_mwh_cols]
+                .divide(merged[gross_mwh_cols].sum(axis=1), axis=0)
+                .fillna(0.0)
+            )
+
+            core_fuels = ["coal_fraction", "natural_gas_fraction", "petroleum_fraction"]
+
+            out = (
+                merged.assign(
+                    minor_fuels_fraction=lambda x: x.filter(like="_fraction").sum(
+                        axis=1
+                    )
+                    - x[core_fuels].sum(axis=1)
+                )
+                .query('_merge == "all"')
+                .drop(columns=["_merge", "hrs_in_yr"])
+            )
+
+            self._dfs["exa_by_gen"] = self.core_validation(out, level="generator")
+
+        return self._dfs["exa_by_gen"].copy()
+
     def get_exa_all(self, by_fuel=True):
         """
         Args:
@@ -690,117 +843,6 @@ class DataBySubplant:
             merged = drop_zero_cols(merged)
             self._dfs["waterfall"] = merged
         return self._dfs["waterfall"]
-
-    def get_exa_by_generator(self):
-        if "exa_by_gen" not in self._dfs:
-            df_860 = self.get_860_by_x(subplant_id_col="generator_id")
-            df_923 = self.get_gf923_by_generator()
-            df_cems = self.get_cems_by_generator()
-
-            # merge cems and 923 for gen-fuel level allocation of gross gen
-            df = pd.merge(
-                df_923,
-                df_cems,
-                on=["plant_id_eia", "generator_id", "report_date"],
-                how="outer",
-                validate="1:1",
-                indicator="cems_923_merge",
-            )
-            # allocate cems gross gen using pivoted gf 923
-            cems_and_923 = allocate_col_by(
-                df,
-                to_allocate="gross_generation_mwh",
-                new_suffix="_gross_mwh",
-                old_suffix="_mmbtu",
-                rollup_by=["plant_id_eia", "generator_id"],
-                drop=False,
-            )
-
-            cems_and_923 = drop_zero_cols(cems_and_923)
-
-            merged = (
-                cems_and_923.merge(
-                    df_860,
-                    on=["plant_id_eia", "generator_id", "report_date"],
-                    validate="1:1",
-                    how="outer",
-                    indicator="exa_merge",
-                )
-                .assign(
-                    _merge=lambda x: x[["cems_923_merge", "exa_merge"]]
-                    .astype("string")
-                    .fillna("")
-                    .agg(",".join, axis=1)
-                    .replace(
-                        {
-                            "both,both": "all",
-                            "both,left_only": "cems_923_only",
-                            "right_only,both": "exa_860",
-                        }
-                    )
-                )
-                .drop(columns=["cems_923_merge", "exa_merge"])
-                .merge(
-                    self.get_wage_scale(),
-                    on=["report_date", "state"],
-                    how="left",
-                    validate="m:1",
-                )
-                .fillna({"wage_scale": 1})
-                .assign(
-                    hrs_in_yr=lambda x: np.where(
-                        x.report_date.dt.is_leap_year, 8784, 8760
-                    ),
-                    gross_cf=lambda x: x.gross_generation_mwh
-                    / (x.capacity_mw * x.hrs_in_yr),
-                )
-                .merge(
-                    pd.read_parquet(
-                        PACKAGE_PATH
-                        / "860_FERC_matching_cost_regressions.parquet.gzip",
-                    )[["report_year", "inflator_to_2021"]]
-                    .drop_duplicates()
-                    .assign(
-                        report_date=lambda x: pd.to_datetime(
-                            x["report_year"], format="%Y"
-                        )
-                    ),
-                    on=["report_date"],
-                    how="left",
-                )
-                .assign(
-                    real_pollution_control_costs_per_kw=lambda x: x.pollution_control_costs_per_kw
-                    * x.inflator_to_2021
-                )  # pandera caught 3 observations w/null prime movers
-                .query("prime_mover.notnull()")
-                .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
-            )
-
-            # fuel fraction calcs from merge all
-            gross_mwh_cols = merged.filter(like="_gross_mwh").columns
-
-            merged[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
-                merged[gross_mwh_cols]
-                .divide(merged[gross_mwh_cols].sum(axis=1), axis=0)
-                .fillna(0.0)
-            )
-
-            core_fuels = ["coal_fraction", "natural_gas_fraction", "petroleum_fraction"]
-
-            out = (
-                merged.assign(
-                    minor_fuels_fraction=lambda x: x.filter(like="_fraction").sum(
-                        axis=1
-                    )
-                    - x[core_fuels].sum(axis=1)
-                )
-                .query('_merge == "all"')
-                .drop(columns=["_merge", "hrs_in_yr"])
-            )
-
-            self._dfs["exa_by_gen"] = self.core_validation(out, level="generator")
-
-        return self._dfs["exa_by_gen"].copy()
 
     def export_data_by_prime(self, name=None, clean=True):
         name = "data_for_pf_subplants.parquet" if name is None else name
@@ -2805,46 +2847,4 @@ class DataBySubplant:
             )
             .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
             .assign(report_year=lambda x: x.report_date.dt.year)
-        )
-
-    def get_epd(self):
-        """
-        Objective: combine historical and counterfactual dataframes
-
-        Process:
-
-        Notes:
-        Three types of counterfactuals
-        1) missing years
-        2) fuel switch
-        3) zeroes reported
-
-        For instances a generator switched fuel or
-        reported zero fuel consumption or generation,
-        the counterfactual observation replaces the
-        historical one
-
-        """
-
-        historical = self.get_exa_by_generator().assign(
-            type=lambda x: "historical",
-            mmbtu=lambda x: x.filter(like="_fraction").sum(axis=1),
-        )
-        # take out where mmbtu and net gen are zero, for cf to replace
-        historical_clean = historical.loc[
-            ~((historical["mmbtu"] == 0) & (historical["net_generation_mwh"] == 0))
-        ]
-
-        cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactual")
-
-        """only plant / gen / year duplicates at this stage are
-        for fuel switches,  so let's keep counterfactual observation
-        by keeping last row appeared in duplicates
-        """
-        return (
-            pd.concat([historical_clean, cf])
-            .drop(columns=["mmbtu"])
-            .drop_duplicates(
-                subset=["plant_id_eia", "generator_id", "report_date"], keep="last"
-            )
         )
