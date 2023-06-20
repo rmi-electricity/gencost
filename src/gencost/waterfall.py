@@ -1237,7 +1237,7 @@ class DataBySubplant:
                 how="left",
                 validate="m:1",
             )
-            .fillna({"pollution_control_costs_per_kw" : 0.0})
+            .fillna({"pollution_control_costs_per_kw": 0.0})
             .merge(
                 self.pudl_tabl.gens_eia860m()[
                     [
@@ -1859,8 +1859,7 @@ class DataBySubplant:
                 how="left",
             )
 
-        else:
-            return gf_923
+        return gf_923
 
     def get_cems_by_x(self, subplant_id_col, xwalk=None, merge_only=False):
         """
