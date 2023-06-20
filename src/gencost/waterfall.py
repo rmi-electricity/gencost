@@ -2270,7 +2270,7 @@ class DataBySubplant:
                 "report_date": Column(dt),
                 "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
                 # "step": Column(int, Check.isin((1, 2, 3))),
-                "report_year": Column(int, nullable=True),
+                # "report_year": Column(int, nullable=True),
                 # "fuel_category": Column(str),
                 "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
                 "gross_cf": Column(float, Check.ge(0.0), nullable=True),
@@ -2778,7 +2778,8 @@ class DataBySubplant:
             .assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
-                ).round(2)
+                ).round(2),
+                report_year=lambda x: x.report_date.dt.year,
             )
             # .assign(year=lambda x: x["report_date"].dt.year)
             .pipe(self.create_fill_in_ep_thresholds)
@@ -2864,9 +2865,13 @@ class DataBySubplant:
                 ]
             )
 
-        return test.sort_values(
-            by=["plant_id_eia", "generator_id", "report_date"], ascending=True
-        ).query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
+        return (
+            test.sort_values(
+                by=["plant_id_eia", "generator_id", "report_date"], ascending=True
+            )
+            .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
+            .assign(report_year=lambda x: x.report_date.dt.year)
+        )
 
     def get_epd(self):
         """
@@ -2885,7 +2890,15 @@ class DataBySubplant:
 
         """
 
-        historical = self.get_exa_by_generator().assign(type=lambda x: "historical")
+        historical = self.get_exa_by_generator().assign(
+            type=lambda x: "historical",
+            mmbtu=lambda x: x.filter(like="_fraction").sum(axis=1),
+        )
+        # take out where mmbtu and net gen are zero, for cf to replace
+        historical_clean = historical.loc[
+            ~((historical["mmbtu"] == 0) & (historical["net_generation_mwh"] == 0))
+        ]
+
         cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactal")
 
-        return pd.concat([historical, cf])
+        return pd.concat([historical_clean, cf]).drop(columns=["mmbtu"])
