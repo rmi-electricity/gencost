@@ -23,7 +23,6 @@ from gencost.constants import (
     GET_860_GEN_COLS,
     HIST_EP_COLS,
 )
-
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
@@ -2374,7 +2373,11 @@ class DataBySubplant:
             | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
         )
 
-        gen_columns = {"generator_id": Column(str)}
+        gen_columns = {
+            "generator_id": Column(str),
+            "generator_operating_date": Column(dt),
+            "final_ba_code": Column(str, nullable=True),
+        }
 
         def gross_ge_net(df_):
             return df_.gross_generation_mwh >= df_.net_generation_mwh
@@ -2473,12 +2476,12 @@ class DataBySubplant:
             "biofuel_mmbtu",
             "coal_mmbtu",
             "natural_gas_mmbtu",
-            "nuclear_mmbtu",
+            # "nuclear_mmbtu",
             "other_mmbtu",
             "other_gas_mmbtu",
             "petroleum_mmbtu",
             "petroleum_coke_mmbtu",
-            "renew_mmbtu",
+            # "renew_mmbtu",
         ]
 
         filtered_df = (
