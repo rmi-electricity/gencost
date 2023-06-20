@@ -2258,22 +2258,22 @@ class DataBySubplant:
         core_columns = (
             {
                 "plant_id_eia": Column(int),
-                # "generator_id": Column(str),
-                # "pf_subplant_id": Column(int),
-                # "subplant_id": Column("Int64", nullable=True),
-                # "generator_id": Column(str),
                 "report_date": Column(dt),
                 "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
-                # "step": Column(int, Check.isin((1, 2, 3))),
                 "report_year": Column(int, nullable=True),
-                # "fuel_category": Column(str),
                 "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
                 "gross_cf": Column(float, Check.ge(0.0), nullable=True),
                 "generator_starts": Column(int, Check.ge(0)),
-                # "cum_starts": Column(int, Check.ge(0)),
                 "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
                 "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
                 "wage_scale": Column(float),
+                "respondent_id": Column(pd.Int64Dtype(), nullable=True),
+                "respondent_id_purchaser": Column(pd.Int64Dtype(), nullable=True),
+                "final_respondent_id": Column(pd.Int64Dtype(), nullable=True),
+                "final_ba_code": Column(str, nullable=True),
+                "state": Column(str),
+                "utility_id_eia": Column(pd.Int64Dtype(), nullable=True),
+                "balancing_authority_code_eia": Column(str, nullable=True),
             }
             | {
                 "age_of_observation_secular_adj": Column(float),
@@ -2287,20 +2287,10 @@ class DataBySubplant:
             | {
                 "age_in_report_year": Column(float),
                 "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
-                # "parasitic_load_pct": Column(float),
-                # "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
                 "gross_generation_mwh": Column(float, Check.ge(0.0)),
-                # "gross_hr": Column(float, Check.ge(0.0), nullable=True),
-                # "heat_in_mmbtu": Column(float, Check.ge(0.0)),
                 "net_generation_mwh": Column(float),
-                # "net_cf": Column(float, nullable=True),
-                # "arc": Column(float, nullable=True),
                 "inflator_to_2021": Column(float),
                 "fuel_starts": Column(int, Check.ge(0)),
-                # "opex": Column(float, Check.ge(0.0), nullable=True),
-                # "real_capex": Column(float, Check.ge(0.0), nullable=True),
-                # "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
-                # "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
             }
             | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
             | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
@@ -2308,70 +2298,33 @@ class DataBySubplant:
                 f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
                 for k in fuels
             }
-            # | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
         )
 
         merge_all_columns = (
             {
-                # "plant_id_eia": Column(int),
                 "pf_subplant_id": Column(int),
                 "subplant_id": Column("Int64", nullable=True),
-                # "report_date": Column(dt),
-                # "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
                 "step": Column(int, Check.isin((1, 2, 3))),
-                # "report_year": Column(int, nullable=True),
-                # "fuel_category": Column(str),
-                # "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
-                # "gross_cf": Column(float, Check.ge(0.0), nullable=True),
-                # "generator_starts": Column(int, Check.ge(0)),
                 "cum_starts": Column(int, Check.ge(0)),
-                # "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
-                # "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
-                # "wage_scale": Column(float),
             }
-            # | {
-            # "age_of_observation_secular_adj": Column(float),
-            # "age_of_observation": Column(float, Check.in_range(0.0, 2e3)),
-            # "age_relative_to_prime_avg": Column(float),
-            #
-            # | {f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0)) for k in fuels}
-            # | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
-            # | {
-            #    k: Column(float, Check.gt(0.0), nullable=True)
-            #   for k in ("capex", "real_opex")
-            # }
-            # not used in regression
             | {
-                #   "age_in_report_year": Column(float),
-                #  "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
                 "parasitic_load_pct": Column(float),
                 "camd_capacity_mw": Column(float, Check.in_range(0.0, 1e4)),
-                # "gross_generation_mwh": Column(float, Check.ge(0.0)),
                 "gross_hr": Column(float, Check.ge(0.0), nullable=True),
                 "heat_in_mmbtu": Column(float, Check.ge(0.0)),
-                # "net_generation_mwh": Column(float),
                 "net_cf": Column(float, nullable=True),
                 "arc": Column(float, nullable=True),
-                # "inflator_to_2021": Column(float),
-                # "fuel_starts": Column(int, Check.ge(0)),
                 "opex": Column(float, Check.ge(0.0), nullable=True),
                 "real_capex": Column(float, Check.ge(0.0), nullable=True),
                 "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
                 "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
             }
-            # | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
-            # | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
-            # | {
-            #   f"{k}_gross_mwh": Column(float, Check.ge(0.0), nullable=True)
-            #  for k in fuels
-            # }
             | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
         )
 
         gen_columns = {
             "generator_id": Column(str),
             "generator_operating_date": Column(dt),
-            "final_ba_code": Column(str, nullable=True),
         }
 
         def gross_ge_net(df_):
