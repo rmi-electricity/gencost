@@ -1835,28 +1835,8 @@ class DataBySubplant:
 
             gf_923.columns = map("_".join, gf_923.columns)
 
-            return gf_923.reset_index().merge(
-                (
-                    self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
-                    .groupby(
-                        [
-                            "plant_id_eia",
-                            "generator_id",
-                            pd.Grouper(key="report_date", freq="YS"),
-                        ]
-                    )
-                    .agg({"net_generation_mwh": "sum"})
-                    .reset_index()[
-                        [
-                            "plant_id_eia",
-                            "generator_id",
-                            "report_date",
-                            "net_generation_mwh",
-                        ]
-                    ]
-                ),
-                on=["plant_id_eia", "generator_id", "report_date"],
-                how="left",
+            return gf_923.reset_index().assign(
+                net_generation_mwh=lambda x: x.filter(like="_mwh").sum(axis=1)
             )
 
         return gf_923
