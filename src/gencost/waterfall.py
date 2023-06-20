@@ -2682,7 +2682,13 @@ class DataBySubplant:
 
         """
         zero_reported = (
-            df_923_cf.query('energy_source_code_num == "energy_source_code_1"')
+            df_923_cf.assign(
+                n_fuels=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id", "report_date"]
+                )["energy_source_code_num"].transform("nunique")
+            )
+            .query("n_fuels == 1")
+            .drop(columns=["n_fuels"])
             .groupby(
                 [
                     "plant_id_eia",
@@ -2736,7 +2742,7 @@ class DataBySubplant:
                     "plant_id_eia",
                     "generator_id",
                     "report_date",
-                    "prime_mover",
+                    # "prime_mover",
                     # "fuel_group",
                 ],
                 keep="first",
