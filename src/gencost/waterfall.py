@@ -1237,11 +1237,7 @@ class DataBySubplant:
                 how="left",
                 validate="m:1",
             )
-            .assign(
-                pollution_control_costs_per_kw=lambda x: x[
-                    "pollution_control_costs_per_kw"
-                ].fillna(0.0)
-            )
+            .fillna({"pollution_control_costs_per_kw" : 0.0})
             .merge(
                 self.pudl_tabl.gens_eia860m()[
                     [
