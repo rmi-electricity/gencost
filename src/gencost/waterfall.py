@@ -2265,7 +2265,7 @@ class DataBySubplant:
                 "report_date": Column(dt),
                 "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
                 # "step": Column(int, Check.isin((1, 2, 3))),
-                # "report_year": Column(int, nullable=True),
+                "report_year": Column(int, nullable=True),
                 # "fuel_category": Column(str),
                 "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
                 "gross_cf": Column(float, Check.ge(0.0), nullable=True),
@@ -2900,6 +2900,6 @@ class DataBySubplant:
             ~((historical["mmbtu"] == 0) & (historical["net_generation_mwh"] == 0))
         ]
 
-        cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactal")
+        cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactual")
 
         return pd.concat([historical_clean, cf]).drop(columns=["mmbtu"])
