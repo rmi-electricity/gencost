@@ -2837,8 +2837,8 @@ class DataBySubplant:
 
         cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactual")
 
-        """ only plant / gen / year duplicates at this stage are 
-        for fuel switches,  so let's keep counterfactual observation 
+        """only plant / gen / year duplicates at this stage are
+        for fuel switches,  so let's keep counterfactual observation
         by keeping last row appeared in duplicates
         """
         return (
