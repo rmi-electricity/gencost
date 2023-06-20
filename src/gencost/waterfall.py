@@ -2819,8 +2819,10 @@ class DataBySubplant:
         2) fuel switch
         3) zeroes reported
 
-        There will be duplicates for instances a generator switched fuel or
-        reported zero fuel consumption or generation
+        For instances a generator switched fuel or
+        reported zero fuel consumption or generation,
+        the counterfactual observation replaces the
+        historical one
 
         """
 
@@ -2835,4 +2837,14 @@ class DataBySubplant:
 
         cf = self.fill_in_ep_data().assign(type=lambda x: "counterfactual")
 
-        return pd.concat([historical_clean, cf]).drop(columns=["mmbtu"])
+        """ only plant / gen / year duplicates at this stage are 
+        for fuel switches,  so let's keep counterfactual observation 
+        by keeping last row appeared in duplicates
+        """
+        return (
+            pd.concat([historical_clean, cf])
+            .drop(columns=["mmbtu"])
+            .drop_duplicates(
+                subset=["plant_id_eia", "generator_id", "report_date"], keep="last"
+            )
+        )
