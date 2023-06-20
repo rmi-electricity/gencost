@@ -2494,7 +2494,7 @@ class DataBySubplant:
         that we want to fill in with similar plants
 
         """
-        hist_data = self.get_exa_by_generator()
+        hist_data = self.get_eternally_present_by_generator()
 
         xwalk = self.xwalk
 
@@ -2745,7 +2745,7 @@ class DataBySubplant:
         xwalk = self.xwalk
 
         return (
-            self.get_exa_by_generator()
+            self.get_eternally_present_by_generator()
             .merge(
                 xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
                 on=["plant_id_eia", "generator_id", "prime_mover"],

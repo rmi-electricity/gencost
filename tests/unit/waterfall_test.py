@@ -76,14 +76,19 @@ class TestFullWaterfall:
         df = databysubplant.merge_all()
         assert not df.empty
 
-    def test_get_exa_by_generator(self, databysubplant):
+    def test_get_historical_by_generator(self, databysubplant):
         """Perfunctory test that the method produces something."""
-        df = databysubplant.get_exa_by_generator()
+        df = databysubplant.get_historical_by_generator()
         assert not df.empty
 
     def test_fill_in_eternals(self, databysubplant):
         """Perfunctory test that the method produces something."""
         df = databysubplant.fill_in_ep_data()
+        assert not df.empty
+
+    def test_get_eternally_present_by_generator(self, databysubplant):
+        """Perfunctory test that the method produces something."""
+        df = databysubplant.get_eternally_present_by_generator()
         assert not df.empty
 
     def test_compare_capacity_fig(self, databysubplant):
