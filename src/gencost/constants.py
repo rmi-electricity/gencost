@@ -184,12 +184,12 @@ HIST_EP_COLS = [
     "minor_fuels_fraction",
     "net_generation_mwh",
     "gross_cf",
-    "wage_scale",
-    "age_of_observation_secular_adj",
-    "inflator_to_2021",
 ]
 
 CURRENT_EP_COLS = [  # "renew_gross_mwh",
+    "plant_id_eia",
+    "generator_id",
+    "report_date",
     "capacity_mw",
     "associated_combined_heat_power",
     "duct_burners",
@@ -203,11 +203,6 @@ CURRENT_EP_COLS = [  # "renew_gross_mwh",
     "subcritical_tech",
     "supercritical_tech",
     "ultrasupercritical_tech",
-    "age_in_report_year",
-    "age_in_current_year",
-    "age_of_observation",
-    "age_relative_to_prime_avg",
-    "pollution_control_costs_per_kw",
     "real_pollution_control_costs_per_kw",
 ]
 

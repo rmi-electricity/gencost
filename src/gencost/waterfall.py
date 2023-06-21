@@ -2495,7 +2495,7 @@ class DataBySubplant:
         that we want to fill in with similar plants
 
         """
-        hist_data = self.get_eternally_present_by_generator()
+        hist_data = self.get_historical_by_generator()
 
         xwalk = self.xwalk
 
@@ -2747,10 +2747,13 @@ class DataBySubplant:
             reference_date = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
         else:
             reference_date = dt.utcnow()
-        xwalk = self.xwalk
 
-        ep = (
-            self.get_eternally_present_by_generator()
+        # instances we need
+        xwalk = self.xwalk
+        # df_860 = self.get_860_by_x(subplant_id_col="generator_id")
+
+        historical = (
+            self.get_historical_by_generator()
             .merge(
                 xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
                 on=["plant_id_eia", "generator_id", "prime_mover"],
@@ -2766,22 +2769,22 @@ class DataBySubplant:
             .pipe(self.create_fill_in_ep_thresholds)
         )
 
-        missing_data = (
+        missing = (
             self.find_missing_data()
             .pipe(self.create_fill_in_ep_thresholds)
             .assign(
                 essentials_present=lambda x: np.where(
-                    x["essentials"].isin(ep["essentials"]),
+                    x["essentials"].isin(historical["essentials"]),
                     "essentials",
                     pd.NA,
                 ),
                 ba_plus_essentials_present=lambda x: np.where(
-                    x["ba_plus_essentials"].isin(ep["ba_plus_essentials"]),
+                    x["ba_plus_essentials"].isin(historical["ba_plus_essentials"]),
                     "ba_plus_essentials",
                     pd.NA,
                 ),
                 ba_plus_age_present=lambda x: np.where(
-                    x["ba_plus_age"].isin(ep["ba_plus_age"]),
+                    x["ba_plus_age"].isin(historical["ba_plus_age"]),
                     "ba_plus_age",
                     pd.NA,
                 ),
@@ -2822,20 +2825,19 @@ class DataBySubplant:
 
         for col in cols:
             # core columns we want to get from historical, append column we're going to merge on
-            HIST_EP_COLS.append(col)
+
             # keep plant specific id columns - plant/gen/utility/ba ids (don't want to fill that in with historical)
             df = (
-                missing_data[FILL_IN_EP_COLS]
+                missing[FILL_IN_EP_COLS]
                 .query("match == @col")
-                .merge(ep[HIST_EP_COLS], on=[col], how="inner")
+                .merge(historical[HIST_EP_COLS + [col]], on=[col], how="inner")
                 .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
             )
 
             filled_in.append(df)
-            HIST_EP_COLS.remove(col)
 
         # remove columns not in historical df for future concat, excpt mtch and fuss
-        hist_cols = (
+        filled_in_hist_cols = (
             pd.concat(filled_in)
             .drop(
                 columns=[
@@ -2853,20 +2855,26 @@ class DataBySubplant:
         )
 
         """
+        Now that we have missing data w/
+        historical generation + fuel consumption
+        
+        Move on to:
 
         Fill in part #2: capacity + tech cols
-        Merge filled in data with current 860
-        #inflator, redo?
-        Fill in part #3: (w)age cols to recalc
+        Merge filled in data with latest (2020?) 860 info
+        
+        Fill in part #3: (w)age cols to recalculate
         """
 
         current = (
-            hist_cols.merge(
-                self.pudl_tabl.gens_eia860().query('report_date == "2022-01-01"'),
-                on=["plant_id_eia", "generator_id", "report_date"],
-                how="left",
+            filled_in_hist_cols.merge(
+                historical[CURRENT_EP_COLS]
+                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")
+                .drop(columns=["report_date"]),
+                on=["plant_id_eia", "generator_id"],
+                how="inner",  # inner merge to only keep generators in get_exa subset
                 validate="m:1",
-            )[CURRENT_EP_COLS]
+            )  # merge in inflator columns
             .merge(
                 pd.read_parquet(
                     PACKAGE_PATH / "860_FERC_matching_cost_regressions.parquet.gzip",
@@ -2874,11 +2882,12 @@ class DataBySubplant:
                 .drop_duplicates()
                 .assign(
                     report_date=lambda x: pd.to_datetime(x["report_year"], format="%Y")
-                ),
+                )
+                .drop(columns=["report_year"]),
                 on=["report_date"],
                 how="left",
-                validate="m:1",
-            )
+                # validate="m:1",
+            )  # re-do age calculations
             .assign(
                 age_in_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
@@ -2892,14 +2901,22 @@ class DataBySubplant:
                 / 365.25,
                 age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
                 - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
-            )
+            )  # add wage scale
             .merge(
-                self.get_wage_scale()[["wage_scale", "age_of_observation_secular_adj"]],
+                self.get_wage_scale()[
+                    [
+                        "wage_scale",
+                        "age_of_observation_secular_adj",
+                        "report_date",
+                        "state",
+                    ]
+                ],
                 on=["report_date", "state"],
                 how="left",
                 validate="m:1",
             )
             .fillna({"wage_scale": 1})
+            # recalc pollution control costs
             .assign(
                 pollution_control_costs_per_kw=lambda x: x[
                     "real_pollution_control_costs_per_kw"
