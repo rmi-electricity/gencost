@@ -2871,7 +2871,8 @@ class DataBySubplant:
                 on=["plant_id_eia", "generator_id"],
                 how="inner",  # inner merge to only keep generators in get_exa subset
                 validate="m:1",
-            ).assign(  # re-do age calculations
+            )
+            .assign(  # re-do age calculations
                 age_in_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
                 ).dt.days
@@ -2892,12 +2893,11 @@ class DataBySubplant:
                 ]
                 / x["inflator_to_2021"]
             )
-        )
-
-        return (
-            current.sort_values(
+            .sort_values(
                 by=["plant_id_eia", "generator_id", "report_date"], ascending=True
             )
             .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
             .assign(report_year=lambda x: x.report_date.dt.year)
         )
+
+        return self.core_validation(current, level="generator")
