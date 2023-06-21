@@ -184,6 +184,9 @@ HIST_EP_COLS = [
     "minor_fuels_fraction",
     "net_generation_mwh",
     "gross_cf",
+    "wage_scale",
+    "age_of_observation_secular_adj",
+    "inflator_to_2021"
 ]
 
 CURRENT_EP_COLS = [  # "renew_gross_mwh",

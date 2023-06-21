@@ -2857,12 +2857,9 @@ class DataBySubplant:
         """
         Now that we have missing data w/
         historical generation + fuel consumption
-        
         Move on to:
-
         Fill in part #2: capacity + tech cols
         Merge filled in data with latest (2020?) 860 info
-        
         Fill in part #3: (w)age cols to recalculate
         """
 
@@ -2874,21 +2871,7 @@ class DataBySubplant:
                 on=["plant_id_eia", "generator_id"],
                 how="inner",  # inner merge to only keep generators in get_exa subset
                 validate="m:1",
-            )  # merge in inflator columns
-            .merge(
-                pd.read_parquet(
-                    PACKAGE_PATH / "860_FERC_matching_cost_regressions.parquet.gzip",
-                )[["report_year", "inflator_to_2021"]]
-                .drop_duplicates()
-                .assign(
-                    report_date=lambda x: pd.to_datetime(x["report_year"], format="%Y")
-                )
-                .drop(columns=["report_year"]),
-                on=["report_date"],
-                how="left",
-                # validate="m:1",
-            )  # re-do age calculations
-            .assign(
+            ).assign(  # re-do age calculations
                 age_in_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
                 ).dt.days
@@ -2901,21 +2884,7 @@ class DataBySubplant:
                 / 365.25,
                 age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
                 - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
-            )  # add wage scale
-            .merge(
-                self.get_wage_scale()[
-                    [
-                        "wage_scale",
-                        "age_of_observation_secular_adj",
-                        "report_date",
-                        "state",
-                    ]
-                ],
-                on=["report_date", "state"],
-                how="left",
-                validate="m:1",
             )
-            .fillna({"wage_scale": 1})
             # recalc pollution control costs
             .assign(
                 pollution_control_costs_per_kw=lambda x: x[
