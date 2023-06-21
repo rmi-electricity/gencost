@@ -2856,11 +2856,8 @@ class DataBySubplant:
 
         Fill in part #2: capacity + tech cols
         Merge filled in data with current 860
-        
         #inflator, redo?
-
         Fill in part #3: (w)age cols to recalc
-
         """
 
         current = (
