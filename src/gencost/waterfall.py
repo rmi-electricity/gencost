@@ -22,6 +22,7 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
+    CURRENT_EP_COLS,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
@@ -2741,10 +2742,14 @@ class DataBySubplant:
             + x["age_range"].astype(str),
         )
 
-    def get_ep_data(self):
+    def fill_in_ep_data(self, age_year=2021):
+        if age_year is not None:
+            reference_date = dt.strptime(f"12-1-{age_year}", "%m-%d-%Y")
+        else:
+            reference_date = dt.utcnow()
         xwalk = self.xwalk
 
-        return (
+        ep = (
             self.get_eternally_present_by_generator()
             .merge(
                 xwalk[["plant_id_eia", "generator_id", "prime_mover", "fuel_group"]],
@@ -2760,9 +2765,6 @@ class DataBySubplant:
             # .assign(year=lambda x: x["report_date"].dt.year)
             .pipe(self.create_fill_in_ep_thresholds)
         )
-
-    def fill_in_ep_data(self):
-        ep = self.get_ep_data()
 
         missing_data = (
             self.find_missing_data()
@@ -2805,6 +2807,7 @@ class DataBySubplant:
         )
 
         """
+        Fill in part #1: generation and fuel consumption
         Merge missing data df with historical data
         1) Loop based on unique values in match column
         2) Query based on value (list with different kind of matches)
@@ -2831,8 +2834,10 @@ class DataBySubplant:
             filled_in.append(df)
             HIST_EP_COLS.remove(col)
 
-            # remove columns not in historical df for future concat, excpt mtch and fuss
-            test = pd.concat(filled_in).drop(
+        # remove columns not in historical df for future concat, excpt mtch and fuss
+        hist_cols = (
+            pd.concat(filled_in)
+            .drop(
                 columns=[
                     "ba_plus_age",
                     "ba_plus_essentials",
@@ -2840,9 +2845,74 @@ class DataBySubplant:
                     "fuel_group",
                 ]
             )
+            .sort_values(
+                by=["plant_id_eia", "generator_id", "report_date"], ascending=True
+            )
+            .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
+            .assign(report_year=lambda x: x.report_date.dt.year)
+        )
+
+        """
+
+        Fill in part #2: capacity + tech cols
+        Merge filled in data with current 860
+       
+        #inflator, redo?
+
+        Fill in part #3: (w)age cols to recalc
+
+        """
+
+        current = (
+            hist_cols.merge(
+                self.pudl_tabl.gens_eia860().query('report_date == "2022-01-01"'),
+                on=["plant_id_eia", "generator_id", "report_date"],
+                how="left",
+                validate="m:1",
+            )[CURRENT_EP_COLS]
+            .merge(
+                pd.read_parquet(
+                    PACKAGE_PATH / "860_FERC_matching_cost_regressions.parquet.gzip",
+                )[["report_year", "inflator_to_2021"]]
+                .drop_duplicates()
+                .assign(
+                    report_date=lambda x: pd.to_datetime(x["report_year"], format="%Y")
+                ),
+                on=["report_date"],
+                how="left",
+                validate="m:1",
+            )
+            .assign(
+                age_in_report_year=lambda x: (
+                    x["report_date"] - x["generator_operating_date"]
+                ).dt.days
+                / 365.25,
+                age_in_current_year=lambda x: (
+                    reference_date - x["generator_operating_date"]
+                ).dt.days
+                / 365.25,
+                age_of_observation=lambda x: (reference_date - x["report_date"]).dt.days
+                / 365.25,
+                age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
+                - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
+            )
+            .merge(
+                self.get_wage_scale()[["wage_scale", "age_of_observation_secular_adj"]],
+                on=["report_date", "state"],
+                how="left",
+                validate="m:1",
+            )
+            .fillna({"wage_scale": 1})
+            .assign(
+                pollution_control_costs_per_kw=lambda x: x[
+                    "real_pollution_control_costs_per_kw"
+                ]
+                / x["inflator_to_2021"]
+            )
+        )
 
         return (
-            test.sort_values(
+            current.sort_values(
                 by=["plant_id_eia", "generator_id", "report_date"], ascending=True
             )
             .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
