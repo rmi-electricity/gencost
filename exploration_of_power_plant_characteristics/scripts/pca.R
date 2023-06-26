@@ -17,7 +17,8 @@ setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
 Data <- read_csv('clean_data/data.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f', 
-	consolidated_regression_filter = 'l', .default = 'd')) 
+	consolidated_regression_filter = 'l', .default = 'd')) %>%
+	filter(consolidated_regression_filter)
 
 Historic <- read_csv('clean_data/historic_for_clustering.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f',  .default = 'd'))
@@ -84,10 +85,10 @@ NumPcaComponents <-
 
 # Note the variables that exist in the historic data, the fitted data, and the variables
 # we want for our clustering!
-common_variables <- intersect(colnames(Data), colnames(Historic))
-common_variables_and_clusters <- intersect(common_variables, variables_for_clusters)
-all(variables_for_clusters %in% common_variables_and_clusters)
-variables_to_select <- c('rowid', 'prime_mover', common_variables_and_clusters)
+# common_variables <- intersect(colnames(Data), colnames(Historic))
+# common_variables_and_clusters <- intersect(common_variables, variables_for_clusters)
+# all(variables_for_clusters %in% common_variables_and_clusters)
+# variables_to_select <- c('rowid', 'prime_mover', common_variables_and_clusters)
 
 # NEED:
 # prime mover
@@ -240,3 +241,4 @@ NumPcaComponents %>%
 # 	select(prime_mover, pca_fit) %>%
 # 	write_rds(., 'clean_data/nested_pca_mods.RDS')
 write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')
+

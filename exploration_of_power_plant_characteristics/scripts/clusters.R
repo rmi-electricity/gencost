@@ -2,8 +2,6 @@ library(tidyverse)
 library(skimr)
 library(psych)
 library(conflicted)
-library(GGally)
-# library(ggrepel)
 library(flexclust)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
@@ -38,14 +36,14 @@ KmeansFit <-
 			variables = map(data, get_variable_names_with_variance),
 			data = map2(data, variables, select),
 			) %>%
-		expand_grid(num_clusters = 2:5) %>%
+		expand_grid(num_clusters = 2:15) %>%
 		mutate(
 			cls_fit = map2(data, num_clusters, kmeans),
 			cls_flexclust = map2(cls_fit, data, as.kcca)) %>%
 		select(prime_mover, num_clusters, cls_fit, cls_flexclust)
 
 #### Step 2: assign the Data table to these clusters ####
-ClusteredData <-
+ClusteredDataWithout1Cluster <-
 	WeightedDataScores %>%
 		group_by(prime_mover) %>%
 		nest %>%
@@ -59,9 +57,22 @@ ClusteredData <-
 		left_join(KmeansFit, by = 'prime_mover') %>%
 		mutate(cluster = map2(cls_flexclust, data, predict)) %>%
 		select(prime_mover, rowid, num_clusters, cluster)
+ClusteredDataWithout1Cluster
+
+ClusteredData <-
+	Data %>%
+		select(prime_mover, rowid) %>%
+		mutate(num_clusters = 1L, cluster = 1L) %>%
+		nest(data = c(rowid, cluster)) %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			cluster = map(data, select, 'cluster')
+		) %>%
+		select(-data) %>%
+		bind_rows(ClusteredDataWithout1Cluster)
 	
 #### Step 3: assign the Hist table to these clusters using the same steps. ####
-ClusteredHist <-
+ClusteredHistWithout1Cluster <-
 	WeightedHistScores %>%
 		group_by(prime_mover) %>%
 		nest %>%
@@ -76,10 +87,22 @@ ClusteredHist <-
 		mutate(cluster = map2(cls_flexclust, data, predict)) %>%
 		select(prime_mover, rowid, num_clusters, cluster)
 
+ClusteredHist <-
+	Hist %>%
+		select(prime_mover, rowid) %>%
+		mutate(num_clusters = 1L, cluster = 1L) %>%
+		nest(data = c(rowid, cluster)) %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			cluster = map(data, select, 'cluster')
+		) %>%
+		select(-data) %>%
+		bind_rows(ClusteredHistWithout1Cluster)
+
 saveRDS(ClusteredData, 'clean_data/clustered_data.RDS')
 saveRDS(ClusteredHist, 'clean_data/clustered_hist.RDS')
 
-# end here for now
+#### end here for now ####
 
 
 variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')

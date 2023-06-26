@@ -1,17 +1,14 @@
 # Regression models
-
 library(tidyverse)
 library(skimr)
 library(conflicted)
-library(Metrics)
+# library(Metrics)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 
-
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-# ClusteredHist <- readRDS('clean_data/clustered_hist.RDS')
 Data <- read_csv('clean_data/data.csv', col_types = c(
 	prime_mover = 'c', plant_id_eia = 'f', 
 	consolidated_regression_filter = 'l', .default = 'd')) %>%
@@ -19,24 +16,41 @@ Data <- read_csv('clean_data/data.csv', col_types = c(
 ClusteredData <- readRDS('clean_data/clustered_data.RDS')
 get_variable_names_with_variance <- readRDS('clean_data/get_variable_names_with_variance.RDS')
 FormulasRealOpex <- read_csv('clean_data/formulas_real_opex.csv', col_types = 'cc')
-# variables_for_regressions <- readRDS('clean_data/variables_for_regressions.RDS')
 
 #### 1. Get actual coefficients ####
+# Add unclustered data to the top of the dataset
+
+
 ModsFit <-
 	ClusteredData %>%
 		select(-prime_mover) %>%
 		unnest(c(rowid, cluster)) %>%
 		inner_join(Data, by = 'rowid') %>%
-		drop_na(real_opex) %>%
+		# drop_na(real_opex) %>%
 		select(-rowid) %>%
 		group_by(prime_mover, num_clusters, cluster) %>%
 		nest %>%
 		ungroup %>%
+		# bind_rows(JoinmeUnclustered) %>%
 		left_join(FormulasRealOpex, by = 'prime_mover') %>%
 		mutate(lm_fit = map2(formula, data, lm)) %>%
-		select(prime_mover, num_clusters, cluster, lm_fit)
+		select(prime_mover, num_clusters, cluster, lm_fit) %>%
+		arrange(num_clusters, cluster, prime_mover)
 print(ModsFit)
 
+# Look at which variables are modelled
+ModsFit %>%
+	filter(num_clusters == 1L) %>%
+	mutate(
+		coefficients = map(lm_fit, 'coefficients'),
+		coefficients = map(coefficients, as.data.frame),
+		coefficients = map(coefficients, rownames_to_column),
+		) %>%
+	unnest(coefficients) %>%
+	distinct(rowname) %>%
+	arrange(rowname) %>%
+	pull
+	
 NestedCoefficients <-
 	ModsFit %>%
 		mutate(
@@ -45,30 +59,51 @@ NestedCoefficients <-
 			coefficients = map(coefficients, rownames_to_column, 'measure'),
 			coefficients = map(coefficients, select, c('measure', 'estimate' = 'Estimate', 'se' = 'Std. Error'))
 			)
-print(NestedCoefficients)
+# print(NestedCoefficients)
 
-#### 2. Get measures of accuracy ####
-ModsFit %>%
-	mutate(residuals = map(lm_fit, 'residuals')) %>%
-	unnest(residuals) %>%
-	group_by(prime_mover, num_clusters) %>%
-	summarize(rmse = sqrt(mean(residuals**2))) %>%
-	ungroup %>%
-	group_by(prime_mover) %>%
-	mutate(my_label = if_else(num_clusters == min(num_clusters), prime_mover, NA_character_)) %>%
-	ggplot(aes(x = num_clusters, y = rmse, group = prime_mover, color = prime_mover)) +
-	geom_path() +
-	geom_label(aes(label = my_label), family = 'serif') +
-	expand_limits(y = 0) +
-	# scale_y_continuous(labels = scales::comma_format(1)) +
+#### 2. Plot measures of accuracy ####
+CVGoF <-
+	ClusteredData %>%
+		select(-prime_mover) %>%
+		unnest(c(rowid, cluster)) %>%
+		inner_join(Data, by = 'rowid') %>%
+		drop_na(real_opex) %>%
+		group_by(prime_mover, num_clusters, cluster) %>%
+		nest %>%
+		ungroup %>%
+		# bind_rows(JoinmeUnclustered) %>%  # unclustered for reference
+		left_join(FormulasRealOpex, by = 'prime_mover') %>%
+		expand_grid(boot_num = seq(1, 100)) %>%   # number of bootstraps
+		mutate(
+			Train = map(data, sample_frac, size = 0.75, replace = F),
+			Test = map2(data, Train, anti_join, by = 'rowid'),
+			lm_train = map2(formula, Train, lm),
+			y_fit = map2(lm_train, Test, predict.lm, type = 'response'),
+			y_true = map(Test, 'real_opex')
+			) %>%
+		# select(prime_mover, num_clusters, y_true, y_fit) %>%
+		unnest(c(y_true, y_fit)) %>%
+		mutate(
+			residual = y_true - y_fit,
+			residual2 = residual**2
+		) %>%
+		group_by(prime_mover, num_clusters, boot_num) %>%
+		summarize(rmse = sqrt(mean(residual2))) %>%
+		ungroup
+
+CVGoF %>%
+mutate(num_clusters = ordered(num_clusters)) %>%
+	ggplot(aes(x = num_clusters, y = rmse)) +
+	geom_boxplot() +
+	coord_cartesian(ylim = c(0, 25000000)) +
+	facet_wrap(~prime_mover) +
 	theme(
 		axis.ticks = element_blank(),
-		legend.position = 'none',
 		panel.grid.minor.x = element_blank(),
 		text = element_text(family = 'serif')
-	) +
-	labs(x = 'Number of clusters', y = 'Square-root mean squared error')
+	)
 
+#### Save variables to disk ####
 saveRDS(NestedCoefficients, 'clean_data/nested_coefficients.RDS')	
 #### End here for now ####
 

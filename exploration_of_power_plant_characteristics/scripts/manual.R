@@ -1,37 +1,70 @@
-# Power plant clustering and regressions project:
-# 1. Perform preliminary data transformations.
-# 2023 Andrew Bartnof for RMI
-
-# 	Ingest data_by_subplant and historic_data_gen_level datasets; 
-# 	the former will be used to define the PCA and Clusters; the latter will have
-#   those qualities applied.
-#		Conduct all of the transformations that are necessary for the regressions.
-
-#### Define custom functions, load packages, read local files ####
-percentile <- function(xx){rank(xx)/length(xx)}
-
-get_variable_names_with_variance <- function(X){
-	# Note which columns have variance
-	X %>%
-		select_if(is.numeric) %>%
-		sapply(., var) %>%
-		enframe(name = 'variable', value = 'variance') %>%
-		filter(!is.na(variance) & (variance > 0)) %>%
-		pull(variable)
-}
-
 library(tidyverse)
 library(skimr)
-library(arrow)
 library(conflicted)
+library(arrow)
+# library(lubridate)
+# library(flexclust)
+# library(lavaan)
+conflicted::conflict_prefer('map', 'purrr')
+conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-RawData <- read_parquet('input_data/data_by_subplant.parquet')
-HistoricRaw <- read_parquet('input_data/historic_data_gen_level.parquet')
 
-#### Perform initial data transformations ####
-Data <-
-	RawData %>%
+#### load data ####
+DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
+	filter(prime_mover %in% c('CC', 'GT', 'ST'))
+HistoricalData <- arrow::read_parquet('input_data/historic_data_gen_level.parquet')
+
+#### Define variables ####
+
+fixed_cols <- c(
+	"capacity_adj",
+	"gas_fixed_adj",
+	"oil_fixed_adj",
+	"CHP_fixed_adj",
+	"pollution_fixed_adj",
+	"pulverized_coal_fixed_adj",
+	"duct_burners_fixed_adj",
+	"supercritical_fixed_adj",
+	"age_fixed_adj",
+	"oil_age_fixed_adj",
+	"gas_pollution_fixed_adj"
+)
+
+variable_cols <- c(
+	"gen_adj",
+	"oil_variable_adj",
+	"pollution_variable_adj",
+	"age_variable_adj",
+	"fluidized_bed_variable_adj",
+	"CHP_variable_adj",
+	"supercritical_variable_adj",
+	"gas_age_variable_adj",
+	"duct_burners_variable_adj",
+	"oil_age_variable_adj"
+)
+
+start_cols <- c("starts_adj", "gas_starts_adj", "oil_starts_adj")
+
+MapVariableToVariableType <-
+	# A table that allows us to map variable name to variable type
+	tribble(
+		~variable_type, ~variable,
+		'variable', variable_cols,
+		'fixed', fixed_cols,
+		'start', start_cols
+	) %>%
+		unnest(variable)
+
+#### Define functions ####
+
+percentile = function(xx){
+	# https://stackoverflow.com/questions/17557203/compute-percentile-for-a-given-value?rq=3
+	ecdf(xx)(xx)
+}
+
+create_independent_variables <- function(X){
+	X %>%
 	rowid_to_column %>%
 	mutate(
 		# Now we turn to the process of regressing the FERC data to estimate capex and opex coefficients.
@@ -69,7 +102,7 @@ Data <-
 		oil_CHP_fixed = associated_combined_heat_power * petroleum_fraction * capacity_mw,
 		other_CHP_fixed = associated_combined_heat_power * other_gas_fraction * capacity_mw,
 		age_obs_fixed = capacity_mw * age_of_observation_secular_adj,
-		cum_starts_age_obs_fixed = cum_starts * capacity_mw * age_of_observation_secular_adj,
+		# cum_starts_age_obs_fixed = cum_starts * capacity_mw * age_of_observation_secular_adj,
 		CHP_age_obs_fixed = associated_combined_heat_power * capacity_mw * age_of_observation_secular_adj,
 		duct_burners_age_obs_fixed = duct_burners * capacity_mw * age_of_observation_secular_adj,
 		bypass_hrsg_age_obs_fixed = bypass_heat_recovery * capacity_mw * age_of_observation_secular_adj,
@@ -154,15 +187,18 @@ Data <-
 		gas_age_variable_adj = natural_gas_fraction * age_relative_to_prime_avg * gen_adj,
 		oil_pollution_variable_adj = petroleum_fraction * real_pollution_control_costs_per_kw * gen_adj,
 		oil_age_variable_adj = petroleum_fraction * age_relative_to_prime_avg * gen_adj,
-		real_opex_per_kw = real_opex / capacity_mw  # is this right?
-	) %>%
-		# redefine as real_opex per kw
-		# notes: x * inflator_to_2021 = x_real
-		# use here real_opex / capacity AS real_opex_per_kw and use this for the percentiles-- per prime mover
-		group_by(prime_mover) %>%
-		mutate(real_opex_percentile = percentile(real_opex)) %>%
-		ungroup %>%
-		mutate(
+		# real_opex_per_kw = real_opex / capacity_mw  # is this right?
+	)
+		# select(rowid, prime_mover, real_opex, all_of(fixed_cols), all_of(variable_cols), all_of(start_cols), real_opex_per_kw)
+}
+
+create_consolidated_regression_filter <- function(X){
+	X %>%
+	mutate(real_opex_per_kw = real_opex / capacity_mw) %>%
+	group_by(prime_mover) %>%
+	mutate(real_opex_percentile = percentile(real_opex)) %>%
+	ungroup %>%
+	mutate(
 		# real_opex_percentile = percentile(real_opex), # overall or per prime_mover type?
 		opex_over_capex = opex_per_kw / capex_per_kw,
 		is_outlier_general = ifelse(opex_over_capex >= 0.5 | opex_over_capex <= 0.002 | gross_cf > 1.1, TRUE, FALSE),
@@ -173,7 +209,7 @@ Data <-
 		is_safe_cc = (prime_mover == 'CC') & (!is_outlier_general) & 
 			(real_opex_percentile >= 0.03) & (real_opex_percentile <= 0.97) &
 			(coal_fraction == 0),
-		 # ,data=FERC_Data,subset=(CC==1 & coal==0 & outlier_flag==0 & real_opex_percentile<=0.97 & real_opex_percentile>=0.03))
+		# ,data=FERC_Data,subset=(CC==1 & coal==0 & outlier_flag==0 & real_opex_percentile<=0.97 & real_opex_percentile>=0.03))
 		is_safe_gt = (prime_mover == 'GT') & (!is_outlier_general) & 
 			(real_opex_percentile<=0.97) & (real_opex_percentile>=0.03),
 		# ,data=FERC_Data,subset=(GT==1 & outlier_flag==0 & real_opex_percentile<=0.97 & real_opex_percentile>=0.03))
@@ -183,180 +219,109 @@ Data <-
 			prime_mover == 'CC' ~ is_safe_cc,
 			prime_mover == 'GT' ~ is_safe_gt,
 			prime_mover == 'ST' ~ is_safe_st,
-			# T ~ as.logical(NA_real_)
+			T ~ as.logical(NA_real_)
 		)
 	)
+}
 
-#
-Historic <-
-	HistoricRaw %>%
-	rowid_to_column %>%
-	mutate(
-		capacity_adj = wage_scale * capacity_mw,
-		age_fixed_adj = age_relative_to_prime_avg * capacity_adj,
-		age_obs_fixed_adj = age_of_observation * capacity_adj,
-		report_year = lubridate::year(report_date),
-		duct_burners_fixed_adj = duct_burners * capacity_adj,
-		starts_adj = generator_starts * capacity_adj,
-		supercritical_fixed_adj = supercritical_tech * capacity_adj,
-		CHP_fixed_adj = associated_combined_heat_power * capacity_adj,
-		gen = gross_cf * capacity_mw * ifelse(report_year %% 4 ==0,8784,8760),
-		gen_adj = wage_scale * gen,
-		age_obs_variable_adj = age_of_observation * gen_adj,
-		age_variable_adj = age_relative_to_prime_avg * gen_adj,
-		fluidized_bed_variable_adj = fluidized_bed_tech * gen_adj,
-		gas_age_fixed_adj = natural_gas_fraction * age_relative_to_prime_avg * capacity_adj,
-		gas_age_variable_adj = natural_gas_fraction * age_relative_to_prime_avg * gen_adj,
-		gas_fixed_adj = natural_gas_fraction * capacity_adj,
-		gas_starts_adj = natural_gas_fraction * starts_adj,
-		gas_pollution_fixed_adj = natural_gas_fraction * real_pollution_control_costs_per_kw * capacity_adj,
-		oil_age_fixed_adj = petroleum_fraction * age_relative_to_prime_avg * capacity_adj,
-		oil_fixed_adj = petroleum_fraction * capacity_adj,
-		oil_starts_adj = petroleum_fraction * starts_adj,
-		pollution_fixed_adj = real_pollution_control_costs_per_kw * capacity_adj,
-		pollution_variable_adj = real_pollution_control_costs_per_kw * gen_adj,
-		supercritical_variable_adj = supercritical_tech * gen_adj,
-		CHP_variable_adj = associated_combined_heat_power * gen_adj,  # for final manipulations
-		oil_age_variable_adj = petroleum_fraction * age_relative_to_prime_avg * gen_adj,
-		pulverized_coal_fixed_adj = pulverized_coal_tech * capacity_adj,
-		oil_variable_adj = petroleum_fraction * gen_adj
-	)
+check_are_columns_present <- function(X){
+	all(c(fixed_cols, variable_cols, start_cols, 'prime_mover') %in% colnames(X))
+}
 
-#### Establish the formulas that we'll use for regressions ####
-# added gross_cf to all formulas
+define_formulas <- function(X){
+	# This can be redefined later- the important thing is that it returns a 
+	# tibble, mapping a prime_mover to a (string) formula.
+	# Currently, it just groups by prime_mover, pulls any variable with variance,
+	# and concatenates it into a formula, predicting real_opex 
+	# without an intercept.
 	
-# removed:
-# gross_cf + # (Wasn't in Uday's script)
+	get_variables_with_variance <- function(X){
+		sapply(X, var) %>%
+			enframe('variable', 'variance') %>%
+			filter(!is.na(variance), variance > 0) %>%
+			pull(variable)
+	}
 
-# high_median_CF_adj +
-# high_median_CF_fixed_adj +
-# median_CF_adj +
-# median_CF_fixed_adj +
-# mid_median_CF_adj +
-# mid_median_CF_fixed_adj +
-formula_st_real_opex <- 'real_opex ~ 0 + 
-age_obs_variable_adj +
-age_variable_adj +
-capacity_adj +
-CHP_variable_adj +
-fluidized_bed_variable_adj +
-gas_age_fixed_adj +
-gas_age_variable_adj +
-gas_fixed_adj +
-gas_pollution_fixed_adj +
-gas_starts_adj +
-gen_adj +
-oil_fixed_adj +
-pollution_fixed_adj +
-pollution_variable_adj +
-pulverized_coal_fixed_adj +
-starts_adj + 
-supercritical_fixed_adj + 
-supercritical_variable_adj' 
+	consolidated_variables <- c(fixed_cols, variable_cols, start_cols)
+	
+	X %>%
+		select(prime_mover, all_of(consolidated_variables)) %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			variables = map(data, get_variables_with_variance),
+			variables_concat = map_chr(variables, paste, collapse = ' + '),
+			formula = str_c('real_opex ~ 0 + ', variables_concat)
+			) %>%
+		select(prime_mover, formula)
+}
 
-# removed:
-#gross_cf + (wasn't in Uday's script)
-# high_median_CF_adj +
-# high_median_CF_fixed_adj +
-# low_median_CF_adj +
-# low_median_CF_fixed_adj +
-# median_CF_adj +
-# median_CF_fixed_adj +
-# mid_median_CF_adj +
-# mid_median_CF_fixed_adj +
-formula_cc_real_opex <- 'real_opex ~ 0 +
-CHP_fixed_adj +
-age_obs_variable_adj +
-age_variable_adj +
-capacity_adj +
-duct_burners_fixed_adj +
-gen_adj +
-oil_age_fixed_adj +
-pollution_variable_adj +
-starts_adj' 
+get_coefficients <- function(X, Formulas){
+	# Nest the input data around prime_mover; 
+	# join to table mapping prime_mover to formula.
+	# Fit linear model taking advantage of the fact that lm() will assume that the
+	# first column selected (real_opex here) is the dependent variable;
+	# Extract coefficients
+	X %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		inner_join(Formulas, by = 'prime_mover') %>%
+		mutate(
+			lm_fit = map2(formula, data, ~lm(formula = .x, data = .y)),
+			coefficients = map(lm_fit, 'coefficients'),
+			coefficients = map(coefficients, as.data.frame),
+			coefficients = map(coefficients, rownames_to_column, var = 'variable'),
+		) %>%
+		select(prime_mover, coefficients) %>%
+		unnest(coefficients) %>%
+		rename(coefficient = `.x[[i]]`)
+}
 
-# removed:
-# gross_cf + (not in original script)
-# high_median_CF_adj +
-# low_median_CF_adj +
-# low_median_CF_fixed_adj +
-# median_CF_adj +
-# median_CF_fixed_adj +
-# mid_median_CF_adj +
-# mid_median_CF_fixed_adj +
-formula_gt_real_opex <- 'real_opex ~ 0 +
-age_fixed_adj +
-age_obs_fixed_adj +
-age_obs_variable_adj +
-age_variable_adj +
-capacity_adj +
-gen_adj +
-oil_age_fixed_adj +
-oil_fixed_adj +
-oil_starts_adj +
-oil_variable_adj +
-starts_adj
-'
-FormulasRealOpex <- tribble(
-	~prime_mover, ~formula,
-	'CC', formula_cc_real_opex,
-	'GT', formula_gt_real_opex,
-	'ST', formula_st_real_opex
-)
+#### Run script ####
+CleanedDataBySubplant <-
+	DataBySubplant %>%
+		create_independent_variables %>%
+		create_consolidated_regression_filter %>%
+		filter(consolidated_regression_filter)
 
-variables_for_regressions <-
-	FormulasRealOpex %>%
-		mutate(variables = str_extract_all(formula, '[A-Za-z_]+')) %>%
-		unnest(variables) %>%
-		distinct(variables) %>%
-		arrange(variables) %>%
-		pull
+check_are_columns_present(CleanedDataBySubplant)
+
+Formulas <- define_formulas(CleanedDataBySubplant)
+Coefficients <- get_coefficients(CleanedDataBySubplant, Formulas)
 
 
-#### Subset to only the necessary variables, and write the dataset to disk ####
-variables_for_sanity_check_cc <- c('age_in_report_year', 'capacity_mw', 
-	'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction', 
-	'minor_fuels_fraction')
+SummedDataByVariableType <-
+	CleanedDataBySubplant %>%
+		# rowid serves as UID but we need prime_mover to join with coefficients
+		select(rowid, prime_mover, all_of(variable_cols), 
+					 all_of(fixed_cols), all_of(start_cols)
+	  ) %>%
+		gather(variable, value, -rowid, -prime_mover) %>%
+		arrange(rowid, variable) %>%
+		inner_join(Coefficients, by = c('prime_mover', 'variable')) %>%
+		mutate(value_times_coefficient = value * coefficient) %>%
+		inner_join(MapVariableToVariableType, by = 'variable') %>%
+		group_by(rowid, variable_type) %>%
+		summarize(sum = sum(value_times_coefficient)) %>%
+		ungroup %>%
+		spread(variable_type, sum)
 
-variables_for_sanity_check_gt <- c('age_in_report_year', 'capacity_mw', 
-	'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction',  
-	'minor_fuels_fraction')
+CapacityGeneratorStartsGrossGeneration <-
+	CleanedDataBySubplant %>%
+		select(rowid, capacity_mw, generator_starts, gross_generation_mwh)
 
-variables_for_sanity_check_st <- c('age_in_report_year', 'capacity_mw', 
-	'generator_starts', 'gross_cf', 'coal_fraction', 'natural_gas_fraction', 
-	'petroleum_fraction', 'minor_fuels_fraction')
+SummedDataByVariableType %>%
+	inner_join(CapacityAndGeneratorStarts, by = c('rowid')) %>%
+	mutate(
+		fom = fixed / (capacity_mw * 1000),
+		vom = variable / gross_generation_mwh,
+		som = start / (capacity_mw * generator_starts * 1000)
+	)
+	
 
-variables_all <- 
-	c('rowid', 'plant_id_eia', 'prime_mover', variables_for_regressions, 
-		variables_for_sanity_check_cc, variables_for_sanity_check_gt, 
-		variables_for_sanity_check_st, 'consolidated_regression_filter')
 
-variables_all %>%
-	# Make sure all variables are present in the dataset!
-	enframe(name = NULL, value = 'variable') %>%
-	arrange(variable) %>%
-	mutate(is_in_data = variable %in% colnames(Data)) %>%
-	filter(!is_in_data)
 
-Data %>%
-	filter(prime_mover %in% c('ST', 'CC', 'GT')) %>%  # omit 2 IC plants
-	select(all_of(variables_all)) %>%
-	write_csv(file = 'clean_data/data.csv')
 
-Historic %>%
-	filter(prime_mover %in% c('ST', 'CC', 'GT')) %>%
-	select(all_of(intersect(variables_all, colnames(.)))) %>%
-	write_csv(file = 'clean_data/historic_for_clustering.csv')
 
-FormulasRealOpex %>%
-	write_csv(file = 'clean_data/formulas_real_opex.csv')
-
-saveRDS(variables_for_regressions, 'clean_data/variables_for_regressions.RDS')
-saveRDS(variables_for_sanity_check_cc, 'clean_data/variables_for_sanity_check_cc.RDS')
-saveRDS(variables_for_sanity_check_gt, 'clean_data/variables_for_sanity_check_gt.RDS')
-saveRDS(variables_for_sanity_check_st, 'clean_data/variables_for_sanity_check_st.RDS')
-
-variables_for_clusters <- 
-	variables_for_regressions[variables_for_regressions != 'real_opex']
-saveRDS(variables_for_clusters, 'clean_data/variables_for_clusters.RDS')
-saveRDS(get_variable_names_with_variance, 'clean_data/get_variable_names_with_variance.RDS')
