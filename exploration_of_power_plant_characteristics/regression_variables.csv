@@ -1,0 +1,85 @@
+﻿variable,category,st_legacy,st,cc_legacy,cc,gt_legacy,gt,formula
+capacity_adj,fixed,x,core,x,core,x,core,wage_scale * capacity_mw
+gas_fixed_adj,fixed,x,optional,,unused,,unused,natural_gas_fraction * wage_scale * capacity_mw
+oil_fixed_adj,fixed,x,optional,,unused,x,optional,petroleum_fraction * wage_scale * capacity_mw
+high_median_CF_fixed_adj,fixed,x,unused,x,unused,,unused,high_median_CF * wage_scale * capacity_mw
+mid_median_CF_fixed_adj,fixed,x,unused,x,unused,x,unused,mid_median_CF * wage_scale * capacity_mw
+low_median_CF_fixed_adj,fixed,,unused,x,unused,x,unused,low_median_CF * wage_scale * capacity_mw
+median_CF_fixed_adj,fixed,x,unused,x,unused,x,unused,median_CF * wage_scale * capacity_mw
+age_fixed_adj,fixed,,core,,core,x,core,age_relative_to_prime_avg * wage_scale * capacity_mw
+gas_age_fixed_adj,fixed,x,optional,,unused,,unused,natural_gas_fraction * age_relative_to_prime_avg * wage_scale * capacity_mw
+oil_age_fixed_adj,fixed,,unused,x,optional,x,optional,petroleum_fraction * age_relative_to_prime_avg * wage_scale * capacity_mw
+age_obs_fixed_adj,fixed,,unused,,unused,x,core,age_of_observation * wage_scale * capacity_mw
+pollution_fixed_adj,fixed,x,core,,unused,,unused,real_pollution_control_costs_per_kw * wage_scale * capacity_mw
+gas_pollution_fixed_adj,fixed,x,optional,,unused,,unused,natural_gas_fraction * real_pollution_control_costs_per_kw * wage_scale * capacity_mw
+CHP_fixed_adj,fixed,,unused,x,optional,,unused,associated_combined_heat_power * wage_scale * capacity_mw
+duct_burners_fixed_adj,fixed,,unused,x,optional,,unused,duct_burners * wage_scale * capacity_mw
+pulverized_coal_fixed_adj,fixed,x,optional,,unused,,unused,pulverized_coal_tech * wage_scale * capacity_mw
+supercritical_fixed_adj,fixed,x,optional,,unused,,unused,supercritical_tech * wage_scale * capacity_mw
+gen_adj,variable,x,core,x,core,x,core,wage_scale * gross_generation_mwh
+oil_variable_adj,variable,,unused,,unused,x,optional,petroleum_fraction * wage_scale * gross_generation_mwh
+age_variable_adj,variable,x,core,x,core,x,core,age_relative_to_prime_avg * wage_scale * gross_generation_mwh
+gas_age_variable_adj,variable,x,optional,,unused,,unused,natural_gas_fraction * age_relative_to_prime_avg * wage_scale * gross_generation_mwh
+age_obs_variable_adj,variable,x,core,x,core,x,core,age_of_observation * wage_scale * gross_generation_mwh
+pollution_variable_adj,variable,x,core,x,core,,unused,real_pollution_control_costs_per_kw * wage_scale * gross_generation_mwh
+high_median_CF_adj,variable,x,unused,x,unused,x,unused,high_median_CF * wage_scale * gross_generation_mwh
+mid_median_CF_adj,variable,x,unused,x,unused,x,unused,mid_median_CF * wage_scale * gross_generation_mwh
+low_median_CF_adj,variable,,unused,x,unused,x,unused,low_median_CF * wage_scale * gross_generation_mwh
+median_CF_adj,variable,x,unused,x,unused,x,unused,median_CF * wage_scale * gross_generation_mwh
+CHP_variable_adj,variable,x,optional,,unused,,unused,associated_combined_heat_power * wage_scale * gross_generation_mwh
+fluidized_bed_variable_adj,variable,x,optional,,unused,,unused,fluidized_bed_tech * wage_scale * gross_generation_mwh
+supercritical_variable_adj,variable,x,optional,,unused,,unused,supercritical_tech * wage_scale * gross_generation_mwh
+starts_adj,start,x,core,x,core,x,core,starts * wage_scale * capacity_mw
+gas_starts_adj,start,x,optional,,unused,,unused,natural_gas_fraction * starts * wage_scale * capacity_mw
+oil_starts_adj,start,,unused,,optional,x,optional,petroleum_fraction * starts * wage_scale * capacity_mw
+capacity,capex,x,core,x,core,x,core,capacity_mw * 1000
+gas_fixed,capex,x,optional,,unused,,unused,natural_gas_fraction * capacity_mw
+oil_fixed,capex,x,optional,,unused,x,optional,petroleum_fraction * capacity_mw
+age_fixed,capex,x,core,x,core,x,core,age_relative_to_prime_avg * capacity_mw
+gas_age_fixed,capex,x,optional,,unused,,unused,natural_gas_fraction * age_relative_to_prime_avg * capacity_mw
+oil_age_fixed,capex,,unused,,unused,x,optional,petroleum_fraction * age_relative_to_prime_avg * capacity_mw
+age_obs_fixed,capex,x,core,,unused,x,core,capacity_mw * age_of_observation_secular_adj
+gas_age_obs_fixed,capex,x,optional,,unused,,unused,natural_gas_fraction * capacity_mw * age_of_observation_secular_adj
+oil_age_obs_fixed,capex,x,optional,,unused,x,optional,petroleum_fraction * capacity_mw * age_of_observation_secular_adj
+CHP_age_obs_fixed,capex,x,optional,,unused,x,optional,associated_combined_heat_power * capacity_mw * age_of_observation_secular_adj
+cum_starts_age_obs_fixed,capex,x,core,x,optional,x,core,cum_starts * capacity_mw * age_of_observation_secular_adj
+duct_burners_age_obs_fixed,capex,,unused,x,optional,,unused,duct_burners * capacity_mw * age_of_observation_secular_adj
+bypass_hrsg_age_obs_fixed,capex,,unused,x,optional,,unused,bypass_heat_recovery * capacity_mw * age_of_observation_secular_adj
+pulverized_coal_age_obs_fixed,capex,x,optional,,unused,,unused,pulverized_coal_tech * capacity_mw * age_of_observation_secular_adj
+supercritical_age_obs_fixed,capex,x,optional,,unused,,unused,supercritical_tech * capacity_mw * age_of_observation_secular_adj
+pollution_fixed,capex,x,core,,unused,,unused,pollution_control_costs_per_kw * capacity_mw
+gas_pollution_fixed,capex,x,optional,,unused,,unused,natural_gas_fraction * pollution_control_costs_per_kw * capacity_mw
+CHP_fixed,capex,x,core,x,core,x,core,associated_combined_heat_power * capacity_mw
+gas_CHP_fixed,capex,x,optional,,unused,,unused,associated_combined_heat_power * natural_gas_fraction * capacity_mw
+oil_CHP_fixed,capex,x,optional,,unused,,unused,associated_combined_heat_power * petroleum_fraction * capacity_mw
+bypass_hrsg_fixed,capex,,unused,x,core,,unused,bypass_heat_recovery * capacity_mw
+pulverized_coal_fixed,capex,x,optional,,unused,,unused,pulverized_coal_tech * capacity_mw
+other_comb_fixed,capex,x,optional,,unused,,unused,other_combustion_tech * capacity_mw
+ultrasupercritical_fixed,capex,x,optional,,unused,,unused,ultrasupercritical_tech_tech * capacity_mw
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,

@@ -202,3 +202,5 @@ rsconnect/
 *.parquet
 *.gzip
 *.png
+
+!regression_variables.csv
