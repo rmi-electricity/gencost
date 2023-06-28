@@ -28,6 +28,7 @@ dependencies = [
     "plotly>5.10,<5.15",
     "pyarrow>=7, <12",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
+    "scikit-learn",
     "tqdm >= 4.63,< 4.66",
 ]
 
