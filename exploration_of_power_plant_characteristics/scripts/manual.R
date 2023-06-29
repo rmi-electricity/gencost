@@ -15,6 +15,27 @@ DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
 	filter(prime_mover %in% c('CC', 'GT', 'ST'))
 HistoricalData <- arrow::read_parquet('input_data/historic_data_gen_level.parquet')
 
+VariableKey <- read_csv('input_data/regression_variables.csv', col_types = c('variable' = 'c', .default = 'f'))
+
+#### clean_variable_key ####
+FilteredVariableKey <-
+	VariableKey %>%
+		filter(category %in% c('fixed', 'variable', 'start'))
+
+LongVariableKey <-
+	bind_rows(
+		FilteredVariableKey %>%
+			select(variable, variable_type = st, category) %>%
+			mutate(prime_mover = 'ST'),
+		FilteredVariableKey %>%
+			select(variable, variable_type = cc, category) %>%
+			mutate(prime_mover = 'CC'),
+		FilteredVariableKey %>%
+			select(variable, variable_type = gt, category) %>%
+			mutate(prime_mover = 'GT')
+	) %>%
+	select(prime_mover, variable, category, variable_type)
+
 #### Define variables ####
 
 fixed_cols <- c(
@@ -227,6 +248,13 @@ create_consolidated_regression_filter <- function(X){
 check_are_columns_present <- function(X){
 	all(c(fixed_cols, variable_cols, start_cols, 'prime_mover') %in% colnames(X))
 }
+	
+get_variables_with_variance <- function(X){
+	sapply(X, var) %>%
+		enframe('variable', 'variance') %>%
+		filter(!is.na(variance), variance > 0) %>%
+		pull(variable)
+}
 
 define_formulas <- function(X){
 	# This can be redefined later- the important thing is that it returns a 
@@ -234,13 +262,6 @@ define_formulas <- function(X){
 	# Currently, it just groups by prime_mover, pulls any variable with variance,
 	# and concatenates it into a formula, predicting real_opex 
 	# without an intercept.
-	
-	get_variables_with_variance <- function(X){
-		sapply(X, var) %>%
-			enframe('variable', 'variance') %>%
-			filter(!is.na(variance), variance > 0) %>%
-			pull(variable)
-	}
 
 	consolidated_variables <- c(fixed_cols, variable_cols, start_cols)
 	
@@ -286,11 +307,14 @@ CleanedDataBySubplant <-
 		create_consolidated_regression_filter %>%
 		filter(consolidated_regression_filter)
 
+CleanedHistoricalData <-
+	HistoricalData %>%
+	create_independent_variables
+
 check_are_columns_present(CleanedDataBySubplant)
 
 Formulas <- define_formulas(CleanedDataBySubplant)
 Coefficients <- get_coefficients(CleanedDataBySubplant, Formulas)
-
 
 SummedDataByVariableType <-
 	CleanedDataBySubplant %>%
@@ -308,20 +332,54 @@ SummedDataByVariableType <-
 		ungroup %>%
 		spread(variable_type, sum)
 
+Coefficients %>%
+	filter(is.na(coefficient))
+
 CapacityGeneratorStartsGrossGeneration <-
 	CleanedDataBySubplant %>%
 		select(rowid, capacity_mw, generator_starts, gross_generation_mwh)
 
-SummedDataByVariableType %>%
-	inner_join(CapacityAndGeneratorStarts, by = c('rowid')) %>%
-	mutate(
-		fom = fixed / (capacity_mw * 1000),
-		vom = variable / gross_generation_mwh,
-		som = start / (capacity_mw * generator_starts * 1000)
-	)
-	
+Result <-
+	SummedDataByVariableType %>%
+		inner_join(CapacityGeneratorStartsGrossGeneration, by = c('rowid')) %>%
+		mutate(
+			fom = fixed / (capacity_mw * 1000),
+			vom = variable / gross_generation_mwh,
+			som = start / (capacity_mw * generator_starts * 1000),
+	# == fitted_real_opex
+			calculated_real_opex = (fom * capacity_mw * 1000) + 
+		(vom * gross_generation_mwh) + 
+		(som * generator_starts * capacity_mw * 1000)
+		)
+
+Result %>%
+	skim
 
 
+FitRealOpex <-
+	CleanedDataBySubplant	%>%
+	group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		inner_join(Formulas, by = 'prime_mover') %>%
+		mutate(
+			lm_fit = map2(formula, data, ~lm(formula = .x, data = .y)),
+			fit_real_opex = map(lm_fit, 'fitted.values'),
+			rowid = map(data, 'rowid')
+		) %>%
+		select(rowid, fit_real_opex) %>%
+		unnest(everything())
 
+Result %>%
+	select(rowid, calculated_real_opex) %>%
+	full_join(FitRealOpex) %>%
+	skim
+	# filter(!is.na(calculated_real_opex)) %>%
 
+CleanedDataBySubplant %>%
+	select(rowid, prime_mover, all_of(variable_cols), all_of(fixed_cols), 
+				 all_of(start_cols))
 
+write_csv(CleanedDataBySubplant, 'clean_data/cleaned_data_by_subplant.csv')
+write_csv(CleanedHistoricalData, 'clean_data/cleaned_historical_data.csv')
+write_csv(LongVariableKey, 'clean_data/long_variable_key.csv')
