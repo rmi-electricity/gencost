@@ -1,3 +1,5 @@
+# let's go with 3 for STs and GTs, and 4 for CCs
+
 library(tidyverse)
 library(skimr)
 library(psych)
@@ -10,18 +12,22 @@ conflicted::conflict_prefer('filter', 'dplyr')
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
-Data <- read_csv('clean_data/data.csv', col_types = c(
-	prime_mover = 'c', plant_id_eia = 'f', 
-	consolidated_regression_filter = 'l', .default = 'd')) %>%
+DataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant.csv') %>%
 	filter(consolidated_regression_filter)  # regressions will be on filtered data.
-Hist <- read_csv('clean_data/historic_for_clustering.csv', col_types = c(
-	prime_mover = 'c', plant_id_eia = 'f', .default = 'd'))
+Hist <- read_csv('clean_data/cleaned_historical_data.csv')
 
 WeightedDataScores <- read_csv('clean_data/weighted_data_scores.csv', 
 															 col_types = c(prime_mover = 'c', .default = 'd'))
 WeightedHistScores <- read_csv('clean_data/weighted_hist_scores.csv', 
 															 col_types = c(prime_mover = 'c', .default = 'd'))
-get_variable_names_with_variance <- readRDS('clean_data/get_variable_names_with_variance.RDS')
+
+get_variables_with_variance <- function(X){
+	sapply(X, var) %>%
+		enframe('variable', 'variance') %>%
+		filter(!is.na(variance), variance > 0) %>%
+		pull(variable)
+}
+
 
 #### Step 1: fit 2:5 clusters for each prime_mover type to the Data ####
 # Convert kmeans mod to flexclust type as well, because this can predict on
@@ -33,7 +39,7 @@ KmeansFit <-
 		nest %>%
 		ungroup %>%
 		mutate(
-			variables = map(data, get_variable_names_with_variance),
+			variables = map(data, get_variables_with_variance),
 			data = map2(data, variables, select),
 			) %>%
 		expand_grid(num_clusters = 2:15) %>%
@@ -51,7 +57,7 @@ ClusteredDataWithout1Cluster <-
 		mutate(
 			rowid = map(data, select, 'rowid'),
 			data = map(data, select, -'rowid'),
-			variables = map(data, get_variable_names_with_variance),
+			variables = map(data, get_variables_with_variance),
 			data = map2(data, variables, select)
 		) %>%
 		left_join(KmeansFit, by = 'prime_mover') %>%
@@ -60,13 +66,15 @@ ClusteredDataWithout1Cluster <-
 ClusteredDataWithout1Cluster
 
 ClusteredData <-
-	Data %>%
+	# Add unclustered data as reference point
+	DataBySubplant %>%
 		select(prime_mover, rowid) %>%
 		mutate(num_clusters = 1L, cluster = 1L) %>%
 		nest(data = c(rowid, cluster)) %>%
 		mutate(
 			rowid = map(data, select, 'rowid'),
-			cluster = map(data, select, 'cluster')
+			cluster = map(data, select, 'cluster'),
+			cluster = map(cluster, pull)
 		) %>%
 		select(-data) %>%
 		bind_rows(ClusteredDataWithout1Cluster)
@@ -80,7 +88,7 @@ ClusteredHistWithout1Cluster <-
 		mutate(
 			rowid = map(data, select, 'rowid'),
 			data = map(data, select, -'rowid'),
-			variables = map(data, get_variable_names_with_variance),
+			variables = map(data, get_variables_with_variance),
 			data = map2(data, variables, select)
 		) %>%
 		left_join(KmeansFit, by = 'prime_mover') %>%
@@ -94,7 +102,8 @@ ClusteredHist <-
 		nest(data = c(rowid, cluster)) %>%
 		mutate(
 			rowid = map(data, select, 'rowid'),
-			cluster = map(data, select, 'cluster')
+			cluster = map(data, select, 'cluster'),
+			cluster = map(cluster, pull)
 		) %>%
 		select(-data) %>%
 		bind_rows(ClusteredHistWithout1Cluster)

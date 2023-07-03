@@ -1,8 +1,6 @@
 # Account for colinearity by fitting PCA components before the clustering
 	# Note that in this script we are clustering on a subset of the regression 
 	# variables (exclude real_opex);
-	# We are also excluding any row where the value for any variable is not within
-	# the central 90%
 
 library(tidyverse)
 library(skimr)
@@ -51,14 +49,14 @@ CandidateVariables <-
 		rename(candidate_variables = data) %>%
 		mutate(candidate_variables = map(candidate_variables, pull))
 
-# For each prime_mover type, select ALL variables that are core or optional
+# For each prime_mover type, select ALL variables that are core OR optional
 # Filter out variables without variance (unnecessary here)
 NestedCleanDataBySubplant <-
 	CleanedDataBySubplant %>%
 		group_by(prime_mover) %>%
 		nest %>%
 		ungroup %>%
-		left_join(CandidateVariables) %>%
+		left_join(CandidateVariables, by = 'prime_mover') %>%
 		mutate(
 			rowid = map(data, select, 'rowid'),
 			# Select candidate variables, and ensure they have variance
@@ -96,10 +94,12 @@ NumPcaComponents <-
 		slice(which.max(n)) %>%
 		ungroup %>%
 		select(prime_mover, num_components)
+print(NumPcaComponents)
 
 #### Fit the PCA models to the dataset ####
 
 # Note which variables the PCA model is fit to
+# (The Historical dataset will need the same columns)
 VariablesToSelect <-
 	NestedCleanDataBySubplant %>%
 		mutate(variables = map(data, colnames)) %>%
@@ -116,7 +116,6 @@ NestedPcaMods <-
 		scores = map2(pca_fit, data, predict.psych)
 		) %>%
 		select(prime_mover, rowid, data, pca_fit, scores)
-
 
 # Apply these pca models to the Historic data to get the scores for those data.
 JoinablePcaMods <-
@@ -158,8 +157,7 @@ VarianceExplainedPerComponent <-
 		select(-pca_fit, -variable) %>%
 		gather(component, variance_explained, -prime_mover) %>%
 		drop_na(variance_explained)
-
-VarianceExplainedPerComponent
+print(VarianceExplainedPerComponent)
 
 # Scale the Data scores, multiply by variance explained per component
 # Note the mean and sd for each component!
@@ -173,8 +171,7 @@ MeansAndSds <-
 		group_by(prime_mover, component) %>%
 		summarize(mean = mean(score), sd = sd(score)) %>%
 		ungroup
-
-MeansAndSds
+print(MeansAndSds)
 
 WeightedDataBySubplantScores <-
 	NestedPcaMods %>%
@@ -205,13 +202,11 @@ WeightedHistScores <-
 		select(prime_mover, component, rowid, weighted_scaled_score) %>%
 		spread(component, weighted_scaled_score)
 
-WeightedDataScores %>%
+WeightedDataBySubplantScores %>%
 	write_csv('clean_data/weighted_data_scores.csv')
 WeightedHistScores %>%
 	write_csv('clean_data/weighted_hist_scores.csv')
-
 NumPcaComponents %>%
 	write_csv('clean_data/num_pca_components.csv')
-
 write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')
 
