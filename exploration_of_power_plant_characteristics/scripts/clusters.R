@@ -28,6 +28,78 @@ get_variables_with_variance <- function(X){
 		pull(variable)
 }
 
+NumClusters <- tribble(
+# let's go with 3 for STs and GTs, and 4 for CCs
+	~prime_mover, ~num_clusters,
+	'CC', 4L,
+	'GT', 3L,
+	'ST', 3L
+)
+
+#### Fit the DataBySubplant data with our desired number of clusters ####
+# Convert the model to the kcca class as well, because this can 'predict'
+# the classes of new data (eg Historical)
+
+ClustersFit <-
+	WeightedDataScores %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			data = map(data, select, -'rowid'),
+			variables = map(data, get_variables_with_variance),
+			data = map2(data, variables, select)
+		) %>%
+		select(prime_mover, rowid, data) %>%
+		left_join(NumClusters, by = 'prime_mover') %>%
+		mutate(
+			cls_fit = map2(data, num_clusters, kmeans),
+			cls_fit_flexclust = map2(cls_fit, data, as.kcca),
+			cls = map(cls_fit, 'cluster')
+		)
+#### Assign the historical data to classes ####
+NestedCls <-
+	ClustersFit %>%
+		select(prime_mover, cls_fit_flexclust)
+
+ClsHist <-
+	WeightedHistScores %>%
+			group_by(prime_mover) %>%
+			nest %>%
+			ungroup %>%
+			mutate(
+				rowid = map(data, select, 'rowid'),
+				data = map(data, select, -'rowid'),
+				variables = map(data, get_variables_with_variance),
+				data = map2(data, variables, select)
+			) %>%
+			select(prime_mover, rowid, data) %>%
+			left_join(NestedCls, by = 'prime_mover') %>%
+			mutate(cls = map2(cls_fit_flexclust, data, predict)) %>%
+			select(prime_mover, cls)
+	
+ClsHist %>%
+	unnest(cls) %>%
+	count(prime_mover, cls) %>%
+	ggplot(aes(x = cls, y = n, label = scales::comma(n))) +
+	geom_col(position = 'dodge', fill = 'dodgerblue') +
+	geom_text(vjust = -1, family = 'serif') +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	facet_wrap(~prime_mover, nrow = 1, scales = 'free_x') +
+	theme(
+		axis.ticks = element_blank(),
+		text = element_text(family = 'serif'),
+		panel.grid.major.x = element_blank(),
+		panel.grid.minor.x = element_blank()
+	) +
+	labs(x = 'Cluster', y = 'Observations')
+
+saveRDS(object = ClustersFit, file = 'clean_data/clusters_fit.RDS')
+saveRDS(object = ClsHist, file = 'clean_data/cls_hist.RDS')
+
+# End here #
+
 
 #### Step 1: fit 2:5 clusters for each prime_mover type to the Data ####
 # Convert kmeans mod to flexclust type as well, because this can predict on
