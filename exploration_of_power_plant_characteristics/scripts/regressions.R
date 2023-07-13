@@ -2,6 +2,7 @@
 library(tidyverse)
 library(skimr)
 library(conflicted)
+# library(leaps)
 # library(Metrics)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
@@ -9,209 +10,225 @@ conflicted::conflict_prefer('filter', 'dplyr')
 
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-Data <- read_csv('clean_data/data.csv', col_types = c(
-	prime_mover = 'c', plant_id_eia = 'f', 
-	consolidated_regression_filter = 'l', .default = 'd')) %>%
-	filter(consolidated_regression_filter)  # regressions will be on filtered data.
-ClusteredData <- readRDS('clean_data/clustered_data.RDS')
-get_variable_names_with_variance <- readRDS('clean_data/get_variable_names_with_variance.RDS')
-FormulasRealOpex <- read_csv('clean_data/formulas_real_opex.csv', col_types = 'cc')
 
-#### 1. Get actual coefficients ####
-# Add unclustered data to the top of the dataset
+ClustersFit <- readRDS('clean_data/clusters_fit.RDS')
+CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv')
+CleanedHistoricalData <- read_csv('clean_data/cleaned_historical_data.csv')
 
+LongVariableKey <- read_csv('clean_data/long_variable_key.csv', col_types = c(
+	variable = 'c', .default = 'f'))
 
-ModsFit <-
-	ClusteredData %>%
-		select(-prime_mover) %>%
-		unnest(c(rowid, cluster)) %>%
-		inner_join(Data, by = 'rowid') %>%
-		# drop_na(real_opex) %>%
-		select(-rowid) %>%
-		group_by(prime_mover, num_clusters, cluster) %>%
-		nest %>%
-		ungroup %>%
-		# bind_rows(JoinmeUnclustered) %>%
-		left_join(FormulasRealOpex, by = 'prime_mover') %>%
-		mutate(lm_fit = map2(formula, data, lm)) %>%
-		select(prime_mover, num_clusters, cluster, lm_fit) %>%
-		arrange(num_clusters, cluster, prime_mover)
-print(ModsFit)
+# Count variables
+LongVariableKey %>%
+	filter(variable_type != 'unused') %>%
+	count(prime_mover, variable_type) %>%
+	spread(variable_type, n) %>%
+	mutate(subtotal = core + optional)
 
-# Look at which variables are modelled
-ModsFit %>%
-	filter(num_clusters == 1L) %>%
-	mutate(
-		coefficients = map(lm_fit, 'coefficients'),
-		coefficients = map(coefficients, as.data.frame),
-		coefficients = map(coefficients, rownames_to_column),
+#### Fit the DataBySubplant dataset agnostically, and with core variables ####
+# put core_variables in a list, per prime_mover
+CoreVariables <-
+	LongVariableKey %>%
+		filter(variable_type == 'core') %>%
+		select(prime_mover, variable) %>%
+		nest(data = variable) %>%
+		mutate(
+			core_variables = map(data, pull),
 		) %>%
-	unnest(coefficients) %>%
-	distinct(rowname) %>%
-	arrange(rowname) %>%
-	pull
-	
-NestedCoefficients <-
-	ModsFit %>%
-		mutate(
-			coefficients = map(lm_fit, ~(summary(.))$coefficients),
-			coefficients = map(coefficients, as.data.frame),
-			coefficients = map(coefficients, rownames_to_column, 'measure'),
-			coefficients = map(coefficients, select, c('measure', 'estimate' = 'Estimate', 'se' = 'Std. Error'))
-			)
-# print(NestedCoefficients)
+		select(prime_mover, core_variables)
 
-#### 2. Plot measures of accuracy ####
-CVGoF <-
-	ClusteredData %>%
-		select(-prime_mover) %>%
-		unnest(c(rowid, cluster)) %>%
-		inner_join(Data, by = 'rowid') %>%
-		drop_na(real_opex) %>%
-		group_by(prime_mover, num_clusters, cluster) %>%
-		nest %>%
-		ungroup %>%
-		# bind_rows(JoinmeUnclustered) %>%  # unclustered for reference
-		left_join(FormulasRealOpex, by = 'prime_mover') %>%
-		expand_grid(boot_num = seq(1, 100)) %>%   # number of bootstraps
+JoinmeCoreFormulas <-
+	CoreVariables %>%
 		mutate(
-			Train = map(data, sample_frac, size = 0.75, replace = F),
-			Test = map2(data, Train, anti_join, by = 'rowid'),
-			lm_train = map2(formula, Train, lm),
-			y_fit = map2(lm_train, Test, predict.lm, type = 'response'),
-			y_true = map(Test, 'real_opex')
+			concat_variables = map(core_variables, paste0, collapse = ' + '),
+			formula = map(concat_variables, ~str_c('real_opex ~ 0 + ', .)),
+			pull_size = 0L
+		) %>%
+		select(prime_mover, pull_size, formula) %>%
+		unnest(formula)
+print(JoinmeCoreFormulas)
+
+AllFormulas <-
+	LongVariableKey %>%
+		filter(variable_type == 'optional') %>%
+		select(prime_mover, variable) %>%
+		nest(data = variable) %>%
+		mutate(
+			data = map(data, pull),
+			set_size = map_int(data, length),
+			pull_size = map(set_size, ~seq(1, .)), # a sequence from 1 to the number of items in the set
+	  ) %>%
+		unnest(pull_size) %>%
+		mutate(
+			combination = map2(data, pull_size, combn, simplify = F),
+		) %>%
+		unnest(combination) %>%
+		mutate(combination = map(combination, sort)) %>%  # makes it easier to read them later
+		select(prime_mover, pull_size, optional_variables = combination) %>%
+		left_join(CoreVariables, by = 'prime_mover') %>%
+		mutate(
+			combined_variables = map2(optional_variables, core_variables, c),
+			concat_variables = map(combined_variables, paste0, collapse = ' + '),
+			formula = map(concat_variables, ~str_c('real_opex ~ 0 + ', .))
 			) %>%
-		# select(prime_mover, num_clusters, y_true, y_fit) %>%
-		unnest(c(y_true, y_fit)) %>%
+		select(prime_mover, pull_size, formula) %>%
+		unnest(formula) %>%
+		bind_rows(JoinmeCoreFormulas) %>%
+		arrange(prime_mover, pull_size)
+
+AllFormulas %>%
+	count(prime_mover)
+AllFormulas %>%
+	sample_n(4) %>%
+	as.data.frame
+
+#### Train and Test the models ####
+
+TrainTest <-
+	ClustersFit %>%
+		select(prime_mover, rowid, cls) %>%
+		unnest(c(rowid, cls)) %>%
+		inner_join(CleanedDataBySubplant, by = c('prime_mover', 'rowid')) %>%
+		group_by(prime_mover, cls) %>%
+		nest %>%
+		ungroup %>%
 		mutate(
-			residual = y_true - y_fit,
-			residual2 = residual**2
+			nrow = map_int(data, nrow),
+			indices = map(nrow, ~sample(x = seq(1, 3), size = ., replace = T)) # for resampling (will create 3 folds)
 		) %>%
-		group_by(prime_mover, num_clusters, boot_num) %>%
-		summarize(rmse = sqrt(mean(residual2))) %>%
+		expand_grid(boot_num = seq(1, 3)) %>% # using above resampling indices
+		mutate(
+			train_indices = map2(indices, boot_num, ~(.x != .y)),
+			test_indices = map2(indices, boot_num, ~(.x == .y)),
+			Train = map2(data, train_indices, filter),
+			Test = map2(data, test_indices, filter)
+		)
+
+# Fan out by joining each train/test row to all of the prime mover's formulas
+TrainFit <-
+	TrainTest	 %>%
+		inner_join(AllFormulas, by = 'prime_mover') %>%
+		mutate(
+			lm_fit = map2(formula, Train, lm),
+		)
+
+TrainFit %>%
+	count(prime_mover, cls)
+
+AllFormulas %>%
+	count(prime_mover)
+
+PredictedValues <-
+	TrainFit %>%
+		mutate(
+			y_fit = map2(lm_fit, Test, predict.lm),
+			y = map(Test, pull, 'real_opex')
+		)
+
+RMSE <-
+	PredictedValues %>%
+		unnest(c(y_fit, y)) %>%
+		mutate(residual = y_fit - y) %>%
+		group_by(prime_mover, cls, pull_size, formula, boot_num) %>%
+		summarize(rmse = sqrt(mean(residual^2))) %>%
 		ungroup
 
-CVGoF %>%
-mutate(num_clusters = ordered(num_clusters)) %>%
-	ggplot(aes(x = num_clusters, y = rmse)) +
-	geom_boxplot() +
-	coord_cartesian(ylim = c(0, 25000000)) +
-	facet_wrap(~prime_mover) +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.minor.x = element_blank(),
-		text = element_text(family = 'serif')
-	)
-
-#### Save variables to disk ####
-saveRDS(NestedCoefficients, 'clean_data/nested_coefficients.RDS')	
-#### End here for now ####
-
-temp <- lm(weight ~ feed, chickwts)
-data.frame(
-	resid = temp$residuals,
-	y_fit = temp$fitted.values,
-	y = chickwts$weight
-) %>%
-	as_tibble %>%
-	print
-#
+####
+write_csv(RMSE, 'clean_data/all_models_rmse.csv')
 
 
-
-# Test different regression models, cross-validated
-ModsFit <-
-	ClusteredData %>%
-		mutate(cluster = '(None)') %>%
-		bind_rows(ClusteredData) %>%
-		select(rowid, prime_mover, cluster, all_of(variables_for_regressions)) %>%
-		group_by(prime_mover, cluster) %>%
-		nest %>%
-		expand_grid(resample_i = seq(1, 20)) %>%
-		mutate(
-			# Train and test sets
-			train = map(data, sample_frac, size = 0.75, replace = F),
-			test = map2(data, train, anti_join, by = 'rowid'),
-			# Remove non-regression variables
-			train = map(train, select, -'rowid'),
-			variables = map(train, get_variable_names_with_variance),
-			train = map2(train, variables, select),
-			# Fit models
-			y_true = map(test, select, 'real_opex'),
-			lm_fit = map(train, lm, formula = 'real_opex ~ 0 + .'),
-			y_fit_lm = map2(lm_fit, test, predict),
-			glm_fit = map(train, glm, formula = 'real_opex ~ 0 + .', family = poisson()),
-			y_fit_glm = map2(glm_fit, test, predict, type = 'response')
-		)
-
-ModsFit %>%
-	select(prime_mover, cluster, resample_i, y_true, y_fit_lm, y_fit_glm) %>%
-	unnest(c(y_true, y_fit_lm, y_fit_glm)) %>%
-	rename('Linear model' = y_fit_lm, 'Poisson' = y_fit_glm) %>%
-	gather(mod_type, y_fit, -prime_mover, -cluster, -resample_i, -real_opex) %>%
-	group_by(prime_mover, cluster, resample_i, mod_type) %>%
-	summarize(rmse = Metrics::rmse(real_opex, y_fit)) %>%
-	ungroup %>%
-	group_by(prime_mover, cluster, mod_type) %>%
-	summarize(avg_rmse = median(rmse),
-						low = median(rmse) - sd(rmse),
-						high = median(rmse) + sd(rmse)) %>%
-	ungroup %>%
-	ggplot(aes(x = prime_mover, y = avg_rmse, group = cluster, fill = cluster)) +
-	geom_col(position = 'dodge') +
-	# geom_segment(position = 'dodge', aes(xend = cluster, y = low, yend = high)) +
-	facet_wrap(~mod_type, scales = 'free') +
-	coord_cartesian(ylim = c(0, 1000000000)) +
-	scale_y_continuous(labels = scales::comma_format()) +
-	theme(
-		axis.ticks = element_blank(),
-		legend.position = 'bottom'
-	) +
-	labs(x = 'Cluster', y = 'Median RMSE', 
-			 title = 'Goodness of fit', fill = 'Cluster')
-
-ModsNotCv <-
-	ClusteredData %>%
-		mutate(cluster = '(None)') %>%
-		bind_rows(ClusteredData) %>%
-		select(prime_mover, cluster, all_of(variables_for_regressions)) %>%
-		group_by(prime_mover, cluster) %>%
-		nest %>%
-		mutate(
-			# Remove non-regression variables
-			variables = map(data, get_variable_names_with_variance),
-			data = map2(data, variables, select),
-			# Fit models
-			lm_fit = map(data, lm, formula = 'real_opex ~ 0 + .'),
-			y_fit_lm = map2(lm_fit, data, predict),
-			glm_fit = map(data, glm, formula = 'real_opex ~ 0 + .', family = poisson()),
-			y_fit_glm = map2(glm_fit, data, predict, type = 'response')
-		)
-
-ModsNotCv %>%
-	ungroup %>%
-	select(prime_mover, cluster, 'Linear model' = y_fit_lm, 'Poisson' = y_fit_glm) %>%
-	unnest(c('Linear model', 'Poisson')) %>%
-	gather(mod_type, value, -prime_mover, -cluster) %>%
-	mutate(is_y_fit_neg = value < 0) %>%
-	group_by(prime_mover, cluster, mod_type) %>%
-	summarize(prop_neg = mean(is_y_fit_neg)) %>%
-	ungroup %>%
-	ggplot(aes(x = prime_mover, y = prop_neg, fill = cluster, group = cluster)) +
-	geom_col(position = 'dodge') +
-	facet_wrap(~mod_type, nrow = 1) +
-	scale_y_continuous(labels = scales::percent_format()) +
-	theme(
-		axis.ticks = element_blank(),
-		legend.position = 'bottom') +
-	labs(x = 'Prime mover', y = '% of negative fitted values', fill = 'Cluster')
-
-Mods <-
-	ModsNotCv %>%
-		ungroup %>%
-		filter(
-			cluster == '(None)'
+#### Start here if you simply want to read extant RMSE data ####
+RMSE <- read_csv('clean_data/all_models_rmse.csv', 
+								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i', 
+								 							pull_size = 'i', boot_num = 'i', rmse = 'd'))
+####
+MeanRMSE <-
+	RMSE %>%
+		group_by(prime_mover, cls, pull_size, formula) %>%
+		summarize(
+			mean_rmse = mean(rmse),
+			low_rmse = mean(rmse) - sd(rmse),
+			high_rmse = mean(rmse) + sd(rmse)
 		) %>%
-		select(prime_mover, cluster, lm_fit)
+		ungroup
 
-write_rds(Mods, 'clean_data/mods.RDS')	
+MeanRMSE %>%
+	filter(prime_mover == 'ST') %>%
+	ggplot(aes(x = as.factor(pull_size), y = mean_rmse)) +
+	geom_boxplot() +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	facet_wrap(~cls, scales = 'free') +
+	labs(x = 'Number of optional variables', y = 'Mean RMSE (each formula is aggregated over 3 folds)') +
+	theme(axis.ticks = element_blank(),
+				text = element_text(family = 'serif'))
+
+ChosenFormulas <-
+	MeanRMSE %>%
+		# Get the smallest RMSE; in case of tie, prefer fewer variables
+		# (smaller pull_size)
+		arrange(prime_mover, cls, mean_rmse, pull_size) %>%
+		group_by(prime_mover, cls) %>%
+		mutate(i = row_number()) %>%
+		ungroup %>%
+		filter(i == 1L) %>%
+		select(prime_mover, cls, pull_size, formula, mean_rmse)
+ChosenFormulas
+
+# Fit mods to entire datasets 
+# (this will allow us to then get F-tests and coefficients)
+AllModsFit <-
+	ClustersFit %>%
+		select(prime_mover, rowid, cls) %>%
+		unnest(c(rowid, cls)) %>%
+		inner_join(CleanedDataBySubplant, by = c('prime_mover', 'rowid')) %>%
+		group_by(prime_mover, cls) %>%
+		nest %>%
+		ungroup %>%
+		inner_join(AllFormulas, by = 'prime_mover') %>%
+		mutate(
+			lm_fit = map2(formula, data, lm),
+			summary_lm_fit = map(lm_fit, summary),
+			coefficients = map(summary_lm_fit, 'coefficients'),
+			coefficients = map(coefficients, as.data.frame),
+			coefficients = map(coefficients, rownames_to_column, 'variable_name'),
+		)
+
+
+# Get fitted values from all mods for verification later
+FittedValues <-
+	AllModsFit %>%
+		inner_join(ChosenFormulas, by = c('prime_mover', 'cls', 'pull_size', 'formula')) %>%
+		mutate(
+			fitted_values = map(lm_fit, 'fitted.values'),
+			rowid = map(data, 'rowid'),
+			) %>%
+		select(prime_mover, cls, pull_size, formula, rowid, fitted_values) %>%
+		unnest(c(rowid, fitted_values))
+
+# Get coefficients from all mods
+AllPossibleCoefficients <-
+	AllModsFit %>%
+		select(prime_mover, cls, pull_size, formula, coefficients) %>%
+		unnest(coefficients) %>%
+		rename(variable = variable_name, coefficient = Estimate) %>%
+		left_join(LongVariableKey, by = c('prime_mover', 'variable')) %>%
+		select(prime_mover, cls, pull_size, formula, variable, category, coefficient)
+
+write_csv(AllPossibleCoefficients, 'clean_data/all_possible_coefficients.csv')
+write_csv(ChosenFormulas, 'clean_data/chosen_formulas.csv')
+write_csv(FittedValues, 'clean_data/fitted_values.csv')
+
+# 
+
+Joinme1 <-
+	AllPossibleCoefficients %>%
+		select(prime_mover, cls, pull_size, formula, variable, category)
+
+Joinme2 <-
+	MeanRMSE %>%
+		select(prime_mover, cls, pull_size, formula, mean_rmse)
+
+Joinme1 %>%
+	inner_join(Joinme2) %>%
+	write_csv('~/Downloads/essay_for_plots.csv')
+	

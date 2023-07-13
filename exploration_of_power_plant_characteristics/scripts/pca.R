@@ -9,19 +9,22 @@ library(conflicted)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
-
 set.seed(1)	
+
+
+#### Load local data ####
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
-CleanedDataBySubplant <-
-	read_csv('clean_data/cleaned_data_by_subplant.csv') %>%
-		filter(consolidated_regression_filter)
-
-CleanedHistoric <- read_csv('clean_data/cleaned_historical_data.csv')
-
+CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv',
+																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
+																	.default = 'd'))
+CleanedHistoricalData <- read_csv('clean_data/cleaned_historical_data.csv',
+																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
+																	.default = 'd'))
 LongVariableKey <- read_csv('clean_data/long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
+#### Define functions #### 
 get_variables_with_variance <- function(X){
 	sapply(X, var) %>%
 		enframe('variable', 'variance') %>%
@@ -29,7 +32,7 @@ get_variables_with_variance <- function(X){
 		pull(variable)
 }
 
-#### Prepare the variable key table (this step can be moved to a ETL script later) ####
+####  Ensure that all variables are present in the datasets ####
 core_variables <-
 	LongVariableKey  %>%
 		filter(variable_type == 'core') %>%
@@ -39,6 +42,7 @@ core_variables <-
 # all necessary variables present
 setdiff(core_variables, colnames(CleanedDataBySubplant))
 
+# For each prime_mover type, select ALL variables that are core and/or optional
 CandidateVariables <-
 	LongVariableKey %>%
 		filter(variable_type != 'unused') %>%
@@ -49,9 +53,7 @@ CandidateVariables <-
 		rename(candidate_variables = data) %>%
 		mutate(candidate_variables = map(candidate_variables, pull))
 
-# For each prime_mover type, select ALL variables that are core OR optional
-# Filter out variables without variance (unnecessary here)
-NestedCleanDataBySubplant <-
+NestedCandidateDataBySubplant <-
 	CleanedDataBySubplant %>%
 		group_by(prime_mover) %>%
 		nest %>%
@@ -59,17 +61,15 @@ NestedCleanDataBySubplant <-
 		left_join(CandidateVariables, by = 'prime_mover') %>%
 		mutate(
 			rowid = map(data, select, 'rowid'),
-			# Select candidate variables, and ensure they have variance
+			data = map(data, select, -'rowid'),
 			data = map2(data, candidate_variables, ~select(.x, all_of(.y))),
-			variables_with_variance = map(data, get_variables_with_variance),
-			data = map2(data, variables_with_variance, ~select(.x, all_of(.y))),
 		) %>%
 		select(prime_mover, rowid, data)
 
-# resample data x 100 boots
+# Resample data;
 # Find number of PCA components
 NestedParallelTests <-
-	NestedCleanDataBySubplant %>%
+	NestedCandidateDataBySubplant %>%
 		expand_grid(boot_num = seq(1, 100)) %>%
 		mutate(
 			data = map(data, sample_frac, size = 0.75, replace = T),
@@ -79,6 +79,7 @@ NestedParallelTests <-
 			num_components = map_dbl(parallel_fit, 'ncomp')
 		)
 
+# Visualize
 NestedParallelTests %>%
 	count(prime_mover, num_components) %>%
 	ggplot(aes(x = num_components, y = n)) +
@@ -98,32 +99,33 @@ print(NumPcaComponents)
 
 #### Fit the PCA models to the dataset ####
 
-# Note which variables the PCA model is fit to
+# Note which variables the extant PCA model is fit to
 # (The Historical dataset will need the same columns)
 VariablesToSelect <-
-	NestedCleanDataBySubplant %>%
+	NestedCandidateDataBySubplant %>%
 		mutate(variables = map(data, colnames)) %>%
 		select(prime_mover, variables)
 
+# Fit the mods (previous fitting was based on resampling)
 NestedPcaMods <-
-	NestedCleanDataBySubplant %>%
+	NestedCandidateDataBySubplant %>%
 		left_join(NumPcaComponents, by = 'prime_mover') %>%
 		mutate(
 			n_obs = map_int(data, nrow),
 			Cor = map(data, cor, method = 's', use = 'pairwise.complete.obs'),
 			pca_fit = pmap(list(r = Cor, nfactors = num_components, n.obs = n_obs), 
 										 pca, rotate = 'promax'),
-		scores = map2(pca_fit, data, predict.psych)
+		# scores = map2(pca_fit, data, predict.psych)
 		) %>%
-		select(prime_mover, rowid, data, pca_fit, scores)
+		select(prime_mover, data, pca_fit)  # removed: rowid, scores
 
 # Apply these pca models to the Historic data to get the scores for those data.
 JoinablePcaMods <-
 	NestedPcaMods %>%
 		select(prime_mover, pca_fit, data)
 
-HistoricPcaScores <-
-	CleanedHistoric %>%
+HistoricalDataPcaScores <-
+	CleanedHistoricalData %>%
 		group_by(prime_mover) %>%
 		nest %>%
 		ungroup %>%
@@ -141,10 +143,10 @@ HistoricPcaScores <-
 		) %>%
 		select(prime_mover, rowid, scores)
 	
-# Get scores
-VarianceExplainedPerComponent <-
+#### Get scores ####
 	# note how much variance was explained by each component for each prime mover 
 	# class
+VarianceExplainedPerComponent <-
 	NestedPcaMods %>%
 		select(prime_mover, pca_fit) %>%
 		mutate(
@@ -159,12 +161,20 @@ VarianceExplainedPerComponent <-
 		drop_na(variance_explained)
 print(VarianceExplainedPerComponent)
 
+# sanity check!
+VarianceExplainedPerComponent %>% 
+	group_by(prime_mover) %>%
+	summarize(sum(variance_explained))
+
 # Scale the Data scores, multiply by variance explained per component
 # Note the mean and sd for each component!
 MeansAndSds <-
 	NestedPcaMods %>%
+		mutate(
+			scores = map2(pca_fit, data, psych::predict.psych),
+			scores = map(scores, as.data.frame)
+		) %>%
 		select(prime_mover, scores) %>%
-		mutate(scores = map(scores, as.data.frame)) %>%
 		unnest(scores) %>%
 		gather(component, score, -prime_mover) %>%
 		drop_na(score) %>%
@@ -175,8 +185,11 @@ print(MeansAndSds)
 
 WeightedDataBySubplantScores <-
 	NestedPcaMods %>%
+		mutate(
+			scores = map2(pca_fit, data, psych::predict.psych),
+			scores = map(scores, as.data.frame)
+		) %>%
 		select(prime_mover, rowid, scores) %>%
-		mutate(scores = map(scores, as.data.frame)) %>%
 		unnest(c(rowid, scores)) %>%
 		gather(component, score, -prime_mover, -rowid) %>%
 		group_by(prime_mover, component) %>%
@@ -190,8 +203,8 @@ WeightedDataBySubplantScores
 
 # Scale the Historic data according to Data mean and sd; weight acc'd to variance
 # explained per PCA component
-WeightedHistScores <-
-	HistoricPcaScores %>%
+WeightedHistoricalDataScores <-
+	HistoricalDataPcaScores %>%
 		mutate(scores = map(scores, as.data.frame)) %>%
 		unnest(c(rowid, scores)) %>%
 		gather(component, score, -prime_mover, -rowid) %>%
@@ -203,10 +216,10 @@ WeightedHistScores <-
 		spread(component, weighted_scaled_score)
 
 WeightedDataBySubplantScores %>%
-	write_csv('clean_data/weighted_data_scores.csv')
-WeightedHistScores %>%
-	write_csv('clean_data/weighted_hist_scores.csv')
-NumPcaComponents %>%
-	write_csv('clean_data/num_pca_components.csv')
-write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')
+	write_csv('clean_data/weighted_data_by_subplant_scores.csv')
+WeightedHistoricalDataScores %>%
+	write_csv('clean_data/weighted_historical_data_scores.csv')
+# NumPcaComponents %>%
+# 	write_csv('clean_data/num_pca_components.csv')
+# write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')
 

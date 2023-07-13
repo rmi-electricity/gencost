@@ -67,6 +67,34 @@ variable_cols <- c(
 
 start_cols <- c("starts_adj", "gas_starts_adj", "oil_starts_adj")
 
+# sanity check: variable
+xx <-
+	LongVariableKey %>%
+		filter(category == 'variable', variable_type != 'unused') %>%
+		pull(variable)
+print(xx)
+mask <- variable_cols %in% xx
+table(mask)
+xx[!mask]
+
+# sanity check: fixed
+xx <-
+	LongVariableKey %>%
+		filter(category == 'fixed', variable_type != 'unused') %>%
+		pull(variable)
+mask <- fixed_cols %in% xx
+table(mask)
+xx[!mask]
+
+# sanity check: start
+xx <-
+	LongVariableKey %>%
+		filter(category == 'start', variable_type != 'unused') %>%
+		pull(variable)
+mask <- start_cols %in% xx
+table(mask)
+xx[!mask]
+
 MapVariableToVariableType <-
 	# A table that allows us to map variable name to variable type
 	tribble(
