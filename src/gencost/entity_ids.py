@@ -69,24 +69,24 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
     resps_to_keep = (
         # 12,  # Black hills  (small)
         # 100,  # Entergy Mississippi, LLC (varies over time) -> merged into ENTERGY
-        120,  # Northern States Power Co. (MISO)
+        # 120,  # Northern States Power Co. (MISO) -> big deficit so merged into MISO
         130,  # Oklahoma Gas & Electric Co. (SWPP)
         # 144,  # Duke Indiana (PJM) unclear FRR
-        166,  # Southwestern Public Service Co. (SWPP)
+        # 166,  # Southwestern Public Service (SWPP) -> big deficit so merged into SWPP
         177,  # Ameren Missouri (MISO)
         186,  # Dominion Energy Virginia (PJM) DOM is mostly FRR
         # 191,  # Evergy Kansas Central, Inc. (SWPP) -> merged into EVERGY
-        193,  # Wisconsin Electric Power Co. (MISO)
+        # 193,  # Wisconsin Electric Power Co. (MISO) -> big deficit so merged into MISO
         # 194,  # Wisconsin Power & Light Co. (MISO) -> merged into LNT
         195,  # Wisconsin Public Service Corp. (MISO)
         210,  # MidAmerican Energy Co. (MISO)
         22,  # Cleco Power LLC (MISO)
-        41,  # Consumers Energy Co. (MISO)
-        44,  # DTE Electric Co. (MISO)
-        529,  # Tri-State G & T Association (PNM, PSCO, WACM)
+        # 41,  # Consumers Energy Co. (MISO) -> big deficit so merged into MISO
+        # 44,  # DTE Electric Co. (MISO) -> big deficit so merged into MISO
+        # 529,  # Tri-State G & T (PNM, PSCO, WACM) -> big deficit so spread to BAs
         531,  # Basin (OK)
         552,  # Cooperative Energy (MISO, TVA)
-        554,  # Dairyland Power Coop (MISO)
+        # 554,  # Dairyland Power Coop (MISO) -> big deficit so merged into MISO
         556,  # East Kentucky Power Coop, Inc (LGEE, PJM)
         # transfering 560 to MISO because nearly half of gen there already
         # 560,  # Great River Energy (MISO)
@@ -145,7 +145,8 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
             df.final_respondent_id.astype(str).where(
                 df.balancing_authority_code_eia.isin(["SOCO"])
                 # 569 is Oglethorpe
-                & df.final_respondent_id.isin([2, 57, 99, 569]),
+                # Let 99 / MS Power get rolled into SOCO
+                & df.final_respondent_id.isin([2, 57, 569]),
                 pd.NA,
             ),
         )
@@ -181,21 +182,23 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
                 pd.NA,
             ),
         )
-        .fillna(
-            # Aggregate Alliant Energy
-            pd.Series("LNT", index=df.index).where(
-                df.final_respondent_id.isin([194, 281]),
-                pd.NA,
-            ),
-        )
-        .fillna(
-            # AEP, combining Appalachian Power Co. and Indiana Michigan Power Co.
-            # from PJM into an integrated AEP, based on approximate FRR linked above
-            pd.Series("AEP", index=df.index).where(
-                df.final_respondent_id.isin([6, 73]),
-                pd.NA,
-            ),
-        )
+        # Alliant Energy has large deficits so roll into MISO
+        # .fillna(
+        #     # Aggregate Alliant Energy
+        #     pd.Series("LNT", index=df.index).where(
+        #         df.final_respondent_id.isin([194, 281]),
+        #         pd.NA,
+        #     ),
+        # )
+        # AEP has large deficits so roll into PJM
+        # .fillna(
+        #     # AEP, combining Appalachian Power Co. and Indiana Michigan Power Co.
+        #     # from PJM into an integrated AEP, based on approximate FRR linked above
+        #     pd.Series("AEP", index=df.index).where(
+        #         df.final_respondent_id.isin([6, 73]),
+        #         pd.NA,
+        #     ),
+        # )
         .fillna(
             # Aggregate HECO
             pd.Series("HECO", index=df.index).where(
