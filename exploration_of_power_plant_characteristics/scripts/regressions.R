@@ -1,6 +1,7 @@
 # Regression models
 library(tidyverse)
 library(skimr)
+library(broom)
 library(conflicted)
 # library(leaps)
 # library(Metrics)
@@ -141,36 +142,27 @@ write_csv(RMSE, 'clean_data/all_models_rmse.csv')
 RMSE <- read_csv('clean_data/all_models_rmse.csv', 
 								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i', 
 								 							pull_size = 'i', boot_num = 'i', rmse = 'd'))
+
 ####
+# Get the smallest RMSE; in case of tie, prefer fewer variables
+# (smaller pull_size)
 MeanRMSE <-
 	RMSE %>%
 		group_by(prime_mover, cls, pull_size, formula) %>%
 		summarize(
 			mean_rmse = mean(rmse),
-			low_rmse = mean(rmse) - sd(rmse),
-			high_rmse = mean(rmse) + sd(rmse)
+			# low_rmse = mean(rmse) - sd(rmse),
+			# high_rmse = mean(rmse) + sd(rmse)
 		) %>%
-		ungroup
-
-MeanRMSE %>%
-	filter(prime_mover == 'ST') %>%
-	ggplot(aes(x = as.factor(pull_size), y = mean_rmse)) +
-	geom_boxplot() +
-	scale_y_continuous(labels = scales::comma_format(1)) +
-	facet_wrap(~cls, scales = 'free') +
-	labs(x = 'Number of optional variables', y = 'Mean RMSE (each formula is aggregated over 3 folds)') +
-	theme(axis.ticks = element_blank(),
-				text = element_text(family = 'serif'))
-
-ChosenFormulas <-
-	MeanRMSE %>%
-		# Get the smallest RMSE; in case of tie, prefer fewer variables
-		# (smaller pull_size)
+		ungroup %>%
 		arrange(prime_mover, cls, mean_rmse, pull_size) %>%
 		group_by(prime_mover, cls) %>%
-		mutate(i = row_number()) %>%
-		ungroup %>%
-		filter(i == 1L) %>%
+		mutate(rank = row_number()) %>%
+		ungroup
+		
+ChosenFormulas <-
+	MeanRMSE %>%
+		filter(rank == 1L) %>%
 		select(prime_mover, cls, pull_size, formula, mean_rmse)
 ChosenFormulas
 
@@ -217,18 +209,109 @@ AllPossibleCoefficients <-
 write_csv(AllPossibleCoefficients, 'clean_data/all_possible_coefficients.csv')
 write_csv(ChosenFormulas, 'clean_data/chosen_formulas.csv')
 write_csv(FittedValues, 'clean_data/fitted_values.csv')
+write_csv(MeanRMSE, 'clean_data/mean_rmse.csv')
 
-# 
+#### Appendix: reporting goodness of fit ####
+# color scheme: water and rust
+# https://color.adobe.com/explore
 
-Joinme1 <-
-	AllPossibleCoefficients %>%
-		select(prime_mover, cls, pull_size, formula, variable, category)
+MeanRMSE %>%
+	count(prime_mover, cls)
 
-Joinme2 <-
-	MeanRMSE %>%
-		select(prime_mover, cls, pull_size, formula, mean_rmse)
+JoinmeIsChosen <-
+	ChosenFormulas %>%
+		mutate(is_chosen = TRUE)
 
-Joinme1 %>%
-	inner_join(Joinme2) %>%
-	write_csv('~/Downloads/essay_for_plots.csv')
+MeanRMSE %>%
+	filter(prime_mover == 'CC') %>%
+	left_join(JoinmeIsChosen, by = c("prime_mover", "cls", "pull_size", "formula", "mean_rmse")) %>%
+	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+	arrange(is_chosen) %>%
+	ggplot(aes(x = pull_size, y = mean_rmse)) +
+	geom_smooth(method = 'lm', formula = y ~ poly(x, 3), se = T, color = '#151F30') +
+	geom_point(aes(color = is_chosen)) +
+	scale_color_manual(values = c('FALSE' = '#103778', 'TRUE' = '#E3371E')) +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	facet_wrap(~cls, scales = 'free_y') +
+	theme(axis.ticks = element_blank(),
+				legend.position = 'bottom',
+				panel.grid.major.x = element_blank(),
+				panel.grid.minor.x = element_blank(),
+				text = element_text(family = 'serif')) +
+	labs(x = 'Optional variables', y = 'Mean RMSE (lower is better)',
+			 color = 'Model with the best fit',
+			 title = 'Model goodness-of-fit, for each cluster',
+			 caption = str_wrap('Each dataset was tested with cross-validation three times, with each training set consisting of 2/3 of the data. After attempting to predict the testing set\'s values three times, the resulting RMSE metrics were averaged; this is what is illustrated above. NB each y-axis uses a different scale.'),
+			 subtitle = 'CC')
+
+MeanRMSE %>%
+	filter(prime_mover == 'GT') %>%
+	left_join(JoinmeIsChosen, by = c("prime_mover", "cls", "pull_size", "formula", "mean_rmse")) %>%
+	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+	arrange(is_chosen) %>%
+	ggplot(aes(x = pull_size, y = mean_rmse)) +
+	geom_smooth(method = 'lm', formula = y ~ poly(x, 3), se = T, color = '#151F30') +
+	geom_point(aes(color = is_chosen)) +
+	scale_color_manual(values = c('FALSE' = '#103778', 'TRUE' = '#E3371E')) +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	facet_wrap(~cls, scales = 'free_y') +
+	theme(axis.ticks = element_blank(),
+				legend.position = 'bottom',
+				panel.grid.major.x = element_blank(),
+				panel.grid.minor.x = element_blank(),
+				text = element_text(family = 'serif')) +
+	labs(x = 'Optional variables', y = 'Mean RMSE (lower is better)',
+			 color = 'Model with the best fit',
+			 title = 'Model goodness-of-fit, for each cluster',
+			 subtitle = 'GT',
+			 caption = str_wrap('Each dataset was tested with cross-validation three times, with each training set consisting of 2/3 of the data. After attempting to predict the testing set\'s values three times, the resulting RMSE metrics were averaged; this is what is illustrated above. NB each y-axis uses a different scale.'))
+
+MeanRMSE %>%
+	filter(prime_mover == 'ST') %>%
+	# left_join(JoinmeIsChosen, by = c("prime_mover", "cls", "pull_size", "formula", "mean_rmse")) %>%
+	# mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+	# arrange(is_chosen) %>%
+	ggplot(aes(x = pull_size, y = mean_rmse)) +
+	geom_boxplot(alpha = 0.3, aes(x = ordered(pull_size))) +
+	geom_point(data = filter(JoinmeIsChosen, prime_mover == 'ST'), color = '#E3371E') +
+	# geom_smooth(method = 'lm', formula = y ~ poly(x, 3), se = T, color = '#151F30') +
+	# geom_point(aes(color = is_chosen)) +
+	scale_color_manual(values = c('FALSE' = '#103778', 'TRUE' = '#E3371E')) +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	facet_wrap(~cls, scales = 'free_y') +
+	theme(axis.ticks = element_blank(),
+				legend.position = 'bottom',
+				panel.grid.major.x = element_blank(),
+				panel.grid.minor.x = element_blank(),
+				text = element_text(family = 'serif')) +
+	labs(x = 'Optional variables', y = 'Mean RMSE (lower is better)',
+			 color = 'Model with the best fit',
+			 title = 'Model goodness-of-fit, for each cluster',
+			 subtitle = 'ST',
+			 caption = str_wrap('The ST diagram represents several thousand potential models, so I intentionally swap the visual metaphor from points to boxplots, although each best-fitting model is still colored orange. Each dataset was tested with cross-validation three times, with each training set consisting of 2/3 of the data. After attempting to predict the testing set\'s values three times, the resulting RMSE metrics were averaged; this is what is illustrated above. NB each y-axis uses a different scale.'))
+
+
+#### Appendix: export model specifications ####
+ForExportAllCoefficients <-
+	AllModsFit %>%
+		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
+		arrange(prime_mover, cls, pull_size, formula) %>%
+		mutate(tidy = map(lm_fit, broom::tidy)) %>%
+		select(-lm_fit) %>%
+		unnest(tidy)
+#
+ForExportModelGoodnessOfFit <-
+	AllModsFit %>%
+		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
+		arrange(prime_mover, cls, pull_size, formula) %>%
+		mutate(glance = map(lm_fit, broom::glance)) %>%
+		select(-lm_fit) %>%
+		unnest(glance)
+#	
+write_csv(ForExportAllCoefficients, 'results/all_coefficients.csv')
+write_csv(ForExportModelGoodnessOfFit, 'results/model_goodness_of_fit.csv')
+	
+	
+	
+	
 	

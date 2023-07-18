@@ -145,3 +145,4 @@ ClusteredMetrics %>%
 				panel.grid.major.x = element_blank(),
 				text = element_text(family = 'serif')) +
 	labs(x = 'Cluster', y = 'SOM', caption = 'NB y-axis has been truncated; boxplot width represents cluster size')
+

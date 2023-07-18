@@ -84,4 +84,9 @@ ClusteredHistoricalData <-
 saveRDS(object = ClustersFit, file = 'clean_data/clusters_fit.RDS')
 saveRDS(object = ClusteredHistoricalData, file = 'clean_data/clustered_historical_data.RDS')
 
+ClustersFit %>%
+	select(rowid, cls) %>%
+	unnest(everything()) %>%
+	write_csv('clean_data/clustered_data_by_subplant.csv')
+
 # End here #
