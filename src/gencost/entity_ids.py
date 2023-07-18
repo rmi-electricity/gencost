@@ -83,7 +83,7 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
         22,  # Cleco Power LLC (MISO)
         # 41,  # Consumers Energy Co. (MISO) -> big deficit so merged into MISO
         # 44,  # DTE Electric Co. (MISO) -> big deficit so merged into MISO
-        # 529,  # Tri-State G & T (PNM, PSCO, WACM) -> big deficit so spread to BAs
+        529,  # Tri-State G & T (PNM, PSCO, WACM)
         531,  # Basin (OK)
         552,  # Cooperative Energy (MISO, TVA)
         # 554,  # Dairyland Power Coop (MISO) -> big deficit so merged into MISO
