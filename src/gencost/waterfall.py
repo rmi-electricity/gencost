@@ -17,12 +17,12 @@ from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
 from gencost.constants import (
+    CURRENT_EP_COLS,
     FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
-    CURRENT_EP_COLS,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
@@ -1282,14 +1282,16 @@ class DataBySubplant:
             )
             .fillna({"pollution_control_costs_per_kw": 0.0})
             .merge(
-                self.pudl_tabl.gens_eia860m()[
+                self.pudl_tabl.gens_eia860m()
+                .query("report_date == report_date.max()")[
                     [
                         "plant_id_eia",
                         "generator_id",
                         "balancing_authority_code_eia",
                         # "state",
                     ]
-                ].drop_duplicates(),
+                ]
+                .drop_duplicates(),
                 on=["plant_id_eia", "generator_id"],
                 how="left",
                 # indicator=True,
