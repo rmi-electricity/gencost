@@ -21,6 +21,10 @@ CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv'
 CleanedHistoricalData <- read_csv('clean_data/cleaned_historical_data.csv',
 																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
 																	.default = 'd'))
+CleanedEternallyPresent <- read_csv('clean_data/cleaned_eternally_present.csv',
+																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
+																	.default = 'd'))
+
 LongVariableKey <- read_csv('clean_data/long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
@@ -100,7 +104,7 @@ print(NumPcaComponents)
 #### Fit the PCA models to the dataset ####
 
 # Note which variables the extant PCA model is fit to
-# (The Historical dataset will need the same columns)
+# (The Historical and EP datasets will need the same columns)
 VariablesToSelect <-
 	NestedCandidateDataBySubplant %>%
 		mutate(variables = map(data, colnames)) %>%
@@ -117,15 +121,16 @@ NestedPcaMods <-
 										 pca, rotate = 'promax'),
 		# scores = map2(pca_fit, data, predict.psych)
 		) %>%
-		select(prime_mover, data, pca_fit)  # removed: rowid, scores
+		select(prime_mover, rowid, data, pca_fit)  # removed: scores
 
 # Apply these pca models to the Historic data to get the scores for those data.
 JoinablePcaMods <-
 	NestedPcaMods %>%
 		select(prime_mover, pca_fit, data)
 
-HistoricalDataPcaScores <-
-	CleanedHistoricalData %>%
+get_pca_scores <- function(X){
+	# X is either CleanedHistoricalData or CleanedEternallyPresent
+	X %>%
 		group_by(prime_mover) %>%
 		nest %>%
 		ungroup %>%
@@ -137,11 +142,33 @@ HistoricalDataPcaScores <-
 		left_join(JoinablePcaMods, by = 'prime_mover') %>%
 		mutate(
 			scores = pmap(
-				list(object = pca_fit, data = new_data, old.data = data), 
+				list(object = pca_fit, data = new_data, old.data = data),
 				predict.psych
 			)
 		) %>%
 		select(prime_mover, rowid, scores)
+}
+HistoricalDataPcaScores <- get_pca_scores(CleanedHistoricalData)
+EternallyPresentPcaScores <- get_pca_scores(CleanedEternallyPresent)
+
+# HistoricalDataPcaScores <-
+# 	CleanedHistoricalData %>%
+# 		group_by(prime_mover) %>%
+# 		nest %>%
+# 		ungroup %>%
+# 		inner_join(VariablesToSelect, by = 'prime_mover') %>%
+# 		mutate(
+# 			rowid = map(data, select, 'rowid'),
+# 			data = map2(data, variables, select)) %>%
+# 		select(prime_mover, rowid, new_data = data) %>%
+# 		left_join(JoinablePcaMods, by = 'prime_mover') %>%
+# 		mutate(
+# 			scores = pmap(
+# 				list(object = pca_fit, data = new_data, old.data = data), 
+# 				predict.psych
+# 			)
+# 		) %>%
+# 		select(prime_mover, rowid, scores)
 	
 #### Get scores ####
 	# note how much variance was explained by each component for each prime mover 
@@ -187,7 +214,7 @@ WeightedDataBySubplantScores <-
 	NestedPcaMods %>%
 		mutate(
 			scores = map2(pca_fit, data, psych::predict.psych),
-			scores = map(scores, as.data.frame)
+			scores = map(scores, as.data.frame),
 		) %>%
 		select(prime_mover, rowid, scores) %>%
 		unnest(c(rowid, scores)) %>%
@@ -201,10 +228,11 @@ WeightedDataBySubplantScores <-
 		spread(component, weighted_scaled_score)
 WeightedDataBySubplantScores
 
-# Scale the Historic data according to Data mean and sd; weight acc'd to variance
-# explained per PCA component
-WeightedHistoricalDataScores <-
-	HistoricalDataPcaScores %>%
+# Scale the historical and EP data according to Data mean and sd; 
+# weight acc'd to variance explained per PCA component
+get_weighted_scores <- function(X){
+	# X is HistoricalDataPcaScores or EternallyPresentPcaScores 
+		X %>%
 		mutate(scores = map(scores, as.data.frame)) %>%
 		unnest(c(rowid, scores)) %>%
 		gather(component, score, -prime_mover, -rowid) %>%
@@ -214,11 +242,29 @@ WeightedHistoricalDataScores <-
 		mutate(weighted_scaled_score = variance_explained * scaled_score) %>%
 		select(prime_mover, component, rowid, weighted_scaled_score) %>%
 		spread(component, weighted_scaled_score)
+}
+
+WeightedHistoricalDataScores <- get_weighted_scores(HistoricalDataPcaScores)
+WeightedEternallyPresentScores <- get_weighted_scores(EternallyPresentPcaScores)
+
+# WeightedHistoricalDataScores <-
+# 	HistoricalDataPcaScores %>%
+# 		mutate(scores = map(scores, as.data.frame)) %>%
+# 		unnest(c(rowid, scores)) %>%
+# 		gather(component, score, -prime_mover, -rowid) %>%
+# 		left_join(MeansAndSds, by = c('prime_mover', 'component')) %>%
+# 		mutate(scaled_score = (score - mean)/ sd) %>%
+# 		left_join(VarianceExplainedPerComponent, by = c('prime_mover', 'component')) %>%
+# 		mutate(weighted_scaled_score = variance_explained * scaled_score) %>%
+# 		select(prime_mover, component, rowid, weighted_scaled_score) %>%
+# 		spread(component, weighted_scaled_score)
 
 WeightedDataBySubplantScores %>%
 	write_csv('clean_data/weighted_data_by_subplant_scores.csv')
 WeightedHistoricalDataScores %>%
 	write_csv('clean_data/weighted_historical_data_scores.csv')
+WeightedEternallyPresentScores %>%
+	write_csv('clean_data/weighted_eternally_present_scores.csv')
 # NumPcaComponents %>%
 # 	write_csv('clean_data/num_pca_components.csv')
 # write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')

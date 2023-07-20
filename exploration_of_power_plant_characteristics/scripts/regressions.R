@@ -47,7 +47,7 @@ JoinmeCoreFormulas <-
 		) %>%
 		select(prime_mover, pull_size, formula) %>%
 		unnest(formula)
-print(JoinmeCoreFormulas)
+print(as.data.frame(JoinmeCoreFormulas))
 
 AllFormulas <-
 	LongVariableKey %>%
@@ -83,6 +83,7 @@ AllFormulas %>%
 	sample_n(4) %>%
 	as.data.frame
 
+
 #### Train and Test the models ####
 
 TrainTest <-
@@ -106,18 +107,13 @@ TrainTest <-
 		)
 
 # Fan out by joining each train/test row to all of the prime mover's formulas
+# Get fitted values and note RMSE
 TrainFit <-
 	TrainTest	 %>%
 		inner_join(AllFormulas, by = 'prime_mover') %>%
 		mutate(
 			lm_fit = map2(formula, Train, lm),
 		)
-
-TrainFit %>%
-	count(prime_mover, cls)
-
-AllFormulas %>%
-	count(prime_mover)
 
 PredictedValues <-
 	TrainFit %>%
@@ -151,8 +147,6 @@ MeanRMSE <-
 		group_by(prime_mover, cls, pull_size, formula) %>%
 		summarize(
 			mean_rmse = mean(rmse),
-			# low_rmse = mean(rmse) - sd(rmse),
-			# high_rmse = mean(rmse) + sd(rmse)
 		) %>%
 		ungroup %>%
 		arrange(prime_mover, cls, mean_rmse, pull_size) %>%

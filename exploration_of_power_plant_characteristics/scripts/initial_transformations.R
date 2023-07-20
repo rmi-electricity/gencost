@@ -12,6 +12,7 @@ setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
 	filter(prime_mover %in% c('CC', 'GT', 'ST'))
 HistoricalData <- arrow::read_parquet('input_data/historic_data_gen_level.parquet')
+EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
 VariableKey <- read_csv('input_data/regression_variables.csv', col_types = c('variable' = 'c', .default = 'f'))
 
 
@@ -227,6 +228,12 @@ CleanedHistoricalData <-
 	create_independent_variables %>%
 	select(all_of(variables_to_use))
 
-write_csv(CleanedHistoricalData, 'clean_data/cleaned_historical_data.csv')
+CleanedEternallyPresent <-
+	EternallyPresent %>%
+	create_independent_variables %>%
+	select(all_of(variables_to_use))
+
 write_csv(CleanedDataBySubplant, 'clean_data/cleaned_data_by_subplant_data.csv')
+write_csv(CleanedHistoricalData, 'clean_data/cleaned_historical_data.csv')
+write_csv(CleanedEternallyPresent, 'clean_data/cleaned_eternally_present.csv')
 write_csv(LongVariableKey, 'clean_data/long_variable_key.csv')

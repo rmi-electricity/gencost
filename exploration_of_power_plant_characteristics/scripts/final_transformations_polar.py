@@ -1,11 +1,24 @@
+#!/usr/bin/env python
+"""\
+Join the linear model coefficients to the observed values in the DataBySubplant dataset;
+use Polars in lieu of R because this data fans out with the joins, and Polars might be
+optimal for this memory usage.
+"""
+__author__ = "Andrew Bartnof for RMI"
+__email__ = "abartnof.contractor@rmi.org"
+__date__ = "July, 2023"
+
+# Load packages
 import polars as pl
 import os
 os.chdir('/Users/andrewbartnof/Documents/rmi/gencost/exploration_of_power_plant_characteristics')
 
+# Load and transform datasets simultaneously, to make use of Polars' optimisations.
+#
+# Collect three observed variables that will be necessary for final calculations
 ExtraVariables = (
     pl.scan_parquet('input_data/data_by_subplant.parquet')
     .with_row_count(name='rowid', offset=1) # R starts at 1
-        #infer_schema_length=10000)
     .select(['rowid', 'capacity_mw', 'gross_generation_mwh', 'generator_starts'])
     .with_columns(
         pl.col('rowid').cast(pl.Int64)
@@ -13,21 +26,29 @@ ExtraVariables = (
     .collect()
 )
 
+# Table that assigns each rowid to a cluster
 Cls = pl.read_csv('clean_data/clustered_data_by_subplant.csv')
 
+# Table that shows the RMSE for each formula, for each cluster; these are ranked in terms of their
+# goodness-of-fit, which means that if we limit to the top n best-fitting models, and then semi-join
+# this table into the AllPossibleCoef table, we can drastically limit how large our joins will get.
 MeanRmse = (
         pl.scan_csv('clean_data/mean_rmse.csv')
-        .filter(pl.col('rank') <= 100)  # <- THIS IS WHAT LIMITS OUTPUT SIZE
+        .filter(pl.col('rank') == 1)  # <- THIS IS WHAT LIMITS OUTPUT SIZE
         .select(['prime_mover', 'cls', 'formula'])
         .collect()
 )
 
+# Collect the coefficients previously extracted from fitted models for each possible formula.
 AllPossibleCoef = ( # Semijoin with MeanRmse, in order to only include the most useful formulas
         pl.read_csv('clean_data/all_possible_coefficients.csv') 
         .select(['prime_mover', 'cls', 'formula', 'variable', 'category', 'coefficient'])
         .join(MeanRmse, on=['prime_mover', 'cls', 'formula'], how='semi')
         )
 
+# Cluster the dataset, apply the top n best-fitting formulas' coefficients, multiply the coefficients
+# by their values, and sum up these values by their category (fixed cost, variable, or starts) in order
+# to ultimately create human-readable metrics; fom, vom, som, and om_per_mwh
 Results = (
     pl.scan_csv('clean_data/cleaned_data_by_subplant_data.csv', 
         infer_schema_length=10000)
@@ -59,9 +80,10 @@ Results = (
             ( pl.col('fom') * pl.col('capacity_mw') * 1000 ) / pl.col('gross_generation_mwh')
         ).alias('om_per_mwh') #(som * capacity_mw * generator_starts * 1000 + fom * capacity_mw * 1000) / gross_generation_mwh) + vom
     )
+    .select(['rowid', 'prime_mover', 'cls', 'formula', 'fom', 'vom', 'som', 'om_per_mwh'])
 )
 
+# Write results and close out script
 fn = 'clean_data/vom_fom_som.csv'
 Results.write_csv(file=fn)
-
 quit()
