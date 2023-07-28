@@ -123,7 +123,8 @@ NestedPcaMods <-
 		) %>%
 		select(prime_mover, rowid, data, pca_fit)  # removed: scores
 
-# Apply these pca models to the Historic data to get the scores for those data.
+# Apply these pca models to the EP and Historic data to get the 
+# scores for those data.
 JoinablePcaMods <-
 	NestedPcaMods %>%
 		select(prime_mover, pca_fit, data)

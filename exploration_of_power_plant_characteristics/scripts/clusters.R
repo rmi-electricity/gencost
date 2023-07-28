@@ -1,13 +1,16 @@
 # let's go with 3 for STs and GTs, and 4 for CCs
+# NB- fiddle with this now
 
 library(tidyverse)
 library(skimr)
 # library(psych)
 library(conflicted)
 library(flexclust)
+library(arrow)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
+conflicted::conflict_prefer('all_of', 'dplyr')
 
 set.seed(1)	
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
@@ -19,6 +22,10 @@ setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 WeightedDataBySubplantScores <- read_csv('clean_data/weighted_data_by_subplant_scores.csv')
 WeightedHistoricalDataScores <- read_csv('clean_data/weighted_historical_data_scores.csv')
 WeightedEternallyPresentScores <- read_csv('clean_data/weighted_eternally_present_scores.csv')
+
+LongVariableKey <- read_csv('clean_data/long_variable_key.csv') # for appendix EDA only
+DataBySubplant <- read_parquet('input_data/data_by_subplant.parquet') %>%
+	rowid_to_column()
 
 #### Define functions ####
 get_variables_with_variance <- function(X){
@@ -33,6 +40,7 @@ get_variables_with_variance <- function(X){
 NumClusters <- tribble(
 # 3 for STs and GTs, and 4 for CCs
 	~prime_mover, ~num_clusters,
+	# 'CC', 3L,
 	'CC', 4L,
 	'GT', 3L,
 	'ST', 3L
@@ -56,7 +64,7 @@ ClustersFit <-
 		select(prime_mover, rowid, data) %>%
 		left_join(NumClusters, by = 'prime_mover') %>%
 		mutate(
-			cls_fit = map2(data, num_clusters, kmeans),
+			cls_fit = map2(data, num_clusters, kmeans, iter.max=500),
 			cls_fit_flexclust = map2(cls_fit, data, as.kcca),
 			cls = map(cls_fit, 'cluster')
 		)
@@ -186,7 +194,12 @@ ClsCounts <-
 					 prop = round(prop, 2)
 	  ) %>%
 		ungroup
-write_csv(ClsCounts, 'results/cls_counts.csv')
+
+ClsCounts %>%
+	left_join(JoinmeIsChosen) %>%
+	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+	write_csv('results/cls_counts.csv')
+
 
 EvenSplitSize <-
 	ClsCounts	%>%
@@ -217,4 +230,173 @@ ClsCounts	%>%
 			 title = 'Size of clustering schemas',
 			 caption = str_wrap('Dotted lines represent the size of each cluster that we would expect, naively, if each dataset were divided evenly; for example, a subpopulation of 100 observations, split into four clusters, would have a dotted-line at 100/4, or 25.', 100))
 
+# Cluster characteristics
+variables_for_sanity_check_cc <- c('age_in_report_year', 'capacity_mw', 
+																	 'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction', 
+																	 'minor_fuels_fraction')
 
+variables_for_sanity_check_gt <- c('age_in_report_year', 'capacity_mw', 
+																	 'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction',  
+																	 'minor_fuels_fraction')
+
+variables_for_sanity_check_st <- c('age_in_report_year', 'capacity_mw', 
+																	 'generator_starts', 'gross_cf', 'coal_fraction', 'natural_gas_fraction', 
+																	 'petroleum_fraction', 'minor_fuels_fraction')
+
+
+
+
+
+ClustersFit %>%
+	select(rowid, cls) %>%
+	unnest(c(rowid, cls)) %>%
+	inner_join(DataBySubplant, by = 'rowid') %>%
+	filter(prime_mover == 'GT') %>%
+	select(cls, all_of(variables_for_sanity_check_cc)) %>%
+	group_by(cls) %>%
+	nest %>%
+	ungroup %>%
+	mutate(Cor = map(data, cor, method = 's', use = 'pairwise.complete.obs'),
+				 Cor = map(Cor, as.data.frame),
+				 Cor = map(Cor, rownames_to_column, 'variable1')) %>%
+	select(cls, Cor) %>%
+	unnest(Cor) %>%
+	gather(variable2, cor, -cls, -variable1) %>%
+	# drop_na(cor) %>%
+	ggplot(aes(x = variable1, y = variable2, fill = cor)) +
+	geom_raster() +
+	scale_y_discrete(limits = rev) +
+	scale_fill_gradient2(low = 'red', mid = 'white', high = 'blue', na.value = 'grey',
+											 limits = c(-1, 1)) +
+	facet_wrap(~cls) +
+	theme(
+		axis.ticks = element_blank(),
+		panel.background = element_blank(),
+		text = element_text(family = 'serif'),
+		legend.position = 'bottom',
+		axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)
+	) +
+	labs(x = '', y = '', fill = 'Spearman\'s rho', title = 'GT: 3 Clusters') 
+	
+AvgValue <-
+	ClustersFit %>%
+		select(rowid, cls) %>%
+		unnest(c(rowid, cls)) %>%
+		inner_join(DataBySubplant, by = 'rowid') %>%
+		filter(prime_mover == 'CC') %>%
+		select(cls, all_of(variables_for_sanity_check_cc)) %>%
+		gather(variable, value, -cls) %>%
+		group_by(variable) %>%
+		summarize(avg = mean(value)) %>%
+		ungroup
+
+ClustersFit %>%
+	select(rowid, cls) %>%
+	unnest(c(rowid, cls)) %>%
+	inner_join(DataBySubplant, by = 'rowid') %>%
+	filter(prime_mover == 'CC') %>%
+	select(cls, all_of(variables_for_sanity_check_cc)) %>%
+	gather(variable, value, -cls) %>%
+	ggplot(aes(x = ordered(cls), y = value)) +
+	geom_hline(data = AvgValue, aes(yintercept = avg), linetype = 'dashed') +
+	geom_boxplot(outlier.alpha = 1, varwidth = TRUE) +
+	facet_wrap(~variable, scales = 'free') +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.major.x = element_blank(),
+		text = element_text(family = 'serif'),
+	) +
+	labs(x = 'Cluster', y = '', title = 'CC', 
+			 caption = 'Horizontal line indicates overall mean value;\nBoxplot width represents cluster size')
+
+	
+RowToClusterAll <-
+	WeightedDataBySubplantScores %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			rowid = map(data, select, 'rowid'),
+			data = map(data, select, -'rowid'),
+			variables = map(data, get_variables_with_variance),
+			data = map2(data, variables, select)
+		) %>%
+		select(prime_mover, rowid, data) %>%
+		expand_grid(num_clusters = seq(2, 5)) %>%
+		mutate(
+			cls_fit = map2(data, num_clusters, kmeans),
+			cls = map(cls_fit, 'cluster')
+		) %>%
+		select(prime_mover, rowid, num_clusters, cls) %>%
+		unnest(c(rowid, cls))
+
+
+# ClustersFit %>%
+prime_mover_var <- 'ST'
+num_clusters_var <- 5
+variables_var <- variables_for_sanity_check_st
+
+	# Create boxplots for each clustering schema
+	my_title <- str_c(prime_mover_var, ': ', num_clusters_var, ' clusters')
+	fn <- str_c('results/boxplot_', prime_mover_var, '_', num_clusters_var, '.png')
+	
+	AvgValue <-
+		RowToClusterAll %>%
+			filter(
+				prime_mover == prime_mover_var,
+				num_clusters == num_clusters_var
+			) %>%
+			inner_join(DataBySubplant, by = 'rowid') %>%
+			select(cls, all_of(variables_var)) %>%
+			gather(variable, value, -cls) %>%
+			group_by(variable) %>%
+			summarize(avg = mean(value)) %>%
+			ungroup
+	
+	g <-	
+		RowToClusterAll %>%
+			filter(
+				prime_mover == prime_mover_var, 
+				num_clusters == num_clusters_var
+			) %>%
+			inner_join(DataBySubplant, by = 'rowid') %>%
+			select(cls, all_of(variables_var)) %>%
+			gather(variable, value, -cls) %>%
+			ggplot(aes(x = ordered(cls), y = value)) +
+			geom_hline(data = AvgValue, aes(yintercept = avg), linetype = 'dashed') +
+			geom_boxplot(outlier.alpha = 1, varwidth = TRUE) +
+			facet_wrap(~variable, scales = 'free') +
+			theme(
+				axis.ticks = element_blank(),
+				panel.grid.major.x = element_blank(),
+				text = element_text(family = 'serif'),
+			) +
+			labs(x = 'Cluster', y = '', title = my_title, 
+					 caption = 'Horizontal line indicates overall mean value;\nBoxplot width represents cluster size')
+	g
+	ggsave(filename = fn, plot = g, width = 16, height = 9, units = 'in')
+
+#
+	variables_for_sanity_check_cc <- c('age_in_report_year', 'capacity_mw', 
+																		 'generator_starts', 'gross_cf', 'natural_gas_fraction', 'petroleum_fraction', 
+																		 'minor_fuels_fraction')
+
+
+ClusteredEternallyPresent %>%
+	unnest(c(rowid, cls))
+
+ClusteredEternallyPresent %>%
+	unnest(c(rowid, cls)) %>%
+	inner_join(EternallyPresent %>% rowid_to_column()) %>%
+	select(prime_mover, cls, all_of(variables_for_sanity_check_cc)) %>%
+	gather(variable, value, -prime_mover, -cls) %>%
+	ggplot(aes(x = factor(cls), y = value)) +
+	geom_boxplot() +
+	facet_wrap(prime_mover ~ variable, scales = 'free') 
+
+EternallyPresent %>%
+	count(prime_mover)
+
+ClusteredEternallyPresent %>%
+	unnest(cls) %>%
+	count(prime_mover, cls)

@@ -3,6 +3,7 @@ library(tidyverse)
 library(skimr)
 library(broom)
 library(conflicted)
+library(gtools)
 # library(leaps)
 # library(Metrics)
 conflicted::conflict_prefer('map', 'purrr')
@@ -33,59 +34,79 @@ CoreVariables <-
 		filter(variable_type == 'core') %>%
 		select(prime_mover, variable) %>%
 		nest(data = variable) %>%
-		mutate(
-			core_variables = map(data, pull),
-		) %>%
+		mutate(core_variables = map(data, pull)) %>%
 		select(prime_mover, core_variables)
 
-JoinmeCoreFormulas <-
-	CoreVariables %>%
-		mutate(
-			concat_variables = map(core_variables, paste0, collapse = ' + '),
-			formula = map(concat_variables, ~str_c('real_opex ~ 0 + ', .)),
-			pull_size = 0L
-		) %>%
-		select(prime_mover, pull_size, formula) %>%
-		unnest(formula)
-print(as.data.frame(JoinmeCoreFormulas))
-
-AllFormulas <-
+# Likewise, put optional variables in a list, per prime_mover
+OptionalVariables <-
 	LongVariableKey %>%
 		filter(variable_type == 'optional') %>%
 		select(prime_mover, variable) %>%
 		nest(data = variable) %>%
-		mutate(
-			data = map(data, pull),
-			set_size = map_int(data, length),
-			pull_size = map(set_size, ~seq(1, .)), # a sequence from 1 to the number of items in the set
-	  ) %>%
-		unnest(pull_size) %>%
-		mutate(
-			combination = map2(data, pull_size, combn, simplify = F),
-		) %>%
-		unnest(combination) %>%
-		mutate(combination = map(combination, sort)) %>%  # makes it easier to read them later
-		select(prime_mover, pull_size, optional_variables = combination) %>%
-		left_join(CoreVariables, by = 'prime_mover') %>%
-		mutate(
-			combined_variables = map2(optional_variables, core_variables, c),
-			concat_variables = map(combined_variables, paste0, collapse = ' + '),
-			formula = map(concat_variables, ~str_c('real_opex ~ 0 + ', .))
-			) %>%
-		select(prime_mover, pull_size, formula) %>%
-		unnest(formula) %>%
-		bind_rows(JoinmeCoreFormulas) %>%
-		arrange(prime_mover, pull_size)
+		rename(optional_variables = data) %>%
+		mutate(optional_variables = map(optional_variables, pull))
+OptionalVariables
 
-AllFormulas %>%
-	count(prime_mover)
-AllFormulas %>%
-	sample_n(4) %>%
-	as.data.frame
+JoinmeSequence <-
+	# A table that ranges from 1:the number of possible add'l variables
+	OptionalVariables %>%
+		mutate(
+			low = 1, 
+			high = map_int(optional_variables, length),
+			sequence = map2(low, high, seq)
+			) %>%
+		select(prime_mover, sequence)
+JoinmeSequence
+
+RowsWhichSignifyNoOptionalVariables <-
+	# Since we'll make formulas be concatenating the core bits with the 
+	# optional bits, we'll need to make a placeholder with no optional bits
+	# that can be 'concatenated' with the core bits-- ie no optional bits, just core
+	tribble(
+		~prime_mover, ~pull_size, ~optional_variables,
+		c('CC', 'GT', 'ST'), 0L, '' 
+	) %>%
+	unnest(prime_mover)
+RowsWhichSignifyNoOptionalVariables
+
+ComponentsOfFormulasOptional <-
+	# The optional halves of formulas that will be appended to the core halves
+	OptionalVariables %>%
+		left_join(JoinmeSequence) %>%
+		unnest(sequence) %>%
+		rename(pull_size = sequence) %>%
+		mutate(
+			combination = map2(optional_variables, pull_size, 
+												 ~combn(x = .x, m = .y, FUN = paste, collapse = ' + ',
+												 			 simplify = FALSE)),
+			combination = map(combination, unlist)
+			) %>%
+		select(prime_mover, pull_size, combination) %>%
+		unnest(combination) %>%
+		rename(optional_variables = combination) %>%
+		mutate(optional_variables = str_c(' + ', optional_variables)) %>%
+		bind_rows(RowsWhichSignifyNoOptionalVariables) %>% # add above-created placeholders
+		arrange(prime_mover, pull_size, optional_variables)
+ComponentsOfFormulasOptional
+
+ComponentsOfFormulasCoreAndDv <-
+	# the core parts of the formulas, as well as the DV
+	CoreVariables %>%
+		mutate(
+			core_variables = map_chr(core_variables, paste0, collapse = ' + '),
+			core_variables_and_dv = str_c('real_opex ~ 0 + ', core_variables)
+		) %>%
+		select(prime_mover, core_variables_and_dv)
+ComponentsOfFormulasCoreAndDv
+
+AllFormulas <-
+	ComponentsOfFormulasCoreAndDv %>%
+		inner_join(ComponentsOfFormulasOptional, by = 'prime_mover') %>%
+		unite('formula', c('core_variables_and_dv', 'optional_variables'), sep = '')
 
 
 #### Train and Test the models ####
-
+# create training and testing datasets: 3 folds per cluster
 TrainTest <-
 	ClustersFit %>%
 		select(prime_mover, rowid, cls) %>%
@@ -105,6 +126,7 @@ TrainTest <-
 			Train = map2(data, train_indices, filter),
 			Test = map2(data, test_indices, filter)
 		)
+TrainTest
 
 # Fan out by joining each train/test row to all of the prime mover's formulas
 # Get fitted values and note RMSE
@@ -126,7 +148,7 @@ RMSE <-
 	PredictedValues %>%
 		unnest(c(y_fit, y)) %>%
 		mutate(residual = y_fit - y) %>%
-		group_by(prime_mover, cls, pull_size, formula, boot_num) %>%
+		group_by(prime_mover, cls, formula, boot_num) %>%  # removed: pull_size
 		summarize(rmse = sqrt(mean(residual^2))) %>%
 		ungroup
 
@@ -137,32 +159,21 @@ write_csv(RMSE, 'clean_data/all_models_rmse.csv')
 #### Start here if you simply want to read extant RMSE data ####
 RMSE <- read_csv('clean_data/all_models_rmse.csv', 
 								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i', 
-								 							pull_size = 'i', boot_num = 'i', rmse = 'd'))
+								 							boot_num = 'i', rmse = 'd'))
 
-####
-# Get the smallest RMSE; in case of tie, prefer fewer variables
-# (smaller pull_size)
+#### Model picking
 MeanRMSE <-
 	RMSE %>%
-		group_by(prime_mover, cls, pull_size, formula) %>%
-		summarize(
-			mean_rmse = mean(rmse),
-		) %>%
-		ungroup %>%
-		arrange(prime_mover, cls, mean_rmse, pull_size) %>%
-		group_by(prime_mover, cls) %>%
-		mutate(rank = row_number()) %>%
+		group_by(prime_mover, cls, formula) %>%
+		summarize(mean_rmse = mean(rmse)) %>%
 		ungroup
-		
-ChosenFormulas <-
-	MeanRMSE %>%
-		filter(rank == 1L) %>%
-		select(prime_mover, cls, pull_size, formula, mean_rmse)
-ChosenFormulas
 
-# Fit mods to entire datasets 
-# (this will allow us to then get F-tests and coefficients)
+# We'll want to find the formula, per cluster, with the lowest MeanRMSE:
+# but first, use the models fit on all the data to exclude any model that
+# has too much colinearity, and gives us missing values for any coefficient
+
 AllModsFit <-
+	# Fit now using the whole dataset in clusters, NOT train/test
 	ClustersFit %>%
 		select(prime_mover, rowid, cls) %>%
 		unnest(c(rowid, cls)) %>%
@@ -170,44 +181,98 @@ AllModsFit <-
 		group_by(prime_mover, cls) %>%
 		nest %>%
 		ungroup %>%
-		inner_join(AllFormulas, by = 'prime_mover') %>%
+		arrange(prime_mover, cls) %>%
+		left_join(AllFormulas, by = c('prime_mover')) %>%
 		mutate(
 			lm_fit = map2(formula, data, lm),
-			summary_lm_fit = map(lm_fit, summary),
-			coefficients = map(summary_lm_fit, 'coefficients'),
-			coefficients = map(coefficients, as.data.frame),
-			coefficients = map(coefficients, rownames_to_column, 'variable_name'),
+			# coefficients = map(lm_fit, coefficients),
+			# coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient'),
 		)
 
-
-# Get fitted values from all mods for verification later
-FittedValues <-
+# Exclude models with missing coefficients due to colinearity
+FunctionalModelCheck <-
 	AllModsFit %>%
-		inner_join(ChosenFormulas, by = c('prime_mover', 'cls', 'pull_size', 'formula')) %>%
 		mutate(
-			fitted_values = map(lm_fit, 'fitted.values'),
-			rowid = map(data, 'rowid'),
-			) %>%
-		select(prime_mover, cls, pull_size, formula, rowid, fitted_values) %>%
-		unnest(c(rowid, fitted_values))
-
-# Get coefficients from all mods
-AllPossibleCoefficients <-
-	AllModsFit %>%
-		select(prime_mover, cls, pull_size, formula, coefficients) %>%
+			coefficients = map(lm_fit, coefficients),
+			coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient'),
+		) %>%
+		select(prime_mover, cls, formula, coefficients) %>%
 		unnest(coefficients) %>%
-		rename(variable = variable_name, coefficient = Estimate) %>%
-		left_join(LongVariableKey, by = c('prime_mover', 'variable')) %>%
-		select(prime_mover, cls, pull_size, formula, variable, category, coefficient)
+		group_by(prime_mover, cls, formula) %>%
+		summarize(is_functional_model = sum(is.na(coefficient)) == 0L) %>%
+		ungroup
 
-write_csv(AllPossibleCoefficients, 'clean_data/all_possible_coefficients.csv')
+#
+ChosenFormulas <-
+	MeanRMSE %>%
+		inner_join(FunctionalModelCheck, by = c('prime_mover', 'cls', 'formula')) %>%
+		filter(is_functional_model) %>%
+		group_by(prime_mover, cls) %>%
+		slice(which.min(mean_rmse)) %>%
+		ungroup
+
+# sanity check- is there a functional model for each cluster?
+X <-
+	ChosenFormulas %>%
+		distinct(prime_mover, cls) %>%
+		arrange(prime_mover, cls)
+
+Y <-
+	ClustersFit %>%
+		unnest(cls) %>%
+		distinct(prime_mover, cls) %>%
+		arrange(prime_mover, cls)
+identical(X, Y)
+
+# changing variables for CC:
+# age_variable_adj and age_fixed_adj - make afa optional
+# age_obs_variable_adj and gen_adj - both of these optional
+
+# Fit mods to entire datasets 
+# (this will allow us to then get F-tests and coefficients)
+
+# sanity check on number of clusters * formulas to make sure we fit the right #
+NumClusters <-
+	ClustersFit %>%
+		select(prime_mover, num_clusters)
+NumFormulas <-
+	AllFormulas %>%
+		count(prime_mover) %>%
+		inner_join(NumClusters, by = 'prime_mover') %>%
+		mutate(subtotal = n * num_clusters)
+sum(NumFormulas$subtotal)
+
+ChosenModsFit <-
+	AllModsFit %>%
+		inner_join(ChosenFormulas)
+
+ChosenCoefficients <-
+	ChosenModsFit %>%
+		mutate(
+			coefficients = map(lm_fit, coefficients),
+			coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient')
+		) %>%
+		select(prime_mover, cls, formula, coefficients) %>%
+		unnest(coefficients) %>%
+		left_join(LongVariableKey, by = c('prime_mover', 'variable'))
+
+# Ensure each category of variable is accounted for
+ChosenCoefficients %>%
+	mutate_at(c('prime_mover', 'category'), factor) %>%
+	count(prime_mover, cls, category, .drop = F) %>%
+	spread(category, n)
+
+write_csv(ChosenCoefficients, 'clean_data/chosen_coefficients.csv')
 write_csv(ChosenFormulas, 'clean_data/chosen_formulas.csv')
-write_csv(FittedValues, 'clean_data/fitted_values.csv')
+# write_csv(FittedValues, 'clean_data/fitted_values.csv')
 write_csv(MeanRMSE, 'clean_data/mean_rmse.csv')
 
 #### Appendix: reporting goodness of fit ####
 # color scheme: water and rust
 # https://color.adobe.com/explore
+
+AllFormulas %>%
+	count(prime_mover)
 
 MeanRMSE %>%
 	count(prime_mover, cls)
@@ -215,6 +280,12 @@ MeanRMSE %>%
 JoinmeIsChosen <-
 	ChosenFormulas %>%
 		mutate(is_chosen = TRUE)
+
+MeanRMSE %>%
+	left_join(JoinmeIsChosen) %>%
+	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+	
+
 
 MeanRMSE %>%
 	filter(prime_mover == 'CC') %>%
@@ -286,26 +357,57 @@ MeanRMSE %>%
 
 
 #### Appendix: export model specifications ####
-ForExportAllCoefficients <-
-	AllModsFit %>%
-		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
-		arrange(prime_mover, cls, pull_size, formula) %>%
-		mutate(tidy = map(lm_fit, broom::tidy)) %>%
-		select(-lm_fit) %>%
-		unnest(tidy)
-#
-ForExportModelGoodnessOfFit <-
-	AllModsFit %>%
-		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
-		arrange(prime_mover, cls, pull_size, formula) %>%
-		mutate(glance = map(lm_fit, broom::glance)) %>%
-		select(-lm_fit) %>%
-		unnest(glance)
+JoinmeIsChosen <-
+	ChosenFormulas %>%
+		select(prime_mover, cls, pull_size, formula) %>%
+		mutate(is_chosen = TRUE)
+
+AllModsFit %>%
+	head %>%
+	select(prime_mover, cls, pull_size, formula, lm_fit) %>%
+	arrange(prime_mover, cls, pull_size, formula) %>%
+	mutate(
+		summary = map(lm_fit, summary),
+		summary = map(summary, tidy)
+	) %>%
+	select(-lm_fit) %>%
+	unnest(summary)
+	print
+
 #	
-write_csv(ForExportAllCoefficients, 'results/all_coefficients.csv')
-write_csv(ForExportModelGoodnessOfFit, 'results/model_goodness_of_fit.csv')
-	
-	
-	
-	
-	
+lm(chickwts) %>%
+	summary %>%
+	tidy
+#
+
+# ForExportModelGoodnessOfFit <-
+# 	AllModsFit %>%
+# 		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
+# 		arrange(prime_mover, cls, pull_size, formula) %>%
+# 		mutate(glance = map(lm_fit, broom::glance)) %>%
+# 		select(-lm_fit) %>%
+# 		unnest(glance)
+#	
+# write_csv(ForExportAllCoefficients, 'results/all_coefficients.csv')
+# write_csv(ForExportModelGoodnessOfFit, 'results/model_goodness_of_fit.csv')
+
+ForExportAnova <-	
+	AllModsFit %>%
+		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
+		left_join(JoinmeIsChosen) %>%
+		mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+		arrange(prime_mover, cls, pull_size, formula) %>%
+		mutate(
+			anova = map(lm_fit, anova),
+			anova = map(anova, as.data.frame),
+			anova = map(anova, rownames_to_column, 'variable')) %>%
+		select(-lm_fit) %>%
+		unnest(anova)
+ForExportAnova
+write_csv(ForExportAnova, 'results/anova.csv')
+
+
+AllPossibleCoefficients %>%
+	left_join(JoinmeIsChosen, by = c("prime_mover", "cls", "pull_size", "formula")) %>%
+	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+	write_csv('results/all_coefficients.csv')

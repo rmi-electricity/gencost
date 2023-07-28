@@ -1,4 +1,4 @@
-﻿variable,category,st_legacy,st,cc_legacy,cc,gt_legacy,gt,formula
+variable,category,st_legacy,st,cc_legacy,cc,gt_legacy,gt,formula
 capacity_adj,fixed,x,core,x,core,x,core,wage_scale * capacity_mw
 gas_fixed_adj,fixed,x,optional,,unused,,unused,natural_gas_fraction * wage_scale * capacity_mw
 oil_fixed_adj,fixed,x,optional,,unused,x,optional,petroleum_fraction * wage_scale * capacity_mw
@@ -6,7 +6,7 @@ high_median_CF_fixed_adj,fixed,x,unused,x,unused,,unused,high_median_CF * wage_s
 mid_median_CF_fixed_adj,fixed,x,unused,x,unused,x,unused,mid_median_CF * wage_scale * capacity_mw
 low_median_CF_fixed_adj,fixed,,unused,x,unused,x,unused,low_median_CF * wage_scale * capacity_mw
 median_CF_fixed_adj,fixed,x,unused,x,unused,x,unused,median_CF * wage_scale * capacity_mw
-age_fixed_adj,fixed,,core,,core,x,core,age_relative_to_prime_avg * wage_scale * capacity_mw
+age_fixed_adj,fixed,,core,,optional,x,core,age_relative_to_prime_avg * wage_scale * capacity_mw
 gas_age_fixed_adj,fixed,x,optional,,unused,,unused,natural_gas_fraction * age_relative_to_prime_avg * wage_scale * capacity_mw
 oil_age_fixed_adj,fixed,,unused,x,optional,x,optional,petroleum_fraction * age_relative_to_prime_avg * wage_scale * capacity_mw
 age_obs_fixed_adj,fixed,,unused,,unused,x,core,age_of_observation * wage_scale * capacity_mw
@@ -16,7 +16,7 @@ CHP_fixed_adj,fixed,,unused,x,optional,,unused,associated_combined_heat_power * 
 duct_burners_fixed_adj,fixed,,unused,x,optional,,unused,duct_burners * wage_scale * capacity_mw
 pulverized_coal_fixed_adj,fixed,x,optional,,unused,,unused,pulverized_coal_tech * wage_scale * capacity_mw
 supercritical_fixed_adj,fixed,x,optional,,unused,,unused,supercritical_tech * wage_scale * capacity_mw
-gen_adj,variable,x,core,x,core,x,core,wage_scale * gross_generation_mwh
+gen_adj,variable,x,core,x,optional,x,core,wage_scale * gross_generation_mwh
 oil_variable_adj,variable,,unused,,unused,x,optional,petroleum_fraction * wage_scale * gross_generation_mwh
 age_variable_adj,variable,x,core,x,core,x,core,age_relative_to_prime_avg * wage_scale * gross_generation_mwh
 gas_age_variable_adj,variable,x,optional,,unused,,unused,natural_gas_fraction * age_relative_to_prime_avg * wage_scale * gross_generation_mwh
@@ -56,30 +56,3 @@ bypass_hrsg_fixed,capex,,unused,x,core,,unused,bypass_heat_recovery * capacity_m
 pulverized_coal_fixed,capex,x,optional,,unused,,unused,pulverized_coal_tech * capacity_mw
 other_comb_fixed,capex,x,optional,,unused,,unused,other_combustion_tech * capacity_mw
 ultrasupercritical_fixed,capex,x,optional,,unused,,unused,ultrasupercritical_tech_tech * capacity_mw
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,
-,,,,,,,,

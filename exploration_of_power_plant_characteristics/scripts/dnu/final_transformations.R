@@ -12,9 +12,100 @@ setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
 	filter(prime_mover %in% c('CC', 'GT', 'ST'))
 HistoricalData <- arrow::read_parquet('input_data/historic_data_gen_level.parquet')
-EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
+
 VariableKey <- read_csv('input_data/regression_variables.csv', col_types = c('variable' = 'c', .default = 'f'))
 
+
+AllPossibleCoefficients <- read_csv('clean_data/all_possible_coefficients.csv', col_types = c('cls' = 'i', pull_size = 'i', coefficient = 'd', .default = 'c'))
+ClustersFit <- readRDS('clean_data/clusters_fit.RDS')
+MapHistoricalToClusters <- readRDS('clean_data/map_historical_to_clusters.RDS')
+ChosenFormulas <- read_csv('clean_data/chosen_formulas.csv')
+FittedValues <- read_csv('clean_data/fitted_values.csv', col_types = c(
+	'prime_mover' = 'c', 'formula' = 'c', 'cls' = 'i', 'pull_size' = 'i', 
+	'rowid' = 'i', 'fitted_values' = 'd'))
+
+ChosenCoefficients <-
+	AllPossibleCoefficients %>%
+		semi_join(ChosenFormulas, by = c('prime_mover', 'cls', 'pull_size', 'formula'))
+
+# verify that the coefficients and the fitted values correspond to the same
+# formulas.
+xx <-
+ChosenCoefficients %>%
+	distinct(prime_mover, cls, formula) %>%
+	arrange(prime_mover, cls, formula) %>%
+	pull(formula)
+yy <-
+FittedValues %>%
+	distinct(prime_mover, cls, formula) %>%
+	arrange(prime_mover, cls, formula) %>%
+	pull(formula)
+all(xx == yy)
+
+MapCleanedDataBySublantToClusters <-
+	ClustersFit %>%
+		select(rowid, cls) %>%
+		unnest(c(rowid, cls))
+
+#### clean_variable_key ####
+FilteredVariableKey <-
+	VariableKey %>%
+	filter(category %in% c('fixed', 'variable', 'start'))
+
+LongVariableKey <-
+	bind_rows(
+		FilteredVariableKey %>%
+			select(variable, variable_type = st, category) %>%
+			mutate(prime_mover = 'ST'),
+		FilteredVariableKey %>%
+			select(variable, variable_type = cc, category) %>%
+			mutate(prime_mover = 'CC'),
+		FilteredVariableKey %>%
+			select(variable, variable_type = gt, category) %>%
+			mutate(prime_mover = 'GT')
+	) %>%
+	select(prime_mover, variable, category, variable_type)
+
+#### Define variables ####
+
+fixed_cols <- c(
+	"capacity_adj",
+	"gas_fixed_adj",
+	"oil_fixed_adj",
+	"CHP_fixed_adj",
+	"pollution_fixed_adj",
+	"pulverized_coal_fixed_adj",
+	"duct_burners_fixed_adj",
+	"supercritical_fixed_adj",
+	"age_fixed_adj",
+	"oil_age_fixed_adj",
+	"gas_pollution_fixed_adj"
+)
+
+variable_cols <- c(
+	"gen_adj",
+	"oil_variable_adj",
+	"pollution_variable_adj",
+	"age_variable_adj",
+	"fluidized_bed_variable_adj",
+	"CHP_variable_adj",
+	"supercritical_variable_adj",
+	"gas_age_variable_adj",
+	"duct_burners_variable_adj",
+	"oil_age_variable_adj"
+)
+
+start_cols <- c("starts_adj", "gas_starts_adj", "oil_starts_adj")
+
+# MapVariableToVariableType <-
+# 	# A table that allows us to map variable name to variable type
+# 	tribble(
+# 		~variable_type, ~variable,
+# 		'variable', variable_cols,
+# 		'fixed', fixed_cols,
+# 		'start', start_cols
+# 	) %>%
+# 	unnest(variable)
 
 #### Define functions ####
 
@@ -184,56 +275,253 @@ create_consolidated_regression_filter <- function(X){
 		)
 }
 
+check_are_columns_present <- function(X){
+	all(c(fixed_cols, variable_cols, start_cols, 'prime_mover') %in% colnames(X))
+}
 
-#### Clean_variable_key ####
+get_variables_with_variance <- function(X){
+	sapply(X, var) %>%
+		enframe('variable', 'variance') %>%
+		filter(!is.na(variance), variance > 0) %>%
+		pull(variable)
+}
 
-FilteredVariableKey <-
-	VariableKey %>%
-	filter(category %in% c('fixed', 'variable', 'start'))
-
-LongVariableKey <-
-	bind_rows(
-		FilteredVariableKey %>%
-			select(variable, variable_type = st, category) %>%
-			mutate(prime_mover = 'ST'),
-		FilteredVariableKey %>%
-			select(variable, variable_type = cc, category) %>%
-			mutate(prime_mover = 'CC'),
-		FilteredVariableKey %>%
-			select(variable, variable_type = gt, category) %>%
-			mutate(prime_mover = 'GT')
-	) %>%
-	select(prime_mover, variable, category, variable_type)
+define_formulas <- function(X){
+	# This can be redefined later- the important thing is that it returns a 
+	# tibble, mapping a prime_mover to a (string) formula.
+	# Currently, it just groups by prime_mover, pulls any variable with variance,
+	# and concatenates it into a formula, predicting real_opex 
+	# without an intercept.
 	
+	consolidated_variables <- c(fixed_cols, variable_cols, start_cols)
+	
+	X %>%
+		select(prime_mover, all_of(consolidated_variables)) %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		mutate(
+			variables = map(data, get_variables_with_variance),
+			variables_concat = map_chr(variables, paste, collapse = ' + '),
+			formula = str_c('real_opex ~ 0 + ', variables_concat)
+		) %>%
+		select(prime_mover, formula)
+}
 
-#### Transform data and save to disk ####
+get_coefficients <- function(X, Formulas){
+	# Nest the input data around prime_mover; 
+	# join to table mapping prime_mover to formula.
+	# Fit linear model taking advantage of the fact that lm() will assume that the
+	# first column selected (real_opex here) is the dependent variable;
+	# Extract coefficients
+	X %>%
+		group_by(prime_mover) %>%
+		nest %>%
+		ungroup %>%
+		inner_join(Formulas, by = 'prime_mover') %>%
+		mutate(
+			lm_fit = map2(formula, data, ~lm(formula = .x, data = .y)),
+			coefficients = map(lm_fit, 'coefficients'),
+			coefficients = map(coefficients, as.data.frame),
+			coefficients = map(coefficients, rownames_to_column, var = 'variable'),
+		) %>%
+		select(prime_mover, coefficients) %>%
+		unnest(coefficients) %>%
+		rename(coefficient = `.x[[i]]`)
+}
 
-variables_to_use <-
-	LongVariableKey %>%
-		filter(variable_type != 'unused') %>%
-		distinct(variable) %>%
-		arrange(variable) %>%
-		pull(variable) %>%
-		c('prime_mover', 'rowid', .)
+#### Run script ####
+variables_to_select <- unique(ChosenCoefficients$variable)
 
 CleanedDataBySubplant <-
 	DataBySubplant %>%
 	create_independent_variables %>%
 	create_consolidated_regression_filter %>%
-	filter(consolidated_regression_filter) %>%
-	select(all_of(variables_to_use), real_opex)  # Only this dataset contains 'real_opex'
+	filter(consolidated_regression_filter)
+
+# Verify the logic using full data
+
+SummedForVerification <-
+	CleanedDataBySubplant %>%
+	inner_join(MapCleanedDataBySublantToClusters, by = 'rowid') %>%
+	select(rowid, cls, prime_mover, all_of(variables_to_select)) %>%
+	gather(variable, value, -rowid, -cls, -prime_mover) %>%
+	inner_join(ChosenCoefficients, by = c('prime_mover', 'variable', 'cls')) %>%
+	mutate(value_x_coefficient = value * coefficient) %>%
+	group_by(rowid, cls, prime_mover, category) %>%
+	summarize(summed_value_x_coefficient = sum(value_x_coefficient)) %>%
+	ungroup %>%
+	spread(category, summed_value_x_coefficient) %>%
+	mutate_at(c('fixed', 'start', 'variable'), replace_na, 0.0)
+
+CleanedDataBySubplant %>%
+	select(rowid, capacity_mw, gross_generation_mwh, generator_starts) %>%
+	inner_join(SummedForVerification) %>%
+	mutate(
+			fom = fixed / (capacity_mw * 1000),
+			vom = variable / gross_generation_mwh,
+			som = start / (capacity_mw * generator_starts * 1000),
+			# == fitted_real_opex
+			calculated_real_opex = (fom * capacity_mw * 1000) +
+				(vom * gross_generation_mwh) +
+				(som * generator_starts * capacity_mw * 1000)
+		) %>%
+	select(rowid, vom, fom, som) %>%
+	inner_join
+	print
+	inner_join(FittedValues) %>%
+	mutate(is_same = calculated_real_opex == fitted_values) %>%
+	count(prime_mover, cls, is_same)
+#	
+	
+
+
 
 CleanedHistoricalData <-
 	HistoricalData %>%
-	create_independent_variables %>%
-	select(all_of(variables_to_use))
+	create_independent_variables
 
-CleanedEternallyPresent <-
-	EternallyPresent %>%
-	create_independent_variables %>%
-	select(all_of(variables_to_use))
+# check_are_columns_present(CleanedDataBySubplant)
 
-write_csv(CleanedDataBySubplant, 'clean_data/cleaned_data_by_subplant_data.csv')
+# By cluster, join data to coefficients
+
+
+TempLong <-
+	MapHistoricalToClusters %>%
+		unnest(c(rowid, cls)) %>%
+		inner_join(CleanedHistoricalData, by = c("prime_mover", "rowid")) %>% 
+		select(prime_mover, rowid, cls, all_of(variables_to_select)) %>%
+		gather(variable, value, -rowid, -prime_mover, -cls) %>%
+		arrange(rowid, variable)
+
+TempJoined <-
+	TempLong %>%
+		# filter(chunk_num == 1L) %>%
+		inner_join(ChosenCoefficients, by = c('prime_mover', 'cls', 'variable')) %>%
+		mutate(value_times_coefficient = value * coefficient)
+
+TempJoined %>%
+	group_by(rowid, formula, category) %>%
+	summarize(summed_value_times_coefficient = sum(value_times_coefficient)) %>%
+	ungroup %>%
+	spread(category, summed_value_times_coefficient)
+#
+
+
+
+	MapHistoricalToClusters %>%
+		unnest(c(rowid, cls)) %>%
+		inner_join(MapToChunk, by = c('prime_mover', 'cls'))
+	
+		# filter(chunk == )
+		print
+		filter(my_split == my_split_var) %>%
+		gather(variable, value, -rowid, -prime_mover, -cls, -my_split) %>%
+		inner_join(AllPossibleCoefficients, by = c('prime_mover', 'cls', 'variable')) %>%
+		mutate(value_times_coefficient = value * coefficient) %>%
+		group_by(prime_mover, cls, pull_size, formula, category) %>%
+		summarize(summed_value_times_coefficient = sum(value_times_coefficient)) %>%
+		ungroup
+
+ArithmaticPerClusterOthers
+	
+		
+HistoricalValuesAndCoefsCC <- 
+	join_clustered_historical_data_to_formulas(prime_mover_var = 'CC')
+HistoricalValuesAndCoefsGT <- 
+	join_clustered_historical_data_to_formulas(prime_mover_var = 'GT')
+HistoricalValuesAndCoefsST <- 
+	join_clustered_historical_data_to_formulas(prime_mover_var = 'ST')
+
+
+JoinmeGT <-
+	MapHistoricalToClusters %>%
+		filter(prime_mover == 'GT') %>%
+		unnest(c(rowid, cls)) %>%
+		left_join(CleanedHistoricalData, by = c("prime_mover", "rowid")) %>%
+		select(rowid, prime_mover, cls, all_of(variables_to_select)) %>%
+		gather(variable, value, -rowid, -prime_mover, -cls) %>%
+		inner_join(AllPossibleCoefficients, by = c('prime_mover', 'cls', 'variable'))
+JoinmeST <-
+	MapHistoricalToClusters %>%
+		filter(prime_mover == 'ST') %>%
+		unnest(c(rowid, cls)) %>%
+		left_join(CleanedHistoricalData, by = c("prime_mover", "rowid")) %>%
+		select(rowid, prime_mover, cls, all_of(variables_to_select)) %>%
+		gather(variable, value, -rowid, -prime_mover, -cls) %>%
+		inner_join(AllPossibleCoefficients, by = c('prime_mover', 'cls', 'variable'))
+
+#
+
+
+
+Formulas <- define_formulas(CleanedDataBySubplant)
+Coefficients <- get_coefficients(CleanedDataBySubplant, Formulas)
+
+SummedDataByVariableType <-
+	CleanedDataBySubplant %>%
+	# rowid serves as UID but we need prime_mover to join with coefficients
+	select(rowid, prime_mover, all_of(variable_cols), 
+				 all_of(fixed_cols), all_of(start_cols)
+	) %>%
+	gather(variable, value, -rowid, -prime_mover) %>%
+	arrange(rowid, variable) %>%
+	inner_join(Coefficients, by = c('prime_mover', 'variable')) %>%
+	mutate(value_times_coefficient = value * coefficient) %>%
+	inner_join(MapVariableToVariableType, by = 'variable') %>%
+	group_by(rowid, variable_type) %>%
+	summarize(sum = sum(value_times_coefficient)) %>%
+	ungroup %>%
+	spread(variable_type, sum)
+
+Coefficients %>%
+	filter(is.na(coefficient))
+
+CapacityGeneratorStartsGrossGeneration <-
+	CleanedDataBySubplant %>%
+	select(rowid, capacity_mw, generator_starts, gross_generation_mwh)
+
+Result <-
+	SummedDataByVariableType %>%
+	inner_join(CapacityGeneratorStartsGrossGeneration, by = c('rowid')) %>%
+	mutate(
+		fom = fixed / (capacity_mw * 1000),
+		vom = variable / gross_generation_mwh,
+		som = start / (capacity_mw * generator_starts * 1000),
+		# == fitted_real_opex
+		calculated_real_opex = (fom * capacity_mw * 1000) + 
+			(vom * gross_generation_mwh) + 
+			(som * generator_starts * capacity_mw * 1000)
+	)
+
+Result %>%
+	skim
+
+
+FitRealOpex <-
+	CleanedDataBySubplant	%>%
+	group_by(prime_mover) %>%
+	nest %>%
+	ungroup %>%
+	inner_join(Formulas, by = 'prime_mover') %>%
+	mutate(
+		lm_fit = map2(formula, data, ~lm(formula = .x, data = .y)),
+		fit_real_opex = map(lm_fit, 'fitted.values'),
+		rowid = map(data, 'rowid')
+	) %>%
+	select(rowid, fit_real_opex) %>%
+	unnest(everything())
+
+Result %>%
+	select(rowid, calculated_real_opex) %>%
+	full_join(FitRealOpex) %>%
+	skim
+# filter(!is.na(calculated_real_opex)) %>%
+
+CleanedDataBySubplant %>%
+	select(rowid, prime_mover, all_of(variable_cols), all_of(fixed_cols), 
+				 all_of(start_cols))
+
+write_csv(CleanedDataBySubplant, 'clean_data/cleaned_data_by_subplant.csv')
 write_csv(CleanedHistoricalData, 'clean_data/cleaned_historical_data.csv')
-write_csv(CleanedEternallyPresent, 'clean_data/cleaned_eternally_present.csv')
 write_csv(LongVariableKey, 'clean_data/long_variable_key.csv')
