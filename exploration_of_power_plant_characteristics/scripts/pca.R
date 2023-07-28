@@ -1,7 +1,20 @@
-# Account for colinearity by fitting PCA components before the clustering
-	# Note that in this script we are clustering on a subset of the regression 
-	# variables (exclude real_opex);
+# GenCost workflow
+# 2. PCA
+# Andrew Bartnof, for RMI, 2023
+# abartnof.contractor@rmi.org
 
+# We want to fit a clustering model on these data, but first, we have to
+# account for colinearity in the data. If we represent these data
+# with PCA models, then we don't have the same issue. 
+# In order to decide how many components we'll use, we'll resample the data
+# and apply parallel tests (psych package), and see, in general, if these
+# parallel tests tend to agree on how many components would be parsimoneous.
+# Also note that we'll scale the PCA scores before clustering; use the 
+# DataBySubplant PCA score mean and sd in order to scale the EternallyPresent
+# and HistoricalData PCA scores, so that our clustering models are all 
+# fit to the same data
+
+#### Import packages ####
 library(tidyverse)
 library(skimr)
 library(psych)
@@ -70,8 +83,7 @@ NestedCandidateDataBySubplant <-
 		) %>%
 		select(prime_mover, rowid, data)
 
-# Resample data;
-# Find number of PCA components
+#### Resample data to find number of PCA components ####
 NestedParallelTests <-
 	NestedCandidateDataBySubplant %>%
 		expand_grid(boot_num = seq(1, 100)) %>%
@@ -152,24 +164,6 @@ get_pca_scores <- function(X){
 HistoricalDataPcaScores <- get_pca_scores(CleanedHistoricalData)
 EternallyPresentPcaScores <- get_pca_scores(CleanedEternallyPresent)
 
-# HistoricalDataPcaScores <-
-# 	CleanedHistoricalData %>%
-# 		group_by(prime_mover) %>%
-# 		nest %>%
-# 		ungroup %>%
-# 		inner_join(VariablesToSelect, by = 'prime_mover') %>%
-# 		mutate(
-# 			rowid = map(data, select, 'rowid'),
-# 			data = map2(data, variables, select)) %>%
-# 		select(prime_mover, rowid, new_data = data) %>%
-# 		left_join(JoinablePcaMods, by = 'prime_mover') %>%
-# 		mutate(
-# 			scores = pmap(
-# 				list(object = pca_fit, data = new_data, old.data = data), 
-# 				predict.psych
-# 			)
-# 		) %>%
-# 		select(prime_mover, rowid, scores)
 	
 #### Get scores ####
 	# note how much variance was explained by each component for each prime mover 
@@ -248,25 +242,9 @@ get_weighted_scores <- function(X){
 WeightedHistoricalDataScores <- get_weighted_scores(HistoricalDataPcaScores)
 WeightedEternallyPresentScores <- get_weighted_scores(EternallyPresentPcaScores)
 
-# WeightedHistoricalDataScores <-
-# 	HistoricalDataPcaScores %>%
-# 		mutate(scores = map(scores, as.data.frame)) %>%
-# 		unnest(c(rowid, scores)) %>%
-# 		gather(component, score, -prime_mover, -rowid) %>%
-# 		left_join(MeansAndSds, by = c('prime_mover', 'component')) %>%
-# 		mutate(scaled_score = (score - mean)/ sd) %>%
-# 		left_join(VarianceExplainedPerComponent, by = c('prime_mover', 'component')) %>%
-# 		mutate(weighted_scaled_score = variance_explained * scaled_score) %>%
-# 		select(prime_mover, component, rowid, weighted_scaled_score) %>%
-# 		spread(component, weighted_scaled_score)
-
 WeightedDataBySubplantScores %>%
 	write_csv('clean_data/weighted_data_by_subplant_scores.csv')
 WeightedHistoricalDataScores %>%
 	write_csv('clean_data/weighted_historical_data_scores.csv')
 WeightedEternallyPresentScores %>%
 	write_csv('clean_data/weighted_eternally_present_scores.csv')
-# NumPcaComponents %>%
-# 	write_csv('clean_data/num_pca_components.csv')
-# write_csv(VarianceExplainedPerComponent, 'clean_data/variance_explained_per_component.csv')
-

@@ -1,3 +1,12 @@
+# GenCost workflow
+# 5. Final Transformations
+# Andrew Bartnof, for RMI, 2023
+
+# Combine the clustered data with the modelled coefficients in order to 
+# calculate our outcome variables, modelling power plant costs.
+
+#### Import libraries ####
+
 library(tidyverse)
 library(skimr)
 library(conflicted)
@@ -5,9 +14,11 @@ library(arrow)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
 #### Load data ####
+
+setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
+
 # Raw datasets
 DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet')
 EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
@@ -41,51 +52,13 @@ MiscVariablesDataBySubplant <- get_misc_variables(DataBySubplant)
 MiscVariablesHistoricalData <- get_misc_variables(HistoricalData)
 MiscVariablesEternallyPresent <- get_misc_variables(EternallyPresent)
 
-# JoinmeCoefficients <-
-# 	AllPossibleCoefficients %>%
-# 		inner_join(ChosenFormulas, by = c('prime_mover', 'cls', 'pull_size', 'formula'))
-
-# get_vom_etc <- function(XCls, XCleaned, XMisc){
-# 	# Get vom fom som and om_per_mwh
-# 	# These arguments take, eg, 
-# 	# ClusteredHistoricalData, CleanedHistoricalData, MiscVariablesHistoricalData
-# 	# Collect a way to map rowid to prime_mover and cluster number
-# 	XCls %>%
-# 		unnest(c(rowid, cls)) %>%
-# 		select(prime_mover, rowid, cls) %>%
-# 		# Join the full dataset based on prime_mover and row_id
-# 		inner_join(XCleaned, by = c('prime_mover', 'rowid')) %>%
-# 		pivot_longer(
-# 			cols = !c(prime_mover, rowid, cls), 
-# 			names_to = 'variable', 
-# 			values_to = 'value'
-# 		) %>%
-# 		# Once the data is in long format, inner join to the relevant variables
-# 		# for the models we've chosen
-# 		inner_join(ChosenCoefficients, by = c('prime_mover', 'cls', 'variable')) %>%
-# 		mutate(value_x_coef = value * coefficient) %>%
-# 		group_by(rowid, prime_mover, cls, category) %>%
-# 		summarize(sum_value_x_coef = sum(value_x_coef)) %>%
-# 		ungroup %>%
-# 		spread(category, sum_value_x_coef) %>%
-# 		# Add the table that collects capacity_mw, etc
-# 		inner_join(XMisc, by = 'rowid') %>%
-# 		mutate(
-# 			fom = fixed / (capacity_mw * 1000),
-# 			vom = variable / gross_generation_mwh,
-# 			som = start / (capacity_mw * generator_starts * 1000),
-# 			om_per_mwh = (
-# 				(som * capacity_mw * generator_starts * 1000 + fom * capacity_mw * 1000) / gross_generation_mwh)
-# 			+ vom
-# 		) %>%
-# 		select(rowid, cls, prime_mover, fom, vom, som, om_per_mwh)
-# }
-
 get_vom_etc <- function(XCls, XCleaned, XMisc){
 	# Get vom fom som and om_per_mwh
-	# These arguments take, eg,
-	# ClusteredHistoricalData, CleanedHistoricalData, MiscVariablesHistoricalData
-	# Collect a way to map rowid to prime_mover and cluster number
+	# Note that vom, fom, and som are limited here to not exceed the central 80% of the values, per cluster; any value below 10% or higher than 90% is floored or ceilinged, respectively.
+	# XCls: a table that assigns rowid to cluster
+	# XCleaned: a table that's been cleaned in the initial_transformations.R script
+	# XMisc: a table that has invariate values that we'll need from the raw datasets
+	# for example, you could input the following tables: ClusteredHistoricalData, CleanedHistoricalData, MiscVariablesHistoricalData
 	CTE <-
 		XCls %>%
 			unnest(c(rowid, cls)) %>%

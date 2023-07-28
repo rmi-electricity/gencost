@@ -1,9 +1,17 @@
-# let's go with 3 for STs and GTs, and 4 for CCs
-# NB- fiddle with this now
+# GenCost workflow
+# 3. Clusters
+# Andrew Bartnof, for RMI, 2023
+
+# Fit the PCA-scored data, broken down by prime_mover, with clusters.
+# Previously, this script was more of an EDA of what would happen with
+# different numbers of clusters; it has been streamlined to use
+# 3 clusters for STs and GTs, and 4 for CCs
+
+
+#### Import libraries ####
 
 library(tidyverse)
 library(skimr)
-# library(psych)
 library(conflicted)
 library(flexclust)
 library(arrow)
@@ -11,13 +19,11 @@ conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 conflicted::conflict_prefer('all_of', 'dplyr')
-
 set.seed(1)	
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
 #### Load data ####
-# CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv')
-# CleanedHistoricalData <- read_csv('clean_data/cleaned_historical_data.csv')
+
+setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
 WeightedDataBySubplantScores <- read_csv('clean_data/weighted_data_by_subplant_scores.csv')
 WeightedHistoricalDataScores <- read_csv('clean_data/weighted_historical_data_scores.csv')
@@ -95,21 +101,8 @@ get_clustered_data <- function(X){
 ClusteredHistoricalData <- get_clustered_data(WeightedHistoricalDataScores)
 ClusteredEternallyPresent <- get_clustered_data(WeightedEternallyPresentScores)
 
-# ClusteredHistoricalData <-
-# 	WeightedHistoricalDataScores %>%
-# 			group_by(prime_mover) %>%
-# 			nest %>%
-# 			ungroup %>%
-# 			mutate(
-# 				rowid = map(data, select, 'rowid'),
-# 				data = map(data, select, -'rowid'),
-# 				variables = map(data, get_variables_with_variance),
-# 				data = map2(data, variables, select)
-# 			) %>%
-# 			select(prime_mover, rowid, data) %>%
-# 			left_join(NestedCls, by = 'prime_mover') %>%
-# 			mutate(cls = map2(cls_fit_flexclust, data, predict)) %>%
-# 			select(prime_mover, cls)
+
+#### Save data to disk #### 
 
 saveRDS(object = ClustersFit, file = 'clean_data/clusters_fit.RDS')
 saveRDS(object = ClusteredHistoricalData, file = 'clean_data/clustered_historical_data.RDS')
@@ -120,7 +113,7 @@ ClustersFit %>%
 	unnest(everything()) %>%
 	write_csv('clean_data/clustered_data_by_subplant.csv')
 
-# End here #
+#### End here^ #####
 # GOF for competing models
 
 ResampledClustering <-

@@ -1,4 +1,19 @@
-# Regression models
+# GenCost workflow
+# 4. Regressions
+# Andrew Bartnof, for RMI, 2023
+
+# We'll want linear regression models, one per cluster, to predict real_opex.
+# We know which variables are necessary, and which should not be used; 
+# for each prime_mover, for each cluster, iterate through all 
+# possible models that contain all necessary variables, and may contain 
+# any number of optional variables, to find the formula with the best
+# fit. Note that we'll use training and testing sets to ensure we don't
+# overfit on the data.
+# This script is a bit computationally-expensive, because of how many
+# models it compares.
+
+
+#### Import libraries ####
 library(tidyverse)
 library(skimr)
 library(broom)
@@ -9,8 +24,11 @@ library(gtools)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
-
 set.seed(1)	
+
+
+#### Load data ####
+
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
 ClustersFit <- readRDS('clean_data/clusters_fit.RDS')
@@ -107,6 +125,9 @@ AllFormulas <-
 
 #### Train and Test the models ####
 # create training and testing datasets: 3 folds per cluster
+# Pls note that the following few steps are computationally expensive, and if they have 
+# been run before, you can simply load the RMSE results that are saved
+# to disk a few lines down, and continue from there!
 TrainTest <-
 	ClustersFit %>%
 		select(prime_mover, rowid, cls) %>%
@@ -161,7 +182,8 @@ RMSE <- read_csv('clean_data/all_models_rmse.csv',
 								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i', 
 								 							boot_num = 'i', rmse = 'd'))
 
-#### Model picking
+# Aggregate the RMSE over each of the CV folds, so that we have a mean
+# RMSE value per formula, per prime_mover, per cluster
 MeanRMSE <-
 	RMSE %>%
 		group_by(prime_mover, cls, formula) %>%
@@ -171,6 +193,8 @@ MeanRMSE <-
 # We'll want to find the formula, per cluster, with the lowest MeanRMSE:
 # but first, use the models fit on all the data to exclude any model that
 # has too much colinearity, and gives us missing values for any coefficient
+# This means that ultimately, we'll find the lowest RMSE per cluster from the MeanRMSE table ASSUMING the formula doesn't break due to colinearity
+# when it's fit to the entire dataset:
 
 AllModsFit <-
 	# Fit now using the whole dataset in clusters, NOT train/test
@@ -224,13 +248,6 @@ Y <-
 		arrange(prime_mover, cls)
 identical(X, Y)
 
-# changing variables for CC:
-# age_variable_adj and age_fixed_adj - make afa optional
-# age_obs_variable_adj and gen_adj - both of these optional
-
-# Fit mods to entire datasets 
-# (this will allow us to then get F-tests and coefficients)
-
 # sanity check on number of clusters * formulas to make sure we fit the right #
 NumClusters <-
 	ClustersFit %>%
@@ -264,10 +281,9 @@ ChosenCoefficients %>%
 
 write_csv(ChosenCoefficients, 'clean_data/chosen_coefficients.csv')
 write_csv(ChosenFormulas, 'clean_data/chosen_formulas.csv')
-# write_csv(FittedValues, 'clean_data/fitted_values.csv')
 write_csv(MeanRMSE, 'clean_data/mean_rmse.csv')
 
-#### Appendix: reporting goodness of fit ####
+#### End Here^. Appendix: reporting goodness of fit ####
 # color scheme: water and rust
 # https://color.adobe.com/explore
 
@@ -374,22 +390,6 @@ AllModsFit %>%
 	unnest(summary)
 	print
 
-#	
-lm(chickwts) %>%
-	summary %>%
-	tidy
-#
-
-# ForExportModelGoodnessOfFit <-
-# 	AllModsFit %>%
-# 		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
-# 		arrange(prime_mover, cls, pull_size, formula) %>%
-# 		mutate(glance = map(lm_fit, broom::glance)) %>%
-# 		select(-lm_fit) %>%
-# 		unnest(glance)
-#	
-# write_csv(ForExportAllCoefficients, 'results/all_coefficients.csv')
-# write_csv(ForExportModelGoodnessOfFit, 'results/model_goodness_of_fit.csv')
 
 ForExportAnova <-	
 	AllModsFit %>%
@@ -405,9 +405,3 @@ ForExportAnova <-
 		unnest(anova)
 ForExportAnova
 write_csv(ForExportAnova, 'results/anova.csv')
-
-
-AllPossibleCoefficients %>%
-	left_join(JoinmeIsChosen, by = c("prime_mover", "cls", "pull_size", "formula")) %>%
-	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
-	write_csv('results/all_coefficients.csv')

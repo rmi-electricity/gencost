@@ -1,14 +1,23 @@
+# GenCost workflow
+# 1: Initial Transformations
+# Andrew Bartnof, for RMI, 2023
+# abartnof.contractor@rmi.org
+
+# Perform initial data transformations that will allow this data 
+# to be clustered and ultimately fed into linear regression models.
+
+#### Import packages ####
 library(tidyverse)
 library(skimr)
 library(conflicted)
 library(arrow)
-# library(flexclust)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
+
+#### Load data ####
 setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
-#### load data ####
 DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
 	filter(prime_mover %in% c('CC', 'GT', 'ST'))
 HistoricalData <- arrow::read_parquet('input_data/historic_data_gen_level.parquet')
@@ -27,12 +36,6 @@ create_independent_variables <- function(X){
 	X %>%
 		rowid_to_column %>%
 		mutate(
-			# Now we turn to the process of regressing the FERC data to estimate capex and opex coefficients.
-			# Start with (mostly) nominal, unadjusted variables for total capital cost per kW regression. The reason for this
-			# is accounting - the original costs are reported as the sum of nominal costs in various years. However, as maintenance
-			# capex may reasonably be expected to be constant in annual, real, state-adjusted dollars, and as cumulative
-			# maintenance capex could represent some or substantially all the annual change in original costs, we do use a cumulative
-			# adjusted age of observation rather than the raw age of observation to extract a real maintence capex.
 			gas_fixed = natural_gas_fraction * capacity_mw,
 			oil_fixed = petroleum_fraction * capacity_mw,
 			other_fixed = other_gas_fraction * capacity_mw,
@@ -147,9 +150,7 @@ create_independent_variables <- function(X){
 			gas_age_variable_adj = natural_gas_fraction * age_relative_to_prime_avg * gen_adj,
 			oil_pollution_variable_adj = petroleum_fraction * real_pollution_control_costs_per_kw * gen_adj,
 			oil_age_variable_adj = petroleum_fraction * age_relative_to_prime_avg * gen_adj,
-			# real_opex_per_kw = real_opex / capacity_mw  # is this right?
 		)
-	# select(rowid, prime_mover, real_opex, all_of(fixed_cols), all_of(variable_cols), all_of(start_cols), real_opex_per_kw)
 }
 
 create_consolidated_regression_filter <- function(X){
@@ -159,20 +160,15 @@ create_consolidated_regression_filter <- function(X){
 		mutate(real_opex_percentile = percentile(real_opex)) %>%
 		ungroup %>%
 		mutate(
-			# real_opex_percentile = percentile(real_opex), # overall or per prime_mover type?
 			opex_over_capex = opex_per_kw / capex_per_kw,
 			is_outlier_general = ifelse(opex_over_capex >= 0.5 | opex_over_capex <= 0.002 | gross_cf > 1.1, TRUE, FALSE),
-			# outlier_flag = ifelse(opex_over_capex >=0.5 | opex_over_capex <=0.002 | FERC_CF>1.1, 1, 0)) %>%
 			is_safe_st = (prime_mover == 'ST') & (!is_outlier_general) &
 				(gross_cf <= 1.1),  # NB this is redundent logic
-			# ,data=FERC_Data,subset=(ST==1 & FERC_CF<=1.1 & outlier_flag==0))
 			is_safe_cc = (prime_mover == 'CC') & (!is_outlier_general) & 
 				(real_opex_percentile >= 0.03) & (real_opex_percentile <= 0.97) &
 				(coal_fraction == 0),
-			# ,data=FERC_Data,subset=(CC==1 & coal==0 & outlier_flag==0 & real_opex_percentile<=0.97 & real_opex_percentile>=0.03))
 			is_safe_gt = (prime_mover == 'GT') & (!is_outlier_general) & 
 				(real_opex_percentile<=0.97) & (real_opex_percentile>=0.03),
-			# ,data=FERC_Data,subset=(GT==1 & outlier_flag==0 & real_opex_percentile<=0.97 & real_opex_percentile>=0.03))
 			
 			# Collect all of the above filters into one column
 			consolidated_regression_filter = case_when(
@@ -185,7 +181,7 @@ create_consolidated_regression_filter <- function(X){
 }
 
 
-#### Clean_variable_key ####
+#### Perform manual cleaning on the table that describes the variables ####
 
 FilteredVariableKey <-
 	VariableKey %>%
