@@ -101,7 +101,14 @@ NestedParallelTests %>%
 	ggplot(aes(x = num_components, y = n)) +
 	geom_col() +
 	facet_wrap(~prime_mover, ncol = 1) +
-	labs(x = 'Number of components', y = 'n', title = 'Frequency with which a number of components is recommended')
+	theme(
+		axis.ticks = element_blank(),
+		text = element_text(family = 'serif')
+	) +
+	labs(
+		x = 'Number of components', 
+		y = 'n', 
+		title = 'Frequency with which a number of components is recommended')
 
 # Put the outcome in a table, so we know how many PCA components per prime_mover
 NumPcaComponents <-

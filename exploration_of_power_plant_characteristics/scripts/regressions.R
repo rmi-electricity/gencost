@@ -122,6 +122,9 @@ AllFormulas <-
 		inner_join(ComponentsOfFormulasOptional, by = 'prime_mover') %>%
 		unite('formula', c('core_variables_and_dv', 'optional_variables'), sep = '')
 
+AllFormulas %>%
+	count(prime_mover)
+
 
 #### Train and Test the models ####
 # create training and testing datasets: 3 folds per cluster
@@ -151,6 +154,7 @@ TrainTest
 
 # Fan out by joining each train/test row to all of the prime mover's formulas
 # Get fitted values and note RMSE
+# Note: this is computationally expensive
 TrainFit <-
 	TrainTest	 %>%
 		inner_join(AllFormulas, by = 'prime_mover') %>%
@@ -228,12 +232,20 @@ FunctionalModelCheck <-
 
 #
 ChosenFormulas <-
+	# Chosen model has the smallest mean rmse- ties are broken by which
+	# model adds the fewest extra variables (pull size)
 	MeanRMSE %>%
 		inner_join(FunctionalModelCheck, by = c('prime_mover', 'cls', 'formula')) %>%
+		left_join(AllFormulas, by = c('prime_mover', 'formula')) %>%
 		filter(is_functional_model) %>%
 		group_by(prime_mover, cls) %>%
-		slice(which.min(mean_rmse)) %>%
-		ungroup
+		arrange(mean_rmse, pull_size) %>%
+		rowid_to_column('rank') %>%
+		slice(which.min(rank)) %>%
+		ungroup %>%
+		select(prime_mover, cls, formula)
+
+print(ChosenFormulas)
 
 # sanity check- is there a functional model for each cluster?
 X <-
@@ -247,6 +259,47 @@ Y <-
 		distinct(prime_mover, cls) %>%
 		arrange(prime_mover, cls)
 identical(X, Y)
+
+# Dataviz to show the models we chose
+# x axis is add'l variables, y is rmse, colors indicate functional and is_chosen
+Results <-
+	AllFormulas %>%
+		full_join(MeanRMSE, by = c('prime_mover', 'formula')) %>%
+		full_join(FunctionalModelCheck) %>%
+		left_join(
+			ChosenFormulas %>% mutate(is_chosen = TRUE)
+		) %>%
+		mutate(
+			is_chosen = replace_na(is_chosen, FALSE),
+			my_color = case_when(
+				is_chosen ~ 'Chosen',
+				is_functional_model ~ 'Valid model, not chosen',
+				!is_functional_model ~ 'Non-valid model',
+				TRUE ~ 'DEFAULT UNKNOWN'
+			),
+			my_color = ordered(my_color, c('Chosen', 'Valid model, not chosen', 'Non-valid model')),
+			# my_color = fct_rev(my_color)
+		)
+Results
+
+Results %>%
+	filter(prime_mover == 'ST') %>%
+	ggplot(aes(x = pull_size, y = mean_rmse)) +
+	geom_smooth(method = 'lm', formula = 'y ~ poly(x, 3)') +
+	# expand_limits(y = 0) +
+	scale_x_continuous(breaks = seq(0, 10)) +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	facet_wrap(~cls, scales = 'free') +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		text = element_text(family = 'serif')
+	) +
+	labs(x = 'Number of optional variables', 
+			 y = 'Mean RMSE',
+			 title = 'Mean RMSE across training/test sets: ST',
+			 caption = 'Note that these are zoomed in, and the y-axes do not include zero')
+#	
 
 # sanity check on number of clusters * formulas to make sure we fit the right #
 NumClusters <-

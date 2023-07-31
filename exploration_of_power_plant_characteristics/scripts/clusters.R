@@ -153,11 +153,13 @@ ResampledClustering	%>%
 	geom_point(aes(color = label_text)) +
 	facet_wrap(~prime_mover) +
 	scale_color_manual(values = c('Discarded' = 'grey20', 'Chosen' = 'dodgerblue')) +
+	scale_y_continuous(labels = scales::comma_format(1)) +
 	labs(x = 'Number of clusters', y = 'Total within-cluster sum of squares',
 			 color = 'Clustering schemas', 
 			 title = 'Chosen number of clusters') +
 	theme(legend.position = 'bottom',
 				axis.ticks = element_blank(),
+				panel.grid.minor.x = element_blank(),
 				text = element_text(family = 'serif'))
 
 # Histograms for competing models
@@ -218,7 +220,7 @@ ClsCounts	%>%
 		panel.grid.major.x = element_blank(),
 		legend.position = 'bottom'
 	) +
-	labs(x = 'Number of clusters', y = 'n',
+	labs(x = 'Number of clusters, per possible clustering schema', y = 'n',
 			 fill = 'Clustering schemas', 
 			 title = 'Size of clustering schemas',
 			 caption = str_wrap('Dotted lines represent the size of each cluster that we would expect, naively, if each dataset were divided evenly; for example, a subpopulation of 100 observations, split into four clusters, would have a dotted-line at 100/4, or 25.', 100))
@@ -236,15 +238,11 @@ variables_for_sanity_check_st <- c('age_in_report_year', 'capacity_mw',
 																	 'generator_starts', 'gross_cf', 'coal_fraction', 'natural_gas_fraction', 
 																	 'petroleum_fraction', 'minor_fuels_fraction')
 
-
-
-
-
 ClustersFit %>%
 	select(rowid, cls) %>%
 	unnest(c(rowid, cls)) %>%
 	inner_join(DataBySubplant, by = 'rowid') %>%
-	filter(prime_mover == 'GT') %>%
+	filter(prime_mover == 'CC') %>%
 	select(cls, all_of(variables_for_sanity_check_cc)) %>%
 	group_by(cls) %>%
 	nest %>%
@@ -269,7 +267,9 @@ ClustersFit %>%
 		legend.position = 'bottom',
 		axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)
 	) +
-	labs(x = '', y = '', fill = 'Spearman\'s rho', title = 'GT: 3 Clusters') 
+	labs(x = '', y = '', fill = 'Spearman\'s rho', 
+			 title = 'Characteristics of chosen clusters: CC: 4 Clusters',
+			 caption = 'Nb these are NOT the regression variables-- rather, these are variables we chose to make sense of these clusters') 
 	
 AvgValue <-
 	ClustersFit %>%
@@ -287,7 +287,7 @@ ClustersFit %>%
 	select(rowid, cls) %>%
 	unnest(c(rowid, cls)) %>%
 	inner_join(DataBySubplant, by = 'rowid') %>%
-	filter(prime_mover == 'CC') %>%
+	filter(prime_mover == 'GT') %>%
 	select(cls, all_of(variables_for_sanity_check_cc)) %>%
 	gather(variable, value, -cls) %>%
 	ggplot(aes(x = ordered(cls), y = value)) +
@@ -297,10 +297,12 @@ ClustersFit %>%
 	theme(
 		axis.ticks = element_blank(),
 		panel.grid.major.x = element_blank(),
+		panel.grid.minor.y = element_blank(),
 		text = element_text(family = 'serif'),
 	) +
-	labs(x = 'Cluster', y = '', title = 'CC', 
-			 caption = 'Horizontal line indicates overall mean value;\nBoxplot width represents cluster size')
+	labs(x = 'Cluster', y = '', 
+			 title = 'Characteristics of chosen clusters: GT: 3 Clusters',
+			 caption = str_wrap('Nb these are NOT the regression variables-- rather, these are variables we chose to make sense of these clusters. Horizontal line indicates overall mean value; Boxplot width represents cluster size') )
 
 	
 RowToClusterAll <-
