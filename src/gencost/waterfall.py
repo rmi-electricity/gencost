@@ -2985,9 +2985,10 @@ class DataBySubplant:
             var_name="type_of_gen",
         )
 
-        print("scatter plots comparing net gen vs. actual/predicted gross gen")
-
+       
         if generate_viz == True:
+            print("scatter plots comparing net gen vs. actual/predicted gross gen")
+
             sns.relplot(
                 data=melted_gens,
                 x="net_generation_mwh",
