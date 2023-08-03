@@ -6,8 +6,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pandera as pa
+import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 from etoolbox.utils.pudl_helpers import (
     month_year_to_date,
     simplify_columns,
@@ -27,6 +29,10 @@ from gencost.constants import (
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
+
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
@@ -2903,3 +2909,98 @@ class DataBySubplant:
         )
 
         return self.core_validation(current, level="generator")
+
+    def get_predicted_gross_gens(self, generate_viz=False):
+        """
+        Part 1: get predicted values from multivariate regression
+
+        """
+        # add tech description to epd
+        gtn = self.get_eternally_present_by_generator().merge(
+            self.pudl_tabl.gens_eia860()[
+                ["plant_id_eia", "generator_id", "technology_description"]
+            ]
+            .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")
+            .query("technology_description.notna()")
+        )
+
+        # make list for for loop
+        technology_descriptions = gtn["technology_description"].unique().tolist()
+
+        # empty list for dfs
+        filled_in = []
+
+        for tech in technology_descriptions:
+            y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
+            X = gtn.query("technology_description == @tech")[
+                ["net_generation_mwh", "capacity_mw", "age_of_observation"]
+            ]
+
+            # train the linear regression
+            regressor = LinearRegression()
+            regressor.fit(X, y)
+
+            # make predictions on test data
+            y_pred = regressor.predict(X)
+
+            # add cols to df
+            gtn_w_predict = gtn.query("technology_description == @tech").assign(
+                predicted_gross_gen_mwh=lambda x: y_pred,
+                intercept=lambda x: regressor.intercept_,
+                net_gen_coefficient=lambda x: regressor.coef_[0],
+                capacity_coefficient=lambda x: regressor.coef_[1],
+                age_coefficient=regressor.coef_[2],
+                mean_absolute_error=lambda x: mean_absolute_error(
+                    x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
+                ),
+                mean_squared_error=lambda x: mean_squared_error(
+                    x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
+                ),
+                rmse=lambda x: np.sqrt(x["mean_squared_error"]),
+                r_squared=lambda x: regressor.score(X, y),
+            )
+
+            filled_in.append(gtn_w_predict)
+
+        # combine lists for each tech
+        combined = pd.concat(filled_in)
+
+        """
+        Part 2: make data viz comparing actual vs. fitted gross generation
+
+        """
+        # melt gen values to distinguish in scatter plot
+        melted_gens = combined.melt(
+            id_vars=[
+                "plant_id_eia",
+                "generator_id",
+                "report_date",
+                "technology_description",
+                "capacity_mw",
+                "age_of_observation",
+                "net_generation_mwh",
+            ],
+            value_vars=["gross_generation_mwh", "predicted_gross_gen_mwh"],
+            var_name="type_of_gen",
+        )
+
+        print("scatter plots comparing net gen vs. actual/predicted gross gen")
+
+        if generate_viz == True:
+            sns.relplot(
+                data=melted_gens,
+                x="net_generation_mwh",
+                y="value",
+                col="technology_description",
+                kind="scatter",
+                hue="type_of_gen",
+            )
+
+        return gtn_w_predict
+
+        """
+        put estimated y back in the dataframe?
+
+        gross_gen_mw = (net gen - shift factor)*ratio
+
+        """
