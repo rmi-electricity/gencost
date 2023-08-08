@@ -449,18 +449,6 @@ class DataBySubplant:
             .drop_duplicates(
                 subset=["plant_id_eia", "generator_id", "report_date"], keep="last"
             )
-            .merge(
-                self.get_predicted_gross_gens()[
-                    [
-                        "report_year",
-                        "plant_id_eia",
-                        "generator_id",
-                        "predicted_gross_gen_mwh",
-                    ]
-                ],
-                on=["report_year", "plant_id_eia", "generator_id"],
-                how="left",
-            )
         )
 
     def get_historical_by_generator(self):
@@ -2365,6 +2353,7 @@ class DataBySubplant:
         gen_columns = {
             "generator_id": Column(str),
             "generator_operating_date": Column(dt),
+            "technology_description": Column(str, nullable=True),
         }
 
         def gross_ge_net(df_):
@@ -2952,16 +2941,16 @@ class DataBySubplant:
             # regression
             # test data
             y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
-            x = gtn.query("technology_description == @tech")[
+            X = gtn.query("technology_description == @tech")[
                 ["net_generation_mwh", "capacity_mw", "age_of_observation"]
             ]
 
             # train the linear regression
             regressor = LinearRegression()
-            regressor.fit(x, y)
+            regressor.fit(X, y)
 
             # make predictions on test data
-            y_pred = regressor.predict(x)
+            y_pred = regressor.predict(X)
             # add cols on regression stats to df
             gtn_w_predict = gtn.query("technology_description == @tech").assign(
                 predicted_gross_gen_mwh=lambda x: y_pred,
@@ -2976,7 +2965,7 @@ class DataBySubplant:
                     x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
                 ),
                 rmse=lambda x: np.sqrt(x["mean_squared_error"]),
-                r_squared=lambda x: regressor.score(x, y),
+                r_squared=lambda x: regressor.score(X, y),
             )
 
             filled_in.append(gtn_w_predict)

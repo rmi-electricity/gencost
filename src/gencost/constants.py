@@ -143,6 +143,7 @@ GET_860_GEN_COLS = [
     "age_relative_to_prime_avg",
     "pollution_control_costs_per_kw",
     "generator_operating_date",
+    "technology_description",
 ]
 
 HIST_EP_COLS = [
