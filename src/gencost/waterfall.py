@@ -449,6 +449,18 @@ class DataBySubplant:
             .drop_duplicates(
                 subset=["plant_id_eia", "generator_id", "report_date"], keep="last"
             )
+            .merge(
+                self.get_predicted_gross_gens()[
+                    [
+                        "report_year",
+                        "plant_id_eia",
+                        "generator_id",
+                        "predicted_gross_gen_mwh",
+                    ]
+                ],
+                on=["report_year", "plant_id_eia", "generator_id"],
+                how="left",
+            )
         )
 
     def get_historical_by_generator(self):
@@ -2929,20 +2941,6 @@ class DataBySubplant:
             .query("technology_description.notna()")
         )
 
-        # regression
-        # test data
-        y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
-        x = gtn.query("technology_description == @tech")[
-            ["net_generation_mwh", "capacity_mw", "age_of_observation"]
-        ]
-
-        # train the linear regression
-        regressor = LinearRegression()
-        regressor.fit(x, y)
-
-        # make predictions on test data
-        y_pred = regressor.predict(x)
-
         # make list of techs for for loop
         technology_descriptions = gtn["technology_description"].unique().tolist()
 
@@ -2950,6 +2948,19 @@ class DataBySubplant:
         filled_in = []
 
         for tech in technology_descriptions:
+            # regression
+            # test data
+            y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
+            x = gtn.query("technology_description == @tech")[
+                ["net_generation_mwh", "capacity_mw", "age_of_observation"]
+            ]
+
+            # train the linear regression
+            regressor = LinearRegression()
+            regressor.fit(x, y)
+
+            # make predictions on test data
+            y_pred = regressor.predict(x)
             # add cols on regression stats to df
             gtn_w_predict = gtn.query("technology_description == @tech").assign(
                 predicted_gross_gen_mwh=lambda x: y_pred,
