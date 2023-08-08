@@ -2912,7 +2912,14 @@ class DataBySubplant:
 
     def get_predicted_gross_gens(self, generate_viz=False):
         """
-        Part 1: get predicted values from multivariate regression
+        get predicted values from multivariate regression
+
+        Args:
+            generate_viz (boolean): make data viz comparing actual vs. fitted gross generation
+
+        Output:
+            default: epd dataframe with new predicted gross gen values
+            if generate_viz == True : seaborn plot with actual vs. fitted values
 
         """
         # add tech description to epd
@@ -2924,7 +2931,7 @@ class DataBySubplant:
             .query("technology_description.notna()")
         )
 
-        # make list for for loop
+        # make list of techs for for loop
         technology_descriptions = gtn["technology_description"].unique().tolist()
 
         # empty list for dfs
@@ -2943,7 +2950,7 @@ class DataBySubplant:
             # make predictions on test data
             y_pred = regressor.predict(X)
 
-            # add cols to df
+            # add cols on regression stats to df
             gtn_w_predict = gtn.query("technology_description == @tech").assign(
                 predicted_gross_gen_mwh=lambda x: y_pred,
                 intercept=lambda x: regressor.intercept_,
@@ -2984,7 +2991,6 @@ class DataBySubplant:
             var_name="type_of_gen",
         )
 
-       
         if generate_viz == True:
             print("scatter plots comparing net gen vs. actual/predicted gross gen")
 
@@ -2997,11 +3003,4 @@ class DataBySubplant:
                 hue="type_of_gen",
             )
 
-        return gtn_w_predict
-
-        """
-        put estimated y back in the dataframe?
-
-        gross_gen_mw = (net gen - shift factor)*ratio
-
-        """
+        return combined
