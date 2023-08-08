@@ -9,7 +9,6 @@ import pandera as pa
 import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
-import matplotlib.pyplot as plt
 from etoolbox.utils.pudl_helpers import (
     month_year_to_date,
     simplify_columns,
@@ -31,7 +30,6 @@ from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
 
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 pat_path = Path(__file__).parent
@@ -2932,6 +2930,20 @@ class DataBySubplant:
             .query("technology_description.notna()")
         )
 
+        # regression
+        # test data
+        y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
+        x = gtn.query("technology_description == @tech")[
+            ["net_generation_mwh", "capacity_mw", "age_of_observation"]
+        ]
+
+        # train the linear regression
+        regressor = LinearRegression()
+        regressor.fit(x, y)
+
+        # make predictions on test data
+        y_pred = regressor.predict(x)
+
         # make list of techs for for loop
         technology_descriptions = gtn["technology_description"].unique().tolist()
 
@@ -2939,18 +2951,6 @@ class DataBySubplant:
         filled_in = []
 
         for tech in technology_descriptions:
-            y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
-            X = gtn.query("technology_description == @tech")[
-                ["net_generation_mwh", "capacity_mw", "age_of_observation"]
-            ]
-
-            # train the linear regression
-            regressor = LinearRegression()
-            regressor.fit(X, y)
-
-            # make predictions on test data
-            y_pred = regressor.predict(X)
-
             # add cols on regression stats to df
             gtn_w_predict = gtn.query("technology_description == @tech").assign(
                 predicted_gross_gen_mwh=lambda x: y_pred,
@@ -2965,7 +2965,7 @@ class DataBySubplant:
                     x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
                 ),
                 rmse=lambda x: np.sqrt(x["mean_squared_error"]),
-                r_squared=lambda x: regressor.score(X, y),
+                r_squared=lambda x: regressor.score(x, y),
             )
 
             filled_in.append(gtn_w_predict)
@@ -2992,7 +2992,7 @@ class DataBySubplant:
             var_name="type_of_gen",
         )
 
-        if generate_viz == True:
+        if generate_viz:
             print("scatter plots comparing net gen vs. actual/predicted gross gen")
 
             sns.relplot(
