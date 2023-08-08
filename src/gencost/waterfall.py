@@ -241,6 +241,64 @@ def allocate_col_by(
     return df
 
 
+def get_predicted_gross_gen(df):
+    """
+    get predicted values from multivariate regression
+
+    Args:
+        generate_viz (boolean): make data viz comparing actual vs. fitted gross generation
+
+    Output:
+        default: epd dataframe with new predicted gross gen values
+        if generate_viz == True : seaborn plot with actual vs. fitted values
+
+    """
+    # add tech description to epd
+    gtn = df.query("technology_description.notna() & gross_generation_mwh.notna()")
+
+    # make list of techs for for loop
+    technology_descriptions = gtn["technology_description"].unique().tolist()
+
+    # empty list for dfs
+    filled_in = []
+
+    for tech in technology_descriptions:
+        # regression
+        # test data
+        y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
+        X = gtn.query("technology_description == @tech")[
+            ["net_generation_mwh", "capacity_mw", "age_of_observation"]
+        ]
+
+        # train the linear regression
+        regressor = LinearRegression()
+        regressor.fit(X, y)
+
+        # make predictions on test data
+        y_pred = regressor.predict(X)
+        # add cols on regression stats to df
+        gtn_w_predict = gtn.query("technology_description == @tech").assign(
+            predicted_gross_gen_mwh=lambda x: y_pred,
+            intercept=lambda x: regressor.intercept_,
+            net_gen_coefficient=lambda x: regressor.coef_[0],
+            capacity_coefficient=lambda x: regressor.coef_[1],
+            age_coefficient=regressor.coef_[2],
+            mean_absolute_error=lambda x: mean_absolute_error(
+                x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
+            ),
+            mean_squared_error=lambda x: mean_squared_error(
+                x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
+            ),
+            rmse=lambda x: np.sqrt(x["mean_squared_error"]),
+            r_squared=lambda x: regressor.score(X, y),
+        )
+
+        filled_in.append(gtn_w_predict)
+
+    # combine lists for each tech
+    return pd.concat(filled_in)
+
+
 def rime_sort_key(string: str):
     """Sort strings starting from the end."""
     return string[::-1]
@@ -536,19 +594,49 @@ class DataBySubplant:
                 .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
             )
 
-            # fuel fraction calcs from merge all
-            gross_mwh_cols = merged.filter(like="_gross_mwh").columns
+            new = (
+                merged.merge(
+                    merged.pipe(get_predicted_gross_gen)[
+                        [
+                            "report_date",
+                            "plant_id_eia",
+                            "generator_id",
+                            "predicted_gross_gen_mwh",
+                        ]
+                    ],
+                    on=["plant_id_eia", "generator_id", "report_date"],
+                    how="left",
+                )
+                .assign(
+                    gross_gen_value=lambda x: np.where(
+                        x["gross_cf"] > 1.5,
+                        "predicted",
+                        "reported",
+                    ),
+                    gross_generation_mwh=lambda x: np.where(
+                        x["gross_cf"] > 1.5,
+                        x["predicted_gross_gen_mwh"],
+                        x["gross_generation_mwh"],
+                    ),
+                    gross_cf=lambda x: x.gross_generation_mwh
+                    / (x.capacity_mw * x.hrs_in_yr),
+                )
+                .drop(columns="predicted_gross_gen_mwh")
+            )
 
-            merged[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
-                merged[gross_mwh_cols]
-                .divide(merged[gross_mwh_cols].sum(axis=1), axis=0)
+            # fuel fraction calcs from merge all
+            gross_mwh_cols = new.filter(like="_gross_mwh").columns
+
+            new[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
+                new[gross_mwh_cols]
+                .divide(new[gross_mwh_cols].sum(axis=1), axis=0)
                 .fillna(0.0)
             )
 
             core_fuels = ["coal_fraction", "natural_gas_fraction", "petroleum_fraction"]
 
             out = (
-                merged.assign(
+                new.assign(
                     minor_fuels_fraction=lambda x: x.filter(like="_fraction").sum(
                         axis=1
                     )
@@ -556,6 +644,9 @@ class DataBySubplant:
                 )
                 .query('_merge == "all"')
                 .drop(columns=["_merge", "hrs_in_yr"])
+                .query(
+                    "gross_generation_mwh.notna()"
+                )  # only 2 generators, mismatch in subset
             )
 
             self._dfs["exa_by_gen"] = self.core_validation(out, level="generator")
@@ -2290,7 +2381,7 @@ class DataBySubplant:
                 "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
                 "report_year": Column(int, nullable=True),
                 "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
-                "gross_cf": Column(float, Check.ge(0.0), nullable=True),
+                "gross_cf": Column(float, nullable=True),
                 "generator_starts": Column(int, Check.ge(0)),
                 "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
                 "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
@@ -2315,7 +2406,7 @@ class DataBySubplant:
             | {
                 "age_in_report_year": Column(float),
                 "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
-                "gross_generation_mwh": Column(float, Check.ge(0.0)),
+                "gross_generation_mwh": Column(float),
                 "net_generation_mwh": Column(float),
                 "inflator_to_2021": Column(float),
                 "fuel_starts": Column(int, Check.ge(0)),
@@ -2347,13 +2438,14 @@ class DataBySubplant:
                 "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
                 "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
             }
-            | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
+            | {f"{k}_gross_cf": Column(float) for k in fuels}
         )
 
         gen_columns = {
             "generator_id": Column(str),
             "generator_operating_date": Column(dt),
             "technology_description": Column(str, nullable=True),
+            "gross_gen_value": Column(str),
         }
 
         def gross_ge_net(df_):
@@ -2923,13 +3015,7 @@ class DataBySubplant:
 
         """
         # add tech description to epd
-        gtn = self.get_eternally_present_by_generator().merge(
-            self.pudl_tabl.gens_eia860()[
-                ["plant_id_eia", "generator_id", "technology_description"]
-            ]
-            .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")
-            .query("technology_description.notna()")
-        )
+        gtn = self.get_historical_by_generator().query("technology_description.notna()")
 
         # make list of techs for for loop
         technology_descriptions = gtn["technology_description"].unique().tolist()
