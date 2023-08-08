@@ -188,6 +188,8 @@ HIST_EP_COLS = [
     "wage_scale",
     "age_of_observation_secular_adj",
     "inflator_to_2021",
+    "technology_description",
+    "gross_gen_value",
 ]
 
 CURRENT_EP_COLS = [  # "renew_gross_mwh",
