@@ -266,7 +266,12 @@ def get_predicted_gross_gen(df):
         # test data
         y = gtn.query("technology_description == @tech")["gross_generation_mwh"]
         X = gtn.query("technology_description == @tech")[
-            ["net_generation_mwh", "capacity_mw", "age_of_observation"]
+            [
+                "net_generation_mwh",
+                "capacity_mw",
+                "age_of_observation",
+                "age_in_report_year",
+            ]
         ]
 
         # train the linear regression
