@@ -613,12 +613,22 @@ class DataBySubplant:
                 )
                 .assign(
                     gross_gen_value=lambda x: np.where(
-                        x["gross_cf"] > 1.5,
+                        (x["gross_cf"] > 1.5)
+                        | (
+                            (x["gross_generation_mwh"] == 0)
+                            & abs(x["net_generation_mwh"])
+                            > 0
+                        ),
                         "predicted",
                         "reported",
                     ),
                     gross_generation_mwh=lambda x: np.where(
-                        x["gross_cf"] > 1.5,
+                        (x["gross_cf"] > 1.5)
+                        | (
+                            (x["gross_generation_mwh"] == 0)
+                            & abs(x["net_generation_mwh"])
+                            > 0
+                        ),
                         x["predicted_gross_gen_mwh"],
                         x["gross_generation_mwh"],
                     ),
