@@ -246,11 +246,10 @@ def get_predicted_gross_gen(df):
     get predicted values from multivariate regression
 
     Args:
-        generate_viz (boolean): make data viz comparing actual vs. fitted gross generation
+        df (pd.Dataframe): input df with historical net and gross values
 
     Output:
         default: epd dataframe with new predicted gross gen values
-        if generate_viz == True : seaborn plot with actual vs. fitted values
 
     """
     # add tech description to epd
