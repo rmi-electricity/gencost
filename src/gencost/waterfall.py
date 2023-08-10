@@ -241,12 +241,13 @@ def allocate_col_by(
     return df
 
 
-def get_predicted_gross_gen(df):
+def get_predicted_gross_gen(df, xwalk):
     """
     get predicted values from multivariate regression
 
     Args:
         df (pd.Dataframe): input df with historical net and gross values
+        xwalk (pd.Dataframe): df with xwalk from subplant to generator
 
     Output:
         default: epd dataframe with new predicted gross gen values
@@ -281,20 +282,31 @@ def get_predicted_gross_gen(df):
         # make predictions on test data
         y_pred = regressor.predict(X)
         # add cols on regression stats to df
-        gtn_w_predict = gtn.query("technology_description == @tech").assign(
-            predicted_gross_gen_mwh=lambda x: y_pred,
-            intercept=lambda x: regressor.intercept_,
-            net_gen_coefficient=lambda x: regressor.coef_[0],
-            capacity_coefficient=lambda x: regressor.coef_[1],
-            age_coefficient=regressor.coef_[2],
-            mean_absolute_error=lambda x: mean_absolute_error(
-                x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
-            ),
-            mean_squared_error=lambda x: mean_squared_error(
-                x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
-            ),
-            rmse=lambda x: np.sqrt(x["mean_squared_error"]),
-            r_squared=lambda x: regressor.score(X, y),
+        gtn_w_predict = (
+            gtn.query("technology_description == @tech")
+            .assign(
+                intercept=lambda x: regressor.intercept_,
+                net_gen_coefficient=lambda x: regressor.coef_[0],
+                capacity_coefficient=lambda x: regressor.coef_[1],
+                age_coefficient=regressor.coef_[2],
+            )[
+                [
+                    "plant_id_eia",
+                    "report_date",
+                    "subplant_id",
+                    "intercept",
+                    "net_gen_coefficient",
+                    "capacity_coefficient",
+                    "age_coefficient",
+                ]
+            ]
+            .merge(
+                xwalk.drop_duplicates(
+                    subset=["plant_id_eia", "generator_id", "subplant_id"]
+                )[["plant_id_eia", "generator_id", "subplant_id"]],
+                on=["plant_id_eia", "subplant_id"],
+                how="left",
+            )
         )
 
         filled_in.append(gtn_w_predict)
@@ -600,18 +612,16 @@ class DataBySubplant:
 
             new = (
                 merged.merge(
-                    merged.pipe(get_predicted_gross_gen)[
-                        [
-                            "report_date",
-                            "plant_id_eia",
-                            "generator_id",
-                            "predicted_gross_gen_mwh",
-                        ]
-                    ],
-                    on=["plant_id_eia", "generator_id", "report_date"],
+                    get_predicted_gross_gen(self.get_exa_by_subplant(), self.xwalk),
+                    on=["plant_id_eia", "report_date", "generator_id"],
                     how="left",
                 )
                 .assign(
+                    predicted_gross_gen_mwh=lambda x: x["net_generation_mwh"]
+                    * x["net_gen_coefficient"]
+                    + x["capacity_mw"] * x["capacity_coefficient"]
+                    + x["age_of_observation"] * x["age_coefficient"]
+                    + x["intercept"],
                     gross_gen_value=lambda x: np.where(
                         (x["gross_cf"] > 1.5)
                         | (
@@ -1530,10 +1540,17 @@ class DataBySubplant:
                         "balancing_authority_code_eia": "first",
                         "state": "first",
                         "utility_id_eia": "first",
+                        "technology_description": pd.Series.mode,
                     },
                     wtavg_dict=wtavg_dict,
                 )
-                .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+                .astype(
+                    {
+                        "plant_id_eia": "Int64",
+                        subplant_id_col: "Int64",
+                        "technology_description": "string",
+                    }
+                )
                 .pipe(add_ba_code)
             )
 
