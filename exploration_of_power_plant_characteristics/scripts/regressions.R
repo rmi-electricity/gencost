@@ -3,9 +3,9 @@
 # Andrew Bartnof, for RMI, 2023
 
 # We'll want linear regression models, one per cluster, to predict real_opex.
-# We know which variables are necessary, and which should not be used; 
-# for each prime_mover, for each cluster, iterate through all 
-# possible models that contain all necessary variables, and may contain 
+# We know which variables are necessary, and which should not be used;
+# for each prime_mover, for each cluster, iterate through all
+# possible models that contain all necessary variables, and may contain
 # any number of optional variables, to find the formula with the best
 # fit. Note that we'll use training and testing sets to ensure we don't
 # overfit on the data.
@@ -24,7 +24,7 @@ library(gtools)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
-set.seed(1)	
+set.seed(1)
 
 
 #### Load data ####
@@ -69,7 +69,7 @@ JoinmeSequence <-
 	# A table that ranges from 1:the number of possible add'l variables
 	OptionalVariables %>%
 		mutate(
-			low = 1, 
+			low = 1,
 			high = map_int(optional_variables, length),
 			sequence = map2(low, high, seq)
 			) %>%
@@ -77,12 +77,12 @@ JoinmeSequence <-
 JoinmeSequence
 
 RowsWhichSignifyNoOptionalVariables <-
-	# Since we'll make formulas be concatenating the core bits with the 
+	# Since we'll make formulas be concatenating the core bits with the
 	# optional bits, we'll need to make a placeholder with no optional bits
 	# that can be 'concatenated' with the core bits-- ie no optional bits, just core
 	tribble(
 		~prime_mover, ~pull_size, ~optional_variables,
-		c('CC', 'GT', 'ST'), 0L, '' 
+		c('CC', 'GT', 'ST'), 0L, ''
 	) %>%
 	unnest(prime_mover)
 RowsWhichSignifyNoOptionalVariables
@@ -94,7 +94,7 @@ ComponentsOfFormulasOptional <-
 		unnest(sequence) %>%
 		rename(pull_size = sequence) %>%
 		mutate(
-			combination = map2(optional_variables, pull_size, 
+			combination = map2(optional_variables, pull_size,
 												 ~combn(x = .x, m = .y, FUN = paste, collapse = ' + ',
 												 			 simplify = FALSE)),
 			combination = map(combination, unlist)
@@ -128,7 +128,7 @@ AllFormulas %>%
 
 #### Train and Test the models ####
 # create training and testing datasets: 3 folds per cluster
-# Pls note that the following few steps are computationally expensive, and if they have 
+# Pls note that the following few steps are computationally expensive, and if they have
 # been run before, you can simply load the RMSE results that are saved
 # to disk a few lines down, and continue from there!
 TrainTest <-
@@ -182,8 +182,8 @@ write_csv(RMSE, 'clean_data/all_models_rmse.csv')
 
 
 #### Start here if you simply want to read extant RMSE data ####
-RMSE <- read_csv('clean_data/all_models_rmse.csv', 
-								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i', 
+RMSE <- read_csv('clean_data/all_models_rmse.csv',
+								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i',
 								 							boot_num = 'i', rmse = 'd'))
 
 # Aggregate the RMSE over each of the CV folds, so that we have a mean
@@ -295,11 +295,11 @@ Results %>%
 		panel.grid.minor.x = element_blank(),
 		text = element_text(family = 'serif')
 	) +
-	labs(x = 'Number of optional variables', 
+	labs(x = 'Number of optional variables',
 			 y = 'Mean RMSE',
 			 title = 'Mean RMSE across training/test sets: ST',
 			 caption = 'Note that these are zoomed in, and the y-axes do not include zero')
-#	
+#
 
 # sanity check on number of clusters * formulas to make sure we fit the right #
 NumClusters <-
@@ -339,21 +339,6 @@ write_csv(MeanRMSE, 'clean_data/mean_rmse.csv')
 #### End Here^. Appendix: reporting goodness of fit ####
 # color scheme: water and rust
 # https://color.adobe.com/explore
-
-AllFormulas %>%
-	count(prime_mover)
-
-MeanRMSE %>%
-	count(prime_mover, cls)
-
-JoinmeIsChosen <-
-	ChosenFormulas %>%
-		mutate(is_chosen = TRUE)
-
-MeanRMSE %>%
-	left_join(JoinmeIsChosen) %>%
-	mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
-	
 
 
 MeanRMSE %>%
@@ -428,7 +413,7 @@ MeanRMSE %>%
 #### Appendix: export model specifications ####
 JoinmeIsChosen <-
 	ChosenFormulas %>%
-		select(prime_mover, cls, pull_size, formula) %>%
+		select(prime_mover, cls, formula) %>%
 		mutate(is_chosen = TRUE)
 
 AllModsFit %>%
@@ -444,12 +429,12 @@ AllModsFit %>%
 	print
 
 
-ForExportAnova <-	
+ForExportAnova <-
 	AllModsFit %>%
-		select(prime_mover, cls, pull_size, formula, lm_fit) %>%
+		select(prime_mover, cls, formula, lm_fit) %>%
 		left_join(JoinmeIsChosen) %>%
 		mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
-		arrange(prime_mover, cls, pull_size, formula) %>%
+		arrange(prime_mover, cls, formula) %>%
 		mutate(
 			anova = map(lm_fit, anova),
 			anova = map(anova, as.data.frame),
@@ -458,3 +443,18 @@ ForExportAnova <-
 		unnest(anova)
 ForExportAnova
 write_csv(ForExportAnova, 'results/anova.csv')
+
+ForExportCoefs <-
+	AllModsFit %>%
+		select(prime_mover, cls, formula, lm_fit) %>%
+		left_join(JoinmeIsChosen) %>%
+		mutate(is_chosen = replace_na(is_chosen, FALSE)) %>%
+		arrange(prime_mover, cls, formula) %>%
+		mutate(
+			coef = map(lm_fit, coefficients),
+			coef = map(coef, enframe, name = 'variable', value = 'coefficient')
+		) %>%
+		select(-lm_fit) %>%
+		unnest(coef)
+ForExportCoefs
+write_csv(ForExportCoefs, 'results/all_coefficients.csv')
