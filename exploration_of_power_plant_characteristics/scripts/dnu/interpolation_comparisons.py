@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 """
 Created on Tue Apr  4 09:58:35 2023
 
 @author: andrewbartnof
 """
 
-import pandas as pd
-import numpy as np
 import os
-from sklearn.model_selection import (
-    train_test_split,  # noqa: F401
-    ShuffleSplit,
-    cross_val_score,
-)
+
+import numpy as np
+import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error
-
+from sklearn.model_selection import train_test_split  # noqa: F401
+from sklearn.model_selection import ShuffleSplit, cross_val_score
 
 os.chdir("Documents/rmi/power_plant_characteristics/")
 RawData = pd.read_parquet("input_data/data_for_pf_subplants.parquet")

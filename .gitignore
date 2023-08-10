@@ -82,6 +82,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.jupyter
 
 # IPython
 profile_default/
@@ -204,3 +205,4 @@ rsconnect/
 *.png
 
 !regression_variables.csv
+.vscode/settings.json

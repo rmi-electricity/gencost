@@ -52,26 +52,15 @@ Then setup some tools...
    mamba activate gencost
    pre-commit install
 
-Setup ``pudl``
----------------
-After the installation is complete, you will need to set up ``pudl``. This only needs to be
-done once. If you have already done this set up for another project, you can
-skip this step. To do this run the following commands:
+Now everything should be ready!
 
-.. code-block:: console
+Development guidance
+=======================================================================================
 
-   $ mamba activate gencost
-   $ pudl_setup <PUDL_DIR>
-
-
-Where ``<PUDL_DIR>`` is the directory you want to use as your ``pudl`` workspace.
-Currently, we use the pre-built `pudl.sqlite <https://data.catalyst.coop/pudl.db>`_ and
-`ferc1.sqlite <https://data.catalyst.coop/ferc1.db>`_ databases created
-by Catalyst Cooperative available through `datasette <https://data.catalyst.coop>`_. Once you have
-downloaded those files, place them in ``<PUDL_DIR>/sqlite``.
-
-Additional instructions for setting up ``pudl`` can be found
-`here <https://catalystcoop-pudl.readthedocs.io/en/latest/dev/dev_setup.html>`__.
+See
+`git guidance <https://github.com/rmi-electricity/.github-private/blob/main/profile/notes_on_git.md>`_
+and
+`notes on tests and linters <https://github.com/rmi-electricity/.github-private/blob/main/profile/notes_on_tests_and_linters.md>`_.
 
 Stuff from the template README
 =======================================================================================
