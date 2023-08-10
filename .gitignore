@@ -198,4 +198,11 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+*.RDS
+*.csv
+*.parquet
+*.gzip
+*.png
+
+!regression_variables.csv
 .vscode/settings.json
