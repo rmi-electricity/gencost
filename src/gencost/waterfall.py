@@ -288,7 +288,8 @@ def get_predicted_gross_gen(df, xwalk):
                 intercept=lambda x: regressor.intercept_,
                 net_gen_coefficient=lambda x: regressor.coef_[0],
                 capacity_coefficient=lambda x: regressor.coef_[1],
-                age_coefficient=regressor.coef_[2],
+                age_obs_coefficient=regressor.coef_[2],
+                age_report_coefficient=regressor.coef_[3],
             )[
                 [
                     "plant_id_eia",
@@ -297,7 +298,8 @@ def get_predicted_gross_gen(df, xwalk):
                     "intercept",
                     "net_gen_coefficient",
                     "capacity_coefficient",
-                    "age_coefficient",
+                    "age_obs_coefficient",
+                    "age_report_coefficient",
                 ]
             ]
             .merge(
@@ -620,7 +622,8 @@ class DataBySubplant:
                     predicted_gross_gen_mwh=lambda x: x["net_generation_mwh"]
                     * x["net_gen_coefficient"]
                     + x["capacity_mw"] * x["capacity_coefficient"]
-                    + x["age_of_observation"] * x["age_coefficient"]
+                    + x["age_of_observation"] * x["age_obs_coefficient"]
+                    + x["age_in_report_year"] * x["age_report_coefficient"]
                     + x["intercept"],
                     gross_gen_value=lambda x: np.where(
                         (x["gross_cf"] > 1.5)
