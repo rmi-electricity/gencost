@@ -285,21 +285,32 @@ def get_predicted_gross_gen(df, xwalk):
         gtn_w_predict = (
             gtn.query("technology_description == @tech")
             .assign(
+                predicted_gross_gen_mwh=lambda x: y_pred,
                 intercept=lambda x: regressor.intercept_,
                 net_gen_coefficient=lambda x: regressor.coef_[0],
                 capacity_coefficient=lambda x: regressor.coef_[1],
                 age_obs_coefficient=regressor.coef_[2],
                 age_report_coefficient=regressor.coef_[3],
+                mean_absolute_error=lambda x: mean_absolute_error(
+                    x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
+                ),
+                mean_squared_error=lambda x: mean_squared_error(
+                    x["gross_generation_mwh"], x["predicted_gross_gen_mwh"]
+                ),
+                rmse=lambda x: np.sqrt(x["mean_squared_error"]),
+                r_squared=lambda x: regressor.score(X, y),
             )[
                 [
                     "plant_id_eia",
                     "report_date",
                     "subplant_id",
+                    "technology_description",
                     "intercept",
                     "net_gen_coefficient",
                     "capacity_coefficient",
                     "age_obs_coefficient",
                     "age_report_coefficient",
+                    "r_squared",
                 ]
             ]
             .merge(
