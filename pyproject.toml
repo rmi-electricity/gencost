@@ -29,7 +29,7 @@ dependencies = [
     "pyarrow>=7, <13",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
     "scikit-learn>1.1, <1.4",
-    "tqdm >= 4.63,< 4.66",
+    "tqdm >= 4.63,< 4.67",
 ]
 
 [project.optional-dependencies]
