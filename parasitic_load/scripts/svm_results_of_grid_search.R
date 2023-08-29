@@ -72,3 +72,58 @@ for (i in seq(1L, 5L)){  # row in Prepped data (1 row per fold)
 			write_csv(fn)
 	}
 }
+
+# judge this recent search
+
+NestedYFitFinal <-
+	list.files(path = 'clean_data/svm/search2', full.names = T) %>%
+		enframe(name = NULL, value = 'fn') %>%
+		mutate(data = map(fn, read_csv))
+
+JoinmeYFitFinal <-
+	NestedYFitFinal	%>%
+		mutate(
+			fold_num = str_extract(fn, 'fold_num_[0-9]+'),
+			fold_num = str_extract(fold_num, '[0-9]+'),
+			fold_num = parse_integer(fold_num)
+		)
+
+JoinmeYTrue <-
+	PreppedData %>%
+		mutate(
+			y_true = map(test_prepped, 'gross_generation_mwh')
+		) %>%
+		select(fold_num, rowid_test, y_true)
+
+RmseFinal <-
+	JoinmeYFitFinal	%>%
+		left_join(JoinmeYTrue, by = c('fold_num')) %>%
+		unnest(c(data, y_true)) %>%
+		group_by(fold_num, kernel, degree, cost) %>%
+		summarize(rmse = Metrics::rmse(y_true, y_fit)) %>%
+		ungroup
+
+RmseFinal %>%
+	ggplot(aes(x = ordered(cost), y = rmse)) +
+	geom_boxplot()
+
+RmseFinal %>%
+	group_by(kernel, degree, cost) %>%
+	summarize(mean_rmse = mean(rmse)) %>%
+	ungroup %>%
+	arrange(mean_rmse)
+
+# use this:
+# kernel: polynomial
+# degree: 3
+# cost: 1.4
+# mean rmse: 381072.
+
+
+JoinmeYFitFinal	%>%
+	left_join(JoinmeYTrue, by = c('fold_num')) %>%
+	unnest(c(fold_num, rowid_test, data, y_true)) %>%
+	filter(kernel == 'polynomial', degree == 3, cost == 1.4) %>%
+	mutate(model = 'Support vector machine') %>%
+	select(fold_num, model, rowid_test, y_fit, y_true) %>%
+	write_csv('clean_data/results_svm')

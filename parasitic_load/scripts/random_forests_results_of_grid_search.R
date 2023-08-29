@@ -69,7 +69,7 @@ ModelMe <-
 			X_test = map(test_prepped, ~select(., -gross_generation_mwh)),
 			X_test = map(X_test, as.matrix),
 		) %>%
-		select(rank, node_size, num_trees, fold_num, X_train, y_train, X_test, y_test)
+		select(rank, node_size, num_trees, fold_num, X_train, y_train, X_test, y_test, rowid_test)
 
 # for (i in seq(1, nrow(ModelMe))){
 # 	directory <- 'clean_data/random_forest/search3_comparison_of_best_five/'
@@ -108,13 +108,14 @@ YFitNested2 <-
 		mutate_at(c('node_size', 'num_trees', 'fold_num'), parse_integer) %>%
 		select(-fn)
 
+
 RMSE2 <-
 	ModelMe %>%
-		select(rank, node_size, num_trees, fold_num, y_test) %>%
+		select(rank, node_size, num_trees, fold_num, y_test, rowid_test) %>%
 		left_join(YFitNested2, by = c('node_size', 'num_trees', 'fold_num')) %>%
 		mutate(y_fit = map(data, 'value')) %>%
 		select(-data) %>%
-		unnest(c(y_test, y_fit)) %>%
+		unnest(c(rowid_test, y_test, y_fit)) %>%
 		group_by(rank, node_size, num_trees, fold_num) %>%
 		summarize(rmse = Metrics::rmse(y_test, y_fit)) %>%
 		ungroup
@@ -128,7 +129,7 @@ RMSE2 %>%
 	arrange(mean_rmse)
 
 ModelMe %>%
-	select(rank, node_size, num_trees, fold_num, y_test) %>%
+	select(rank, node_size, num_trees, fold_num, y_test, rowid_test) %>%
 	left_join(YFitNested2, by = c('node_size', 'num_trees', 'fold_num')) %>%
 	mutate(
 		y_fit = map(data, 'value'),
@@ -136,6 +137,6 @@ ModelMe %>%
 	) %>%
 	filter(node_size == 1L, num_trees == 183L) %>%
 	rename(y_true = y_test) %>%
-	select(model, fold_num, y_true, y_fit) %>%
-	unnest(c(y_true, y_fit)) %>%
+	select(model, fold_num, rowid_test, y_true, y_fit) %>%
+	unnest(everything()) %>%
 	write_csv('clean_data/results_random_forest.csv')

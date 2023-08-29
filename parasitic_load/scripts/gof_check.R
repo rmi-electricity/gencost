@@ -5,35 +5,111 @@ library(Metrics)
 PreppedData <- readRDS('clean_data/prepped_data.RDS')
 OriginalDataNested <- readRDS('clean_data/original_data_nested.RDS')
 
-# rules to apply to fitted values:
-# gross_generation_mwh distribution should be approx same as training           gross_generation_mwh (worst test)
-
+#### Load data ####
 fn_list <- list.files(path = 'clean_data/', pattern = 'results*', full.names = T, recursive = F)
 Results <-
 	enframe(fn_list, name = NULL, value = 'fn') %>%
 		mutate(data = map(fn, read_csv)) %>%
 		unnest(data) %>%
-		select(fold_num, model, y_fit, y_true)
-# Results <- read_csv('clean_data/results_mean_median.csv')
+		select(fold_num, model, rowid_test, y_fit, y_true) %>%
+		mutate_at('model', str_to_title)
 
-# Compare RMSE
+# ensure there's the same number of rows per model
 Results %>%
-	group_by(model, fold_num) %>%
-	summarize(rmse = Metrics::rmse(y_true, y_fit)) %>%
-	ungroup %>%
-	mutate(model = fct_reorder(model, rmse, median)) %>%
-	ggplot(aes(x = model, y = rmse)) +
-	geom_boxplot() +
-	coord_flip() +
-	expand_limits(y = 0)
+	count(model)
 
+AdditionalVariables <-
+	OriginalDataNested %>%
+		mutate(
+			net_generation_mwh = map(test, 'net_generation_mwh'),
+			capacity_mw = map(test, 'capacity_mw')
+		) %>%
+		select(fold_num, rowid_test, net_generation_mwh, capacity_mw) %>%
+		unnest(c(rowid_test, net_generation_mwh, capacity_mw))
+#
+ParasiticLoadLong <-
+	Results %>%
+		rename(fit = y_fit, true = y_true) %>%
+		gather(metric_type, gross_generation_mwh, -fold_num, -model, -rowid_test) %>%
+		full_join(AdditionalVariables, by = c('fold_num', 'rowid_test')) %>%
+		mutate(
+			parasitic_load = (gross_generation_mwh - net_generation_mwh) / (capacity_mw * 8760)
+		)
+
+#### RMSE ####
+Rmse <-
+	Results %>%
+		group_by(model, fold_num) %>%
+		summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
+		ungroup
+
+# Visualize RMSE
+Rmse %>%
+	# mutate(model = fct_reorder(model, rmse)) %>%
+	ggplot(aes(x = model, y = rmse)) +
+	geom_point() +
+	coord_flip() +
+	expand_limits(y = 0) +
+	scale_y_continuous(labels = scales::comma_format()) +
+	scale_x_discrete(limits = rev) +
+	theme(
+		text = element_text(family = 'serif'),
+		axis.ticks = element_blank(),
+		panel.grid.major.y = element_blank()
+	) +
+	labs(x = '', y = 'RMSE', title = 'Model goodness of fit', subtitle = 'Predicting gross_generation_mwh; five cross-validation folds')
+
+#### Visualize parasitic_load ####
+ParasiticLoadLong %>%
+	filter(metric_type == 'fit') %>%
+	select(model, metric_type, parasitic_load) %>%
+	ggplot(aes(x = model, y = parasitic_load)) +
+	geom_boxplot(outlier.alpha = 0.3, outlier.color = 'dodgerblue') +
+	coord_flip() +
+	labs(x = '', y = 'Fitted parasitic load', title = 'Distribution of fitted parasitic load') +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.major.y = element_blank(),
+		text = element_text(family = 'serif')
+	)
+
+ParasiticLoadLong %>%
+	filter(metric_type == 'fit') %>%
+	select(model, parasitic_load) %>%
+	group_by(model) %>%
+	skim(parasitic_load) %>%
+	select(-skim_variable, -skim_type, -numeric.hist, -n_missing, -complete_rate) %>%
+	rename_all(str_replace, 'numeric.p', 'percentile_') %>%
+	rename(mean = numeric.mean, sd = numeric.sd) %>%
+	mutate_if(is.numeric, round, 2) %>%
+	write_csv('results/parasitic_load')
+
+# rules to apply to fitted values:
 # Check: gross_generation_mwh cannot be <0 (MOST IMPORTANT CHECK)
 MinYFit <-
 	Results %>%
 		group_by(model) %>%
-		summarize(min_y_fit = min(y_fit)) %>%
+		summarize(
+			min_y_fit = min(y_fit),
+			prop_y_fit_below_zero = mean(y_fit < 0)
+		) %>%
 		ungroup
 print(MinYFit)
+write_csv(MinYFit, 'results/min_y_fit.csv')
+
+MinYFit %>%
+	ggplot(aes(x = model, y = prop_y_fit_below_zero)) +
+	geom_col(fill = 'maroon') +
+	coord_flip(y = c(0, 1)) +
+	geom_label(aes(label = scales::percent(prop_y_fit_below_zero)), family = 'serif', nudge_y = 0.05) +
+	scale_y_continuous(labels = scales::percent_format()) +
+	scale_x_discrete(limits = rev) +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.major.y = element_blank(),
+		text = element_text(family = 'serif')
+	) +
+	labs(x = '', y = '', title = 'Percentage of fitted gross_generation_mwh\nthat is below 0')
 
 min_check <- all(MinYFit$min_y_fit >= 0)
 str_c('Check 1: gross_generation_mwh cannot be negative: ', min_check)
@@ -41,35 +117,50 @@ str_c('Check 1: gross_generation_mwh cannot be negative: ', min_check)
 # Check: gross_generation_mwh should be at or higher than net generation_mwh
 # (ie parasitic load should be zero or positive)
 
-NetGenerationMwh <-
-	OriginalDataNested %>%
-		mutate(net_generation_mwh = map(test, 'net_generation_mwh')) %>%
-		select(fold_num, rowid_test, net_generation_mwh) %>%
-		unnest(c(rowid_test, net_generation_mwh))
-
-PropYFitGreaterThanNetGenerationMwh <-
-	NetGenerationMwh %>%
-		left_join(Results, by = c('fold_num', 'rowid_test')) %>%
-		mutate(is_y_fit_greater_than_net_generation_mwh = y_fit >= net_generation_mwh) %>%
+PropParasiticLoadIsNeg <-
+	ParasiticLoadLong %>%
+		filter(metric_type == 'fit') %>%
+		select(model, parasitic_load) %>%
 		group_by(model) %>%
-		summarize(prop_y_fit_greater_than_net_generation_mwh = mean(is_y_fit_greater_than_net_generation_mwh)) %>%
+		summarize(prop_below_zero = mean(parasitic_load < 0)) %>%
+		ungroup
+PropParasiticLoadIsNeg %>%
+	write_csv('results/prop_parasitic_load_neg.csv')
+
+PropGrossGenerationAtOrGreaterThanNetGeneration <-
+	ParasiticLoadLong %>%
+		filter(metric_type == 'fit') %>%
+		group_by(model) %>%
+		summarize(prop_gross_generation_at_or_greater_than_net_generation = mean(gross_generation_mwh >= net_generation_mwh)) %>%
 		ungroup
 
-print(PropYFitGreaterThanNetGenerationMwh)
-
+PropGrossGenerationAtOrGreaterThanNetGeneration %>%
+	ggplot(aes(x = model, y = prop_gross_generation_at_or_greater_than_net_generation)) +
+	geom_col() +
+	coord_flip(ylim = c(0, 1)) +
+	scale_x_discrete(limits = rev) +
+	scale_y_continuous(labels = scales::percent_format(1)) +
+	labs(x = '', y = '', title = 'How often is gross_generation_mwh greater than,\nor equal to, net_generation_mwh?') +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.major.y = element_blank(),
+		text = element_text(family = 'serif')
+	)
 
 # gross_generation_mwh distribution should look like net_generation_mwh, but shifted to the right a bit (diff is parasitic_load)
-NetAndGrossLong <-
-	NetGenerationMwh %>%
-		left_join(Results, by = c('fold_num', 'rowid_test')) %>%
-		rename(`True Gross Generation MWh` = y_true,
-					 `Fitted Gross Generation MWh` = y_fit,
-					 `Net Generation MWh` = net_generation_mwh) %>%
-		gather(metric, value, -fold_num, -rowid_test, -model) %>%
-		mutate(metric = ordered(metric,
-														c('Net Generation MWh', 'True Gross Generation MWh', 'Fitted Gross Generation MWh')))
-
-NetAndGrossLong	%>%
-	ggplot(aes(x = value)) +
-	geom_density(aes(group = metric, color = metric)) +
-	facet_wrap(~model, scales = 'free')
+ParasiticLoadLong %>%
+	filter(metric_type == 'fit') %>%
+	select(model, net_generation_mwh, gross_generation_mwh) %>%
+	gather(variable, value, -model) %>%
+	ggplot(aes(x = variable, y = value)) +
+	geom_boxplot(outlier.alpha = 0.3, outlier.color = 'dodgerblue') +
+	facet_wrap(~model, ncol = 1) +
+	coord_flip() +
+	scale_x_discrete(limits = rev) +
+	scale_y_continuous(labels = scales::comma_format(1)) +
+	labs(x = '', y = '', title = 'Fitted gross_generation_mwh, compared with\nnet_generation_mwh distribution') +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.major.y = element_blank(),
+		text = element_text(family = 'serif')
+	)
