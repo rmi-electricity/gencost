@@ -1,33 +1,30 @@
 # Simple model: overall mean and median
 
 library(tidyverse)
-library(Metrics)
-# library(skimr)
 
-set.seed(1)
-# DataBySubplant <- read_csv('clean_data/clean_data_by_subplant.csv')
-NestedDataBySubplant <- readRDS('clean_data/nested_data_by_subplant.RDS')
+Data <- readRDS('clean_data/prepped_data.RDS')
 
 YFit <-
-	NestedDataBySubplant %>%
-		select(fold_num, train) %>%
+	Data %>%
+		select(fold_num, train_prepped) %>%
 		mutate(
-			train = map(train, 'gross_generation_mwh'),
-			mean = map_dbl(train, mean),
-			median = map_dbl(train, median),
+			gross_generation_mwh = map(train_prepped, 'gross_generation_mwh'),
+			mean = map_dbl(gross_generation_mwh, mean),
+			median = map_dbl(gross_generation_mwh, median)
 		) %>%
-		select(fold_num, mean, median)
-
-GofMeanMedian <-
-	NestedDataBySubplant %>%
-		inner_join(YFit, by = 'fold_num') %>%
-		mutate(y = map(test, 'gross_generation_mwh')) %>%
-		select(fold_num, mean, median, y) %>%
-		gather(model, y_fit, -fold_num, -y) %>%
-		unnest(y) %>%
-		group_by(fold_num, model) %>%
-		summarize(rmse = Metrics::rmse(y, y_fit)) %>%
-		ungroup %>%
+		select(fold_num, mean, median) %>%
+		gather(model, y_fit, -fold_num) %>%
 		mutate(model = str_to_title(model))
 
-write_csv(GofMeanMedian, 'clean_data/gof_mean_median.csv')
+YTrue <-
+	Data %>%
+		mutate(y_true = map(test_prepped, 'gross_generation_mwh')) %>%
+		select(fold_num, rowid_test, y_true)
+
+Results <-
+	YFit %>%
+		left_join(YTrue, by = 'fold_num') %>%
+		unnest(c(y_true, rowid_test)) %>%
+		relocate(fold_num, model, rowid_test)
+
+write_csv(Results, 'clean_data/results_mean_median.csv')
