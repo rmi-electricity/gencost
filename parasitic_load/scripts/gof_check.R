@@ -66,6 +66,7 @@ ParasiticLoadLong %>%
 	ggplot(aes(x = model, y = parasitic_load)) +
 	geom_boxplot(outlier.alpha = 0.3, outlier.color = 'dodgerblue') +
 	coord_flip() +
+	scale_x_discrete(limits = rev) +
 	labs(x = '', y = 'Fitted parasitic load', title = 'Distribution of fitted parasitic load') +
 	theme(
 		axis.ticks = element_blank(),

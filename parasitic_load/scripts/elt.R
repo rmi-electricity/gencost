@@ -7,6 +7,8 @@
 library(tidyverse)
 library(arrow)
 
+
+# tech description variables have been pivoted to show capacity per fuel type
 #### Load data ####
 
 variables_to_select <- c(
