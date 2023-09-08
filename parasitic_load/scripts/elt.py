@@ -1,8 +1,12 @@
-"""
+#!/usr/bin/env python
+""" Basic ELT of DataBySubplant:
 - Read DataBySubplant
-- add parasitic load column
-- deselect undesirable columns
-- filter undesirable rows
+- Add parasitic load column
+- Deselect undesirable columns
+- Filter undesirable rows
+
+Andrew Bartnof, for RMI
+2023
 """
 
 import os

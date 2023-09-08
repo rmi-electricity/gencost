@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+"""
+Perform feature engineering on cleaned data, so that it's ready for modeling:
+    - encode categorical data as numeric
+    - scale all data
+    - impute missing rows
+Andrew Bartnof, for RMI
+2023
+"""
+
 import os
 
 import numpy as np

@@ -1,3 +1,11 @@
+#!/usr/bin/env python
+"""
+Split cleaned data into 5 training/test sets
+Andrew Bartnof, for RMI
+2023
+"""
+
+
 import os
 
 import pandas as pd
