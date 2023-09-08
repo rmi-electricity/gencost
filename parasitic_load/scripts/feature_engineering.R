@@ -32,7 +32,7 @@ SplitData <-
 			) %>%
 		relocate(fold_num)
 
-recipe_object <- recipe(gross_generation_mwh ~ .,
+recipe_object <- recipe(parasitic_load ~ .,
 												data = select(DataBySubplant, -rowid))
 # recipe_object
 

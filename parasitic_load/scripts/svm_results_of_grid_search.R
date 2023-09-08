@@ -8,29 +8,45 @@ PreppedData <- readRDS('clean_data/prepped_data.RDS')
 YTrueNested <-
 	PreppedData %>%
 	filter(fold_num == 1L) %>%
-	mutate(y_true = map(test_prepped, 'gross_generation_mwh')) %>%
+	mutate(y_true = map(test_prepped, 'parasitic_load')) %>%
 	select(y_true)
 
-fn_list <- list.files('clean_data/svm/search1/', full.names = T)
+fn_list <- list.files('clean_data/svm/', full.names = T, recursive = T, pattern = '*.csv')
+fn_list
 
 NestedYFit <-
 	fn_list %>%
 		enframe(name = NULL, value = 'fn') %>%
-		mutate(data = map(fn, read_csv))
-
-NestedYFit %>%
-	unnest(data)
+		mutate(
+			search = str_extract(fn, 'svm linear [0-9]+'),
+			search = str_extract(search, '[0-9]+'),
+			search = parse_integer(search),
+			data = map(fn, read_csv)
+		)
 
 RMSE <-
 	NestedYFit %>%
 		expand_grid(YTrueNested) %>%
 		unnest(c(data, y_true)) %>%
-		group_by(kernel, degree, cost) %>%
+		group_by(search, kernel, cost) %>%
 		summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
 		ungroup
 
 RMSE %>%
-	ggplot(aes(x = ordered(degree), y = cost, fill = rmse)) +
+	filter(cost > 90, cost < 150) %>%
+	arrange(cost)
+
+RMSE %>%
+	mutate(cost = round(cost)) %>%
+	ggplot(aes(x = cost, y = rmse)) +
+	coord_cartesian(xlim = c(0, 250)) +
+	# geom_smooth() +
+	geom_point(aes(color = ordered(search)))
+	# facet_wrap(~search, scales = 'free_x')
+
+
+RMSE %>%
+	ggplot(aes(x = degree, y = cost, fill = rmse)) +
 	geom_raster() +
 	facet_wrap(~kernel, scales = 'free')
 

@@ -8,9 +8,9 @@ YFit <-
 	Data %>%
 		select(fold_num, train_prepped) %>%
 		mutate(
-			gross_generation_mwh = map(train_prepped, 'gross_generation_mwh'),
-			mean = map_dbl(gross_generation_mwh, mean),
-			median = map_dbl(gross_generation_mwh, median)
+			parasitic_load = map(train_prepped, 'parasitic_load'),
+			mean = map_dbl(parasitic_load, mean),
+			median = map_dbl(parasitic_load, median)
 		) %>%
 		select(fold_num, mean, median) %>%
 		gather(model, y_fit, -fold_num) %>%
@@ -18,7 +18,7 @@ YFit <-
 
 YTrue <-
 	Data %>%
-		mutate(y_true = map(test_prepped, 'gross_generation_mwh')) %>%
+		mutate(y_true = map(test_prepped, 'parasitic_load')) %>%
 		select(fold_num, rowid_test, y_true)
 
 Results <-

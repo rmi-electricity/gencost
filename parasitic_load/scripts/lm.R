@@ -10,10 +10,10 @@ YFit <-
 	PreppedData %>%
 		mutate(
 			lm_fit = map(train_prepped, lm,
-				formula = 'gross_generation_mwh ~ net_generation_mwh + capacity_mw + age_of_observation + age_in_report_year'
+				formula = 'parasitic_load ~ net_generation_mwh + capacity_mw + age_of_observation + age_in_report_year'
 			),
 			y_fit = map2(lm_fit, test_prepped, predict.lm),
-			y_true = map(test_prepped, 'gross_generation_mwh'),
+			y_true = map(test_prepped, 'parasitic_load'),
 		)
 
 Results <-

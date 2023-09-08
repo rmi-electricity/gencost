@@ -52,6 +52,24 @@ TechTypeComplexToParasiticLoad <-
 		select(rowid, parasitic_load) %>%
 		inner_join(RowidToTechTypeComplex, by = 'rowid')  # some rows don't have tech type
 
+
+DataBySubplant %>%
+	select(prime_mover, parasitic_load) %>%
+	filter(prime_mover != 'IC') %>%
+	mutate(is_parasitic_load_negative = parasitic_load < 0) %>%
+	count(is_parasitic_load_negative)
+
+	ggplot(aes(x = prime_mover, y = parasitic_load)) +
+	geom_boxplot(outlier.color = 'dodgerblue', outlier.alpha = 0.1) +
+	coord_flip()
+
+
+DataBySubplant %>%
+	select(rowid, parasitic_load) %>%
+	left_join(RowidToTechTypeComplex, by = 'rowid') %>%  # some rows don't have tech type
+	skim
+
+
 TechTypeComplexToParasiticLoad %>%
 	mutate(tech_type_complex = fct_reorder(tech_type_complex, parasitic_load)) %>%
 	ggplot(aes(x = tech_type_complex, y = parasitic_load)) +
