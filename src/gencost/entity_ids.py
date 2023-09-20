@@ -36,6 +36,8 @@ def add_ba_code(
         .query("proportion_purchased >= 0.9")
         .rename(columns={"respondent_id": "respondent_id_purchaser"})
     )
+    # https://github.com/rmi-electricity/utility-transition-hub/issues/444
+    purchased = purchased.query("plant_id_eia != 2164", engine="python")
     out = (
         input_df.merge(
             ferc_match[["respondent_id", "utility_id_eia"]].dropna().drop_duplicates(),
@@ -109,6 +111,8 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
         "CPLE": "DUKE",  # combine Duke Carolinas and Duke Progress
         "CPLW": "DUKE",  # combine Duke Carolinas and Duke Progress
         "BPAT": "PNW",
+        "CHPD": "PNW",
+        "DOPD": "PNW",
         "AVA": "PNW",
         "SCL": "PNW",
         "TPWR": "PNW",
