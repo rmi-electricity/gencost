@@ -5,24 +5,53 @@ library(e1071)
 
 #### Load data for part 1: judging grid search ####
 PreppedData <- readRDS('clean_data/prepped_data.RDS')
-YTrueNested <-
-	PreppedData %>%
-	filter(fold_num == 1L) %>%
-	mutate(y_true = map(test_prepped, 'parasitic_load')) %>%
-	select(y_true)
+# YTrueNested <-
+# 	PreppedData %>%
+# 	filter(fold_num == 1L) %>%
+# 	mutate(y_true = map(test_prepped, 'parasitic_load')) %>%
+# 	select(y_true)
 
-fn_list <- list.files('clean_data/svm/', full.names = T, recursive = T, pattern = '*.csv')
+fn_list <- list.files('clean_data/svm/svm linear 5 final/', full.names = T, recursive = T, pattern = '*.csv')
 fn_list
 
-NestedYFit <-
+# NestedYFit <-
+# 	fn_list %>%
+# 		enframe(name = NULL, value = 'fn') %>%
+# 		mutate(
+# 			search = str_extract(fn, 'svm linear [0-9]+'),
+# 			search = str_extract(search, '[0-9]+'),
+# 			search = parse_integer(search),
+# 			data = map(fn, read_csv)
+# 		)
+
+YFit <-
 	fn_list %>%
 		enframe(name = NULL, value = 'fn') %>%
 		mutate(
-			search = str_extract(fn, 'svm linear [0-9]+'),
-			search = str_extract(search, '[0-9]+'),
-			search = parse_integer(search),
-			data = map(fn, read_csv)
-		)
+			data = map(fn, read_csv),
+			fold_num = str_extract(fn, 'fold_num_[0-9]+'),
+			fold_num = parse_integer(str_extract(fold_num, '[0-9]+'))
+		) %>%
+		unnest(data)
+
+RMSE <-
+	YFit %>%
+		group_by(fold_num, cost) %>%
+		summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
+		ungroup
+
+RMSE %>%
+	ggplot(aes(x = cost, y = rmse)) +
+	geom_point()
+
+# Linear with cost = 112 is (by a smidge) the best fit
+RMSE %>%
+	group_by(cost) %>%
+	summarize(mean_rmse = mean(rmse), median_rmse = median(rmse)) %>%
+	ungroup %>%
+	arrange(mean_rmse, median_rmse)
+
+# END HERE
 
 RMSE <-
 	NestedYFit %>%
@@ -44,6 +73,12 @@ RMSE %>%
 	geom_point(aes(color = ordered(search)))
 	# facet_wrap(~search, scales = 'free_x')
 
+RMSE %>%
+	distinct(kernel, cost, .keep_all = T) %>%
+	arrange(rmse) %>%
+	head(4)
+
+# cost to check: 100, 112, 114, 166
 
 RMSE %>%
 	ggplot(aes(x = degree, y = cost, fill = rmse)) +

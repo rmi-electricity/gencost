@@ -38,10 +38,8 @@ FnIn = pd.DataFrame(
 
 # Attach hyperparameters to be tested
 num_estimators = list(range(1, 500))
-# num_estimators = list(range(1, 1000)) # TODO use this
 NumEstimators = pd.DataFrame(num_estimators, columns=["num_estimators"])
 max_depth = list(range(1, 500))
-# max_depth = list(range(1, 1000)) # TODO use this
 MaxDepth = pd.DataFrame(max_depth, columns=["max_depth"])
 Params = FnIn.merge(NumEstimators, how="cross").merge(MaxDepth, how="cross")
 
@@ -56,6 +54,7 @@ for i in range(Params.shape[0]):
 Params["fn_out"] = fn_out_list
 
 # Test models
+Output = pd.DataFrame(columns=["fold_num", "num_estimators", "max_depth", "rmse"])
 for i in range(Params.shape[0]):
     XTrain = np.load(Params["train_x"].values[i])
     y_train = np.load(Params["train_y"].values[i])
@@ -71,16 +70,17 @@ for i in range(Params.shape[0]):
     print(i, "/", Params.shape[0])
 
     reg = RandomForestRegressor(n_estimators=e, max_depth=d)
-    reg.fit(X=XTrain, y=y_train)
+    reg.fit(X=XTrain, y=y_train.ravel())
     y_fit = reg.predict(XTest)
 
-    Output = pd.DataFrame(
-        columns=["fold_num", "num_estimators", "max_depth", "y_fit", "y_true"]
-    )
-    Output["fold_num"] = f
-    Output["num_estimators"] = e
-    Output["max_depth"] = d
-    Output["y_true"] = np.ndarray.flatten(y_test)
-    Output["y_fit"] = np.ndarray.flatten(y_fit)
-    Output.to_csv(fn_out)
+    # RMSE
+    errors = y_fit - y_test.transpose()
+    se = np.square(errors)
+    mse = np.mean(se)
+    rmse = np.sqrt(mse)
+
+    # Record RMSE
+    new_row = [f, e, d, rmse]
+    Output.loc[len(Output)] = new_row
+    Output.to_csv("random_forest_search_1.csv")
 exit()

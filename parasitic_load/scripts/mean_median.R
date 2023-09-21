@@ -26,5 +26,6 @@ Results <-
 		left_join(YTrue, by = 'fold_num') %>%
 		unnest(c(y_true, rowid_test)) %>%
 		relocate(fold_num, model, rowid_test)
+Results
 
-write_csv(Results, 'clean_data/results_mean_median.csv')
+write_csv(Results, 'results/mean_median.csv')

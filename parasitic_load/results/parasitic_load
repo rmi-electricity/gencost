@@ -1,6 +1,0 @@
-model,mean,sd,percentile_0,percentile_25,percentile_50,percentile_75,percentile_100
-Linear Regression,0.01,0.1,-0.32,-0,0,0.02,4.8
-Mean,0.77,1.91,-2.56,-0.13,0.31,1.11,90.38
-Median,0.01,0.66,-2.92,-0.39,-0.01,0.23,32.24
-Random Forest,-0,0.15,-1.52,0,0.01,0.03,14.67
-Support Vector Machine,0.02,0.27,-12.24,-0.03,0.02,0.06,13.21

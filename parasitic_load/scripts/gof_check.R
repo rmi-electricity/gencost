@@ -2,62 +2,105 @@ library(tidyverse)
 library(skimr)
 library(Metrics)
 
-PreppedData <- readRDS('clean_data/prepped_data.RDS')
+# PreppedData <- readRDS('clean_data/prepped_data.RDS')
 OriginalDataNested <- readRDS('clean_data/original_data_nested.RDS')
 
+PyOriginalData <-
+	list.files(path = 'clean_data_py/test/', pattern = 'csv', full.names = T) %>%
+		enframe(name = NULL, value = 'fn') %>%
+		arrange(fn) %>%
+		mutate(
+			fold_num = str_extract(fn, '[0-9]+'),
+			data = map(fn, read_csv)
+		) %>%
+		unnest(data) %>%
+		select(-fn)
+
 #### Load data ####
-fn_list <- list.files(path = 'clean_data/', pattern = 'results*', full.names = T, recursive = F)
-Results <-
-	enframe(fn_list, name = NULL, value = 'fn') %>%
+MeanMedian <- read_csv('results/mean_median.csv')
+MeanMedian
+	select(model, fold_num, y_fit, y_true)
+
+SvmLinear <-
+	list.files(path = 'results/svm linear/', full.names = T) %>%
+		enframe(name = NULL, value = 'fn') %>%
 		mutate(data = map(fn, read_csv)) %>%
 		unnest(data) %>%
-		select(fold_num, model, rowid_test, y_fit, y_true) %>%
-		mutate_at('model', str_to_title)
+		mutate(
+			model = 'SVM (Linear)',
+			fold_num = str_extract(fn, 'fold_num_[0-9]+'),
+			fold_num = str_extract(fold_num, '[0-9]+'),
+			fold_num = parse_integer(fold_num)
+			) %>%
+		select(model, fold_num, y_fit, y_true)
+
+SvmPolynomial <-
+	list.files(path = 'results/svm poly/', full.names = T) %>%
+		enframe(name = NULL, value = 'fn') %>%
+		arrange(fn) %>%
+		mutate(data = map(fn, read_csv)) %>%
+		unnest(data) %>%
+		mutate(model = 'SVM (Polynomial)') %>%
+		select(model, fold_num, y_fit, y_true)
+
+SvmPolynomial
+PyOriginalData %>%
+	select(net_generation_mwh, gross_)
+table(near(PyOriginalData$parasitic_load, SvmPolynomial$y_true))
+# Insert random forests here
+
+AllMods <-
+	MeanMedian %>%
+		bind_rows(SvmLinear) %>%
+		bind_rows(SvmPolynomial)
+
 
 # ensure there's the same number of rows per model
-Results %>%
-	count(model)
+AllMods %>%
+	count(model) %>%
+	mutate(is_correct_amt = n == nrow(DataBySubplant)) # ELT was slightly different in python
 
-AdditionalVariables <-
-	OriginalDataNested %>%
-		mutate(
-			net_generation_mwh = map(test, 'net_generation_mwh'),
-			capacity_mw = map(test, 'capacity_mw')
-		) %>%
-		select(fold_num, rowid_test, net_generation_mwh, capacity_mw) %>%
-		unnest(c(rowid_test, net_generation_mwh, capacity_mw))
-#
-ParasiticLoadLong <-
-	Results %>%
-		rename(fit = y_fit, true = y_true) %>%
-		gather(metric_type, gross_generation_mwh, -fold_num, -model, -rowid_test) %>%
-		full_join(AdditionalVariables, by = c('fold_num', 'rowid_test')) %>%
-		mutate(
-			parasitic_load = (gross_generation_mwh - net_generation_mwh) / (capacity_mw * 8760)
-		)
 
 #### RMSE ####
 Rmse <-
-	Results %>%
+	AllMods %>%
 		group_by(model, fold_num) %>%
 		summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
 		ungroup
 
-# Visualize RMSE
 Rmse %>%
-	# mutate(model = fct_reorder(model, rmse)) %>%
 	ggplot(aes(x = model, y = rmse)) +
+	geom_point()
+
+Rmse %>%
+	group_by(model) %>%
+	summarize(
+		mean_rmse = mean(rmse),
+		low = mean_rmse - sd(rmse),
+		high = mean_rmse + sd(rmse),
+		) %>%
+	ungroup %>%
+	ggplot(aes(x = model, y = mean_rmse)) +
 	geom_point() +
-	coord_flip() +
-	expand_limits(y = 0) +
-	scale_y_continuous(labels = scales::comma_format()) +
-	scale_x_discrete(limits = rev) +
-	theme(
-		text = element_text(family = 'serif'),
-		axis.ticks = element_blank(),
-		panel.grid.major.y = element_blank()
-	) +
-	labs(x = '', y = 'RMSE', title = 'Model goodness of fit', subtitle = 'Predicting gross_generation_mwh; five cross-validation folds')
+	geom_linerange(aes(ymin = low, ymax = high))
+
+# use parasitic load to recalculate gross_gen;
+# compare artificial gross_gen vs. known gross_gen
+# agg should not be negative!
+
+# parasitic_load = (gross_generation_mwh - net_generation_mwh) / (capacity_mw * 8760)
+# p = (g-n) / (c*8760)
+# p(c*8760) = g-n
+# p(c*8760) + n = g
+
+
+
+
+
+
+
+
+
 
 #### Visualize parasitic_load ####
 ParasiticLoadLong %>%
