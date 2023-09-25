@@ -20,6 +20,7 @@ variables_to_select = [
     # DV:
     "parasitic_load",  # note: gross_generation_mwh is now not in the model
     # IVs:
+    "gross_generation_mwh",  # TODO: remove this from IVs, we just need this for goodness of fit tests
     "capacity_mw",
     "net_generation_mwh",
     # 'heat_in_mmbtu',

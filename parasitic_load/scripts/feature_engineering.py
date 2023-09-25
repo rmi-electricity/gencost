@@ -33,6 +33,10 @@ for fold_num in fold_range:
     Train = pd.read_csv(fn_train_in)
     Test = pd.read_csv(fn_test_in)
 
+    # Remove gross_generation_mwh
+    Train = Train.drop(["gross_generation_mwh"], axis=1)
+    Test = Test.drop(["gross_generation_mwh"], axis=1)
+
     # distinguish between IVs and DV
     y_train = Train["parasitic_load"].to_numpy().reshape(-1, 1)
     y_test = Test["parasitic_load"].to_numpy().reshape(-1, 1)

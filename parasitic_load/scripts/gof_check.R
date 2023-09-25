@@ -2,209 +2,206 @@ library(tidyverse)
 library(skimr)
 library(Metrics)
 
-# PreppedData <- readRDS('clean_data/prepped_data.RDS')
-OriginalDataNested <- readRDS('clean_data/original_data_nested.RDS')
+# Part 1: load python models
 
-PyOriginalData <-
-	list.files(path = 'clean_data_py/test/', pattern = 'csv', full.names = T) %>%
+PythonTest <-
+	list.files(path = 'clean_data_py/test/', pattern = '.csv', full.names = T) %>%
 		enframe(name = NULL, value = 'fn') %>%
-		arrange(fn) %>%
 		mutate(
-			fold_num = str_extract(fn, '[0-9]+'),
-			data = map(fn, read_csv)
+			fold_num = parse_integer(str_extract(fn, '[0-9]+')),
+			data = map(fn, read_csv),
+			prime_mover = map(data, 'prime_mover'),
+			gross_generation_mwh = map(data, 'gross_generation_mwh'),
+			net_generation_mwh = map(data, 'net_generation_mwh'),
+			capacity_mw = map(data, 'capacity_mw')
 		) %>%
-		unnest(data) %>%
-		select(-fn)
+	select(fold_num, data, gross_generation_mwh, net_generation_mwh, capacity_mw, prime_mover)
 
-#### Load data ####
-MeanMedian <- read_csv('results/mean_median.csv')
-MeanMedian
-	select(model, fold_num, y_fit, y_true)
+# Null model
 
-SvmLinear <-
-	list.files(path = 'results/svm linear/', full.names = T) %>%
-		enframe(name = NULL, value = 'fn') %>%
-		mutate(data = map(fn, read_csv)) %>%
-		unnest(data) %>%
+NullModels <-
+	PythonTest %>%
 		mutate(
-			model = 'SVM (Linear)',
-			fold_num = str_extract(fn, 'fold_num_[0-9]+'),
-			fold_num = str_extract(fold_num, '[0-9]+'),
-			fold_num = parse_integer(fold_num)
-			) %>%
-		select(model, fold_num, y_fit, y_true)
+			parasitic_load = map(data, 'parasitic_load'),
+			Mean = map_dbl(parasitic_load, mean),
+			Median = map_dbl(parasitic_load, median)
+		) %>%
+	select(-data) %>%
+	gather(model, y_fit, -fold_num, -gross_generation_mwh, -net_generation_mwh, -capacity_mw, -parasitic_load, -prime_mover) %>%
+	unnest(everything()) %>%
+	rename(y_true = parasitic_load)
 
-SvmPolynomial <-
+
+# SVM Poly
+YFitSvmPoly <-
 	list.files(path = 'results/svm poly/', full.names = T) %>%
 		enframe(name = NULL, value = 'fn') %>%
-		arrange(fn) %>%
-		mutate(data = map(fn, read_csv)) %>%
-		unnest(data) %>%
-		mutate(model = 'SVM (Polynomial)') %>%
-		select(model, fold_num, y_fit, y_true)
+		mutate(
+			fold_num = parse_integer(str_extract(fn, '(?<=fold_)[0-9]')),
+			YFit = map(fn, read_csv)
+		) %>%
+	select(fold_num, YFit)
 
-SvmPolynomial
-PyOriginalData %>%
-	select(net_generation_mwh, gross_)
-table(near(PyOriginalData$parasitic_load, SvmPolynomial$y_true))
-# Insert random forests here
+SvmPoly <-
+	PythonTest %>%
+		left_join(YFitSvmPoly, by = 'fold_num') %>%
+		select(-fold_num, -data) %>%
+		unnest(everything()) %>%
+		select(-`...1`) %>%
+		mutate(model = 'SVM Polynomial') %>%
+		select(model, fold_num, gross_generation_mwh, net_generation_mwh,
+					 capacity_mw, y_fit, y_true, prime_mover
+		)
+SvmPoly
+
+# SVM Linear
+YFitSvmLinear <-
+	list.files(path = 'results/svm linear/', full.names = T, pattern = 'csv') %>%
+		enframe(name = NULL, value = 'fn') %>%
+		mutate(
+			fold_num = parse_integer(str_extract(fn, '(?<=fold_num_)[0-9]')),
+			YFit = map(fn, read_csv)
+		) %>%
+	select(fold_num, YFit)
+
+SvmLinear <-
+	PythonTest %>%
+		left_join(YFitSvmLinear, by = 'fold_num') %>%
+		select(-fold_num, -data) %>%
+		unnest(everything()) %>%
+		select(-`...1`) %>%
+		mutate(model = 'SVM Linear') %>%
+		select(model, fold_num, gross_generation_mwh, net_generation_mwh,
+					 capacity_mw, y_fit, y_true, prime_mover
+		)
+
+# Random Forest
+YFitRandomForest <-
+	list.files(path = 'results/random forest/', full.names = T) %>%
+		enframe(name = NULL, value = 'fn') %>%
+		mutate(
+			fold_num = parse_integer(str_extract(fn, '(?<=fold_num_)[0-9]+')),
+			YFit = map(fn, read_csv)
+		)
+
+RandomForest <-
+	PythonTest %>%
+		left_join(YFitRandomForest, by = 'fold_num') %>%
+		select(-fold_num, -data) %>%
+		unnest(everything()) %>%
+		select(-`...1`) %>%
+		select(model, fold_num, gross_generation_mwh, net_generation_mwh,
+					 capacity_mw, y_fit, y_true, prime_mover
+		)
+
+# PreppedData <- readRDS('clean_data/prepped_data.RDS')
+
+# PyOriginalData <-
+# 	list.files(path = 'clean_data_py/test/', pattern = 'csv', full.names = T) %>%
+# 		enframe(name = NULL, value = 'fn') %>%
+# 		arrange(fn) %>%
+# 		mutate(
+# 			fold_num = str_extract(fn, '[0-9]+'),
+# 			data = map(fn, read_csv)
+# 		) %>%
+# 		unnest(data) %>%
+# 		select(-fn)
 
 AllMods <-
-	MeanMedian %>%
-		bind_rows(SvmLinear) %>%
-		bind_rows(SvmPolynomial)
-
-
-# ensure there's the same number of rows per model
-AllMods %>%
-	count(model) %>%
-	mutate(is_correct_amt = n == nrow(DataBySubplant)) # ELT was slightly different in python
-
+		SvmLinear %>%
+		bind_rows(SvmPoly) %>%
+		bind_rows(RandomForest) %>%
+		bind_rows(NullModels)
 
 #### RMSE ####
-Rmse <-
-	AllMods %>%
-		group_by(model, fold_num) %>%
-		summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
-		ungroup
-
-Rmse %>%
+AllMods %>%
+	group_by(model, fold_num) %>%
+	summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
+	ungroup %>%
 	ggplot(aes(x = model, y = rmse)) +
-	geom_point()
+	geom_point() +
+	coord_flip() +
+	expand_limits(y = 0) +
+	labs(x = '', y = 'RMSE')
 
-Rmse %>%
+AllMods %>%
+	group_by(model, fold_num) %>%
+	summarize(rmse = Metrics::rmse(y_fit, y_true)) %>%
+	ungroup %>%
+	group_by(model) %>%
+	summarize(rmse = mean(rmse)) %>%
+	ungroup %>%
+	ggplot(aes(x = model, y = rmse)) +
+	geom_point() +
+	coord_flip() +
+	expand_limits(y = 0) +
+	labs(x = '', y = 'Mean RMSE')
+
+AllMods %>%
 	group_by(model) %>%
 	summarize(
-		mean_rmse = mean(rmse),
-		low = mean_rmse - sd(rmse),
-		high = mean_rmse + sd(rmse),
-		) %>%
+		Fit = mean(y_fit < 0),
+		True = mean(y_true < 0),
+		# prop_over_one_fit = mean(y_fit > 1),
+		# prop_over_one_true = mean(y_true > 1),
+	) %>%
 	ungroup %>%
-	ggplot(aes(x = model, y = mean_rmse)) +
-	geom_point() +
-	geom_linerange(aes(ymin = low, ymax = high))
+	gather(variable, prop, -model) %>%
+	ggplot(aes(x = model, fill = variable, group = variable, y = prop)) +
+	geom_col(position = 'dodge') +
+	coord_flip() +
+	scale_y_continuous(labels = scales::percent_format()) +
+	labs(x = '', y = '', title = 'Parasitic load < 0.0', fill = '')
+
+AllMods %>%
+	group_by(model) %>%
+	summarize(
+		# Fit = mean(y_fit < 0),
+		# True = mean(y_true < 0),
+		Fit = mean(y_fit > 1),
+		True = mean(y_true > 1),
+	) %>%
+	ungroup %>%
+	gather(variable, prop, -model) %>%
+	ggplot(aes(x = model, fill = variable, group = variable, y = prop)) +
+	geom_col(position = 'dodge') +
+	coord_flip() +
+	scale_y_continuous(labels = scales::percent_format()) +
+	labs(x = '', y = '', title = 'Parasitic load > 1.0', fill = '')
 
 # use parasitic load to recalculate gross_gen;
 # compare artificial gross_gen vs. known gross_gen
 # agg should not be negative!
 
-# parasitic_load = (gross_generation_mwh - net_generation_mwh) / (capacity_mw * 8760)
+# parasitic_load = (gross_generation_mwh - net_generation_mwh)
+#	/ (capacity_mw * 8760)
 # p = (g-n) / (c*8760)
 # p(c*8760) = g-n
 # p(c*8760) + n = g
 
-
-
-
-
-
-
-
-
-
-#### Visualize parasitic_load ####
-ParasiticLoadLong %>%
-	filter(metric_type == 'fit') %>%
-	select(model, metric_type, parasitic_load) %>%
-	ggplot(aes(x = model, y = parasitic_load)) +
-	geom_boxplot(outlier.alpha = 0.3, outlier.color = 'dodgerblue') +
-	coord_flip() +
-	scale_x_discrete(limits = rev) +
-	labs(x = '', y = 'Fitted parasitic load', title = 'Distribution of fitted parasitic load') +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.major.y = element_blank(),
-		text = element_text(family = 'serif')
-	)
-
-ParasiticLoadLong %>%
-	filter(metric_type == 'fit') %>%
-	select(model, parasitic_load) %>%
-	group_by(model) %>%
-	skim(parasitic_load) %>%
-	select(-skim_variable, -skim_type, -numeric.hist, -n_missing, -complete_rate) %>%
-	rename_all(str_replace, 'numeric.p', 'percentile_') %>%
-	rename(mean = numeric.mean, sd = numeric.sd) %>%
-	mutate_if(is.numeric, round, 2) %>%
-	write_csv('results/parasitic_load')
-
-# rules to apply to fitted values:
-# Check: gross_generation_mwh cannot be <0 (MOST IMPORTANT CHECK)
-MinYFit <-
-	Results %>%
-		group_by(model) %>%
-		summarize(
-			min_y_fit = min(y_fit),
-			prop_y_fit_below_zero = mean(y_fit < 0)
+AllMods %>%
+	mutate(
+		artificial_gross_generation_mwh = y_fit * (capacity_mw * 8760) + net_generation_mwh,
+		capacity_factor = artificial_gross_generation_mwh / (capacity_mw * 8760)
 		) %>%
-		ungroup
-print(MinYFit)
-write_csv(MinYFit, 'results/min_y_fit.csv')
+	ggplot(aes(x = model, y = capacity_factor)) +
+	geom_boxplot(outlier.alpha = 0.1, outlier.color = 'blue') +
+	geom_hline(yintercept = 1, linetype = 'dashed') +
+	facet_wrap(~prime_mover)
+	# filter(model == 'Random Forest') %>%
+	# arrange(desc(artificial_gross_generation_mwh)) %>%
+	# select(artificial_gross_generation_mwh)
 
-MinYFit %>%
-	ggplot(aes(x = model, y = prop_y_fit_below_zero)) +
-	geom_col(fill = 'maroon') +
-	coord_flip(y = c(0, 1)) +
-	geom_label(aes(label = scales::percent(prop_y_fit_below_zero)), family = 'serif', nudge_y = 0.05) +
-	scale_y_continuous(labels = scales::percent_format()) +
-	scale_x_discrete(limits = rev) +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.major.y = element_blank(),
-		text = element_text(family = 'serif')
-	) +
-	labs(x = '', y = '', title = 'Percentage of fitted gross_generation_mwh\nthat is below 0')
 
-min_check <- all(MinYFit$min_y_fit >= 0)
-str_c('Check 1: gross_generation_mwh cannot be negative: ', min_check)
 
-# Check: gross_generation_mwh should be at or higher than net generation_mwh
-# (ie parasitic load should be zero or positive)
+AllMods %>%
+	mutate(artificial_gross_generation_mwh = y_fit * (capacity_mw * 8760) + net_generation_mwh) %>%
+	ggplot(aes(x = model, y = artificial_gross_generation_mwh)) +
+	geom_boxplot()
+	# geom_density() +
+	# facet_wrap(~model)
 
-PropParasiticLoadIsNeg <-
-	ParasiticLoadLong %>%
-		filter(metric_type == 'fit') %>%
-		select(model, parasitic_load) %>%
-		group_by(model) %>%
-		summarize(prop_below_zero = mean(parasitic_load < 0)) %>%
-		ungroup
-PropParasiticLoadIsNeg %>%
-	write_csv('results/prop_parasitic_load_neg.csv')
-
-PropGrossGenerationAtOrGreaterThanNetGeneration <-
-	ParasiticLoadLong %>%
-		filter(metric_type == 'fit') %>%
-		group_by(model) %>%
-		summarize(prop_gross_generation_at_or_greater_than_net_generation = mean(gross_generation_mwh >= net_generation_mwh)) %>%
-		ungroup
-
-PropGrossGenerationAtOrGreaterThanNetGeneration %>%
-	ggplot(aes(x = model, y = prop_gross_generation_at_or_greater_than_net_generation)) +
-	geom_col() +
-	coord_flip(ylim = c(0, 1)) +
-	scale_x_discrete(limits = rev) +
-	scale_y_continuous(labels = scales::percent_format(1)) +
-	labs(x = '', y = '', title = 'How often is gross_generation_mwh greater than,\nor equal to, net_generation_mwh?') +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.major.y = element_blank(),
-		text = element_text(family = 'serif')
-	)
-
-# gross_generation_mwh distribution should look like net_generation_mwh, but shifted to the right a bit (diff is parasitic_load)
-ParasiticLoadLong %>%
-	filter(metric_type == 'fit') %>%
-	select(model, net_generation_mwh, gross_generation_mwh) %>%
-	gather(variable, value, -model) %>%
-	ggplot(aes(x = variable, y = value)) +
-	geom_boxplot(outlier.alpha = 0.3, outlier.color = 'dodgerblue') +
-	facet_wrap(~model, ncol = 1) +
-	coord_flip() +
-	scale_x_discrete(limits = rev) +
-	scale_y_continuous(labels = scales::comma_format(1)) +
-	labs(x = '', y = '', title = 'Fitted gross_generation_mwh, compared with\nnet_generation_mwh distribution') +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.major.y = element_blank(),
-		text = element_text(family = 'serif')
-	)
+AllMods %>%
+	mutate(artificial_gross_generation_mwh = y_fit * (capacity_mw * 8760) + net_generation_mwh) %>%
+	group_by(model) %>%
+	skim(artificial_gross_generation_mwh)

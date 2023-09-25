@@ -7,7 +7,6 @@
 library(tidyverse)
 library(arrow)
 
-
 # tech description variables have been pivoted to show capacity per fuel type
 #### Load data ####
 
@@ -16,6 +15,7 @@ variables_to_select <- c(
 # DV:
 'parasitic_load',  # note: gross_generation_mwh is now not in the model
 # IVs:
+'gross_generation_mwh', # TODO: remove from feature engineering
 'capacity_mw',
 'net_generation_mwh',
 # 'heat_in_mmbtu',

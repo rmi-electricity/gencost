@@ -17,7 +17,7 @@ set.seed(1)
 DataBySubplant <- read_csv('clean_data/data_by_subplant.csv')
 
 # Recipes
-SplitData <-
+SplitDataWithGrossGenerationMwh <-
 	DataBySubplant %>%
 		# select(-rowid) %>%
 		crossv_kfold(k = 5L, id = 'fold_num') %>%
@@ -31,6 +31,13 @@ SplitData <-
 			test = map(test, select, -rowid),
 			) %>%
 		relocate(fold_num)
+
+SplitData <-
+	SplitDataWithGrossGenerationMwh %>%
+		mutate(
+			train = map(train, select, -'gross_generation_mwh'),
+			test =  map(test,  select, -'gross_generation_mwh'),
+		)
 
 recipe_object <- recipe(parasitic_load ~ .,
 												data = select(DataBySubplant, -rowid))
@@ -63,11 +70,16 @@ PreppedData <-
 			)
 		)
 
+# Contains extra variable that won't be in the model
+SplitDataWithGrossGenerationMwh %>%
+	saveRDS('clean_data/split_data.RDS')
+
+# Actual prepped data
 PreppedData %>%
 	# save item, omitting non-prepped objects, to avoid any confusion
 	select(fold_num, train_prepped, test_prepped, rowid_train, rowid_test) %>%
 	saveRDS('clean_data/prepped_data.RDS')
 
-PreppedData %>%
-	# save everything
-	saveRDS('clean_data/original_data_nested.RDS')
+# PreppedData %>%
+# 	# save everything
+# 	saveRDS('clean_data/original_data_nested.RDS')
