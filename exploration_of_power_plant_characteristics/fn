@@ -1,0 +1,244 @@
+[[1]]
+An object of class "ScriptNodeInfo"
+Slot "files":
+character(0)
+
+Slot "strings":
+character(0)
+
+Slot "libraries":
+character(0)
+
+Slot "inputs":
+character(0)
+
+Slot "outputs":
+[1] "all_years"
+
+Slot "updates":
+character(0)
+
+Slot "functions":
+    c     : 
+FALSE FALSE 
+
+Slot "removes":
+character(0)
+
+Slot "nsevalVars":
+character(0)
+
+Slot "sideEffects":
+character(0)
+
+Slot "code":
+all_years <- c(2008:2020)
+
+
+[[2]]
+An object of class "ScriptNodeInfo"
+Slot "files":
+character(0)
+
+Slot "strings":
+character(0)
+
+Slot "libraries":
+character(0)
+
+Slot "inputs":
+character(0)
+
+Slot "outputs":
+[1] "all_months"
+
+Slot "updates":
+character(0)
+
+Slot "functions":
+    c     : 
+FALSE FALSE 
+
+Slot "removes":
+character(0)
+
+Slot "nsevalVars":
+character(0)
+
+Slot "sideEffects":
+character(0)
+
+Slot "code":
+all_months <- c(1:12)
+
+
+[[3]]
+An object of class "ScriptNodeInfo"
+Slot "files":
+character(0)
+
+Slot "strings":
+[1] "../patio_data/unit_level_costs_with_flag.parquet"
+
+Slot "libraries":
+character(0)
+
+Slot "inputs":
+character(0)
+
+Slot "outputs":
+[1] "unit_level_data"
+
+Slot "updates":
+character(0)
+
+Slot "functions":
+read_parquet 
+       FALSE 
+
+Slot "removes":
+character(0)
+
+Slot "nsevalVars":
+character(0)
+
+Slot "sideEffects":
+character(0)
+
+Slot "code":
+unit_level_data <- read_parquet("../patio_data/unit_level_costs_with_flag.parquet")
+
+
+[[4]]
+An object of class "ScriptNodeInfo"
+Slot "files":
+character(0)
+
+Slot "strings":
+[1] "Plant_ID"       "Prime_with_CCs" "Generator_ID"  
+
+Slot "libraries":
+character(0)
+
+Slot "inputs":
+[1] "unit_level_data"
+
+Slot "outputs":
+character(0)
+
+Slot "updates":
+[1] "unit_level_data"
+
+Slot "functions":
+   %>% rename 
+ FALSE  FALSE 
+
+Slot "removes":
+character(0)
+
+Slot "nsevalVars":
+character(0)
+
+Slot "sideEffects":
+character(0)
+
+Slot "code":
+unit_level_data <- unit_level_data %>% rename(plant_id_eia = "Plant_ID", 
+    prime_mover_code = "Prime_with_CCs", generator_id = "Generator_ID")
+
+
+[[5]]
+An object of class "ScriptNodeInfo"
+Slot "files":
+character(0)
+
+Slot "strings":
+character(0)
+
+Slot "libraries":
+character(0)
+
+Slot "inputs":
+[1] "all_months"      "all_years"       "unit_level_data"
+
+Slot "outputs":
+character(0)
+
+Slot "updates":
+[1] "unit_level_data"
+
+Slot "functions":
+          %>%        mutate        unname             * days_in_month           ymd 
+        FALSE         FALSE         FALSE         FALSE         FALSE         FALSE 
+            +        rename     left_join     character 
+        FALSE         FALSE         FALSE         FALSE 
+
+Slot "removes":
+character(0)
+
+Slot "nsevalVars":
+[1] "report_year"  "report_month" "y"            "y"           
+
+Slot "sideEffects":
+character(0)
+
+Slot "code":
+unit_level_data <- unit_level_data %>% left_join(all_years, by = character(), 
+    copy = TRUE) %>% rename(report_year = y) %>% left_join(all_months, 
+    by = character(), copy = TRUE) %>% rename(report_month = y) %>% 
+    mutate(month_hours = unname(24 * days_in_month(ymd(report_year * 
+        10000 + report_month * 100 + 1))))
+
+
+[[6]]
+An object of class "ScriptNodeInfo"
+Slot "files":
+character(0)
+
+Slot "strings":
+character(0)
+
+Slot "libraries":
+character(0)
+
+Slot "inputs":
+[1] "unit_level_data"
+
+Slot "outputs":
+[1] "units_present_hist"
+
+Slot "updates":
+character(0)
+
+Slot "functions":
+   %>% select      c filter      &      (      |      <     ==     <=  is.na      > 
+ FALSE  FALSE  FALSE  FALSE  FALSE  FALSE  FALSE  FALSE  FALSE  FALSE  FALSE  FALSE 
+
+Slot "removes":
+character(0)
+
+Slot "nsevalVars":
+ [1] "plant_id_eia"             "generator_id"             "report_year"             
+ [4] "report_month"             "month_hours"              "Operating_Year"          
+ [7] "report_year"              "Operating_Year"           "report_year"             
+[10] "Operating_Month"          "report_month"             "Retirement_Year"         
+[13] "Retirement_Year"          "report_year"              "Retirement_Year"         
+[16] "report_year"              "Retirement_Month"         "report_month"            
+[19] "Planned_Retirement_Year"  "Planned_Retirement_Year"  "report_year"             
+[22] "Planned_Retirement_Year"  "report_year"              "Planned_Retirement_Month"
+[25] "report_month"            
+
+Slot "sideEffects":
+character(0)
+
+Slot "code":
+units_present_hist <- unit_level_data %>% filter(((Operating_Year < 
+    report_year) | ((Operating_Year == report_year) & (Operating_Month <= 
+    report_month))) & (is.na(Retirement_Year) | (Retirement_Year > 
+    report_year) | ((Retirement_Year == report_year) & (Retirement_Month > 
+    report_month))) & (is.na(Planned_Retirement_Year) | (Planned_Retirement_Year > 
+    report_year) | ((Planned_Retirement_Year == report_year) & 
+    (Planned_Retirement_Month > report_month)))) %>% select(c(plant_id_eia, 
+    generator_id, report_year, report_month, month_hours))
+
+

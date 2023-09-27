@@ -19,39 +19,39 @@ classifiers = [
 requires-python = ">=3.10,<3.12"
 dependencies = [
     "bottleneck >= 1.3,< 1.3.8",
-    "numexpr >= 2.8, < 2.8.5",
+    "numexpr >= 2.8, < 2.8.7",
     "numpy >= 1.18.5,<2",
     "networkx >= 3.0,<3.2",
     "pandas >= 1.4,< 2.1",
-    "pandera >= 0.12, < 0.16",
-    "platformdirs >=2.6,<3.6",
-    "plotly>5.10,<5.15",
-    "pyarrow>=7, <13",
+    "pandera >= 0.12, < 0.18",
+    "platformdirs >=2.6,<3.11",
+    "plotly>5.10,<5.18",
+    "pyarrow>=7, <14",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
-    "scikit-learn>1.1, <1.3",
-    "tqdm >= 4.63,< 4.66",
+    "scikit-learn>1.1, <1.4",
+    "tqdm >= 4.63,< 4.67",
 ]
 
 [project.optional-dependencies]
 dev = [
     "black[jupyter] >= 22,< 24",
-    "coverage>=5.3,<7.3",  # Lets us track what code is being tested
-    "pre-commit>=2.9,<3.4",
-    "pytest>=7.2.1,<7.4",  # test framework
-    "pytest-console-scripts>=1.1,<1.4",  # Allow automatic testing of scripts
-    "pytest-cov>=4.0,<4.1",  # Pytest plugin for working with coverage
-    "ruff>0.0.259,<0.0.266",
-    "tox>=4.2,<4.6",
+    "coverage>=5.3,<7.4",  # Lets us track what code is being tested
+    "pre-commit>=2.9,<3.5",
+    "pytest>=7.2.1,<7.5",  # test framework
+    "pytest-console-scripts>=1.1,<1.5",  # Allow automatic testing of scripts
+    "pytest-cov>=4.0,<4.2",  # Pytest plugin for working with coverage
+    "ruff>0.0.259,<0.0.292",
+    "tox>=4.2,<4.12",
 ]
 doc = [
     "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
     "furo>=2022.4.7",  # A clean customisable Sphinx documentation theme.
-    "rstcheck[sphinx,toml]>=6.1,<6.2",  # ReStructuredText linter
-    "sphinx>=4.1,<7.0.1",
+    "rstcheck[sphinx,toml]>=6.1,<6.3",  # ReStructuredText linter
+    "sphinx>=4.1,<7.2.6",
     "sphinx-autoapi>=2.0,<2.2",
     "sphinx-issues>=3.0,<3.1",
-    "sphinx-autodoc-typehints>1.21,<1.24.0",
-    "sphinxcontrib-mermaid>0.7,<0.9.0",
+    "sphinx-autodoc-typehints>1.21,<1.25.0",
+    "sphinxcontrib-mermaid>0.7,<0.10.0",
 ]
 tests = []
 
@@ -111,7 +111,7 @@ ignore_directives = ["bibliography", "todo", "include"]
 [tool.ruff]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 select = ["A", "B", "C", "E", "F", "N", "S", "SIM", "TCH", "W"]
-ignore = []
+ignore = ["E501"]
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 fixable = ["A", "B", "C", "D", "E", "F",]
 unfixable = []
