@@ -1,24 +1,77 @@
 #!/usr/bin/env python
-# ruff: noqa: N803, N806
+# ruff: noqa: N803, N806, F401
 """
-Perform feature engineering on cleaned data, so that it's ready for modeling
-Andrew Bartnof, for RMI
-2023
+Using DataBySubplant as ground truth, fit a random forest regressor, and predict a new data set's
+parasitic load.
 """
-
-import os
 
 import numpy as np
 import pandas as pd
+import pandera as pa
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-os.chdir("/Users/andrewbartnof/Documents/rmi/gencost/parasitic_load")
 
-DataBySubplant = pd.read_csv("clean_data_py/data_by_subplant.csv")
-NewData = pd.read_csv("clean_data_py/data_by_subplant.csv")
+def check_data_by_subplant(input_data, is_data_by_subplant=True):
+    """
+    Ensure DataBySubplant has all of the columns and rows we need.
+    Arguments:
+        input_data=DataBySubplant (or the new data to be inputted into the model). The only difference is that DataBySubplant needs gross_generation_mwh in order to calculate the dependent variable.
+        is_data_by_subplant=Boolean; if FALSE, don't look for gross_generation_mwh
+    Returns:
+        Nothing, just performs checks, and returns a pandera error if any check fails.
+    """
+
+    reference = "DataBySubplant" if is_data_by_subplant else "New data"
+    print(f"{reference} QC")
+
+    schema = pa.DataFrameSchema(
+        {
+            "prime_mover": pa.Column(str, nullable=True),
+            "state": pa.Column(str, nullable=True),
+            "capacity_mw": pa.Column(float, nullable=True),
+            "net_generation_mwh": pa.Column(float, nullable=True),
+            "associated_combined_heat_power": pa.Column(float, nullable=True),
+            "duct_burners": pa.Column(float, nullable=True),
+            "bypass_heat_recovery": pa.Column(float, nullable=True),
+            "solid_fuel_gasification": pa.Column(float, nullable=True),
+            "carbon_capture": pa.Column(float, nullable=True),
+            "fluidized_bed_tech": pa.Column(float, nullable=True),
+            "pulverized_coal_tech": pa.Column(float, nullable=True),
+            "stoker_tech": pa.Column(float, nullable=True),
+            "other_combustion_tech": pa.Column(float, nullable=True),
+            "subcritical_tech": pa.Column(float, nullable=True),
+            "supercritical_tech": pa.Column(float, nullable=True),
+            "ultrasupercritical_tech": pa.Column(float, nullable=True),
+            "age_in_report_year": pa.Column(float, nullable=True),
+            "age_in_current_year": pa.Column(float, nullable=True),
+            "age_of_observation": pa.Column(float, nullable=True),
+            "age_relative_to_prime_avg": pa.Column(float, nullable=True),
+            "pollution_control_costs_per_kw": pa.Column(float, nullable=True),
+            "biofuel_net_mwh": pa.Column(float, nullable=True),
+            "coal_net_mwh": pa.Column(float, nullable=True),
+            "natural_gas_net_mwh": pa.Column(float, nullable=True),
+            "other_net_mwh": pa.Column(float, nullable=True),
+            "other_gas_net_mwh": pa.Column(float, nullable=True),
+            "petroleum_net_mwh": pa.Column(float, nullable=True),
+            "petroleum_coke_net_mwh": pa.Column(float, nullable=True),
+        },
+        checks=pa.Check(
+            lambda df: df.shape[0] > 0, name="Table must contain at least 1 row"
+        ),
+    )
+
+    schema_gross_gen = pa.DataFrameSchema(
+        {"gross_generation_mwh": pa.Column(float, nullable=True)}
+    )
+
+    schema.validate(input_data)
+    if is_data_by_subplant:
+        schema_gross_gen.validate(input_data)
+
+    print(f"{reference} QC results: pass")
 
 
-# start function here
 def feature_engineering(DataBySubplant, NewData):
     """
     Perform feature engineering on cleaned data, so that it's ready for modeling:
@@ -120,9 +173,26 @@ def feature_engineering(DataBySubplant, NewData):
     return X, y, XNew
 
 
-# use np.save to put these on disk for now
-X, y, XNew = feature_engineering(DataBySubplant, NewData)
+def get_y_fit(X, y, XNew):
+    """
+    Fit a random forest regressor, output new values for NewData; this is the parasitic_load
+    """
+    reg = RandomForestRegressor(n_estimators=1, max_depth=250)
+    reg.fit(X=X, y=y)
+    y_fit = reg.predict(XNew)
+    return y_fit
 
-np.save("X.npy", X)
-np.save("y.npy", y)
-np.save("XNew.npy", XNew)
+
+def predict_parasitic_load(DataBySubplant, NewData):
+    """
+    Pull all previous functions together:
+        data QC
+        data cleaning/feature engineering
+        and predict parasitic_load
+    """
+    check_data_by_subplant(DataBySubplant, is_data_by_subplant=True)
+    check_data_by_subplant(NewData, is_data_by_subplant=False)
+    X, y, XNew = feature_engineering(DataBySubplant, NewData)
+    y_fit = get_y_fit(X, y, XNew)
+    NewData["parasitic_load"] = y_fit
+    return NewData
