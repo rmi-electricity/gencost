@@ -4,7 +4,8 @@ parasitic load.
 """
 
 import numpy as np
-import pandas as pd
+
+# import pandas as pd
 import pandera as pa
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -70,7 +71,7 @@ def check_data_by_subplant(input_data, is_data_by_subplant=True):
     print(f"{reference} QC results: pass")
 
 
-def feature_engineering(DataBySubplant, NewData):
+def feature_engineering(dataBySubplant, newData):
     """
     Perform feature engineering on cleaned data, so that it's ready for modeling:
         - add parasitic load to DataBySubplant
@@ -124,73 +125,73 @@ def feature_engineering(DataBySubplant, NewData):
     ]
 
     # Add parasitic load to DataBySubplant
-    num = DataBySubplant["gross_generation_mwh"] - DataBySubplant["net_generation_mwh"]
-    denom = DataBySubplant["capacity_mw"] * 8760.0
-    DataBySubplant["parasitic_load"] = num / denom
+    num = dataBySubplant["gross_generation_mwh"] - dataBySubplant["net_generation_mwh"]
+    denom = dataBySubplant["capacity_mw"] * 8760.0
+    dataBySubplant["parasitic_load"] = num / denom
 
     # Filter unusable values
     #   Base version always excludes negative parasitic load
     #   Future versions will exclude parasitic loads > 1
-    mask_prime_mover = DataBySubplant["prime_mover"].isin(["CC", "GT", "ST"])
-    mask_parasitic_load = DataBySubplant["parasitic_load"] >= 0.0
-    DataBySubplant = DataBySubplant.loc[mask_prime_mover & mask_parasitic_load]
+    mask_prime_mover = dataBySubplant["prime_mover"].isin(["CC", "GT", "ST"])
+    mask_parasitic_load = dataBySubplant["parasitic_load"] >= 0.0
+    dataBySubplant = dataBySubplant.loc[mask_prime_mover & mask_parasitic_load]
 
     # Distinguish between string and number inputs; and parasitic_load
     # barring possible reshape(-1, 1), this is ready
-    TrainStr = DataBySubplant[predictors_str]
-    TrainNum = DataBySubplant[predictors_num]
-    NewDataStr = NewData[predictors_str]
-    NewDataNum = NewData[predictors_num]
+    trainStr = dataBySubplant[predictors_str]
+    trainNum = dataBySubplant[predictors_num]
+    newDataStr = newData[predictors_str]
+    newDataNum = newData[predictors_num]
 
     # make IVs numerical with one-hot encoding; rejoin all data
-    enc.fit(TrainStr)
-    TrainStrEnc = enc.transform(TrainStr).toarray()
-    NewDataStrEnc = enc.transform(NewDataStr).toarray()
+    enc.fit(trainStr)
+    trainStrEnc = enc.transform(trainStr).toarray()
+    newDataStrEnc = enc.transform(newDataStr).toarray()
 
-    TrainStep1 = np.concatenate((TrainStrEnc, TrainNum.to_numpy()), axis=1)
-    NewDataStep1 = np.concatenate((NewDataStrEnc, NewDataNum.to_numpy()), axis=1)
+    trainStep1 = np.concatenate((trainStrEnc, trainNum.to_numpy()), axis=1)
+    NewDataStep1 = np.concatenate((newDataStrEnc, newDataNum.to_numpy()), axis=1)
 
     # scale data
-    scaler.fit(TrainStep1)
-    TrainStep2 = scaler.transform(TrainStep1)
-    NewDataStep2 = scaler.transform(NewDataStep1)
+    scaler.fit(trainStep1)
+    trainStep2 = scaler.transform(trainStep1)
+    newDataStep2 = scaler.transform(newDataStep1)
 
     # Replace missing values with zero
     # https://stackoverflow.com/questions/60443779/how-to-replacing-all-missing-values-in-numpy-array-with-0-and-displaying-the-las
-    mask_train = np.isnan(TrainStep2)
-    TrainStep2[np.where(mask_train)] = 0.0
+    mask_train = np.isnan(trainStep2)
+    trainStep2[np.where(mask_train)] = 0.0
 
-    mask_new_data = np.isnan(NewDataStep2)
-    NewDataStep2[np.where(mask_new_data)] = 0.0
+    mask_new_data = np.isnan(newDataStep2)
+    newDataStep2[np.where(mask_new_data)] = 0.0
 
     # Return data
-    X = TrainStep2
-    y = DataBySubplant["parasitic_load"].to_numpy()
-    XNew = NewDataStep2
+    x = trainStep2
+    y = dataBySubplant["parasitic_load"].to_numpy()
+    xNew = newDataStep2
 
-    return X, y, XNew
+    return x, y, xNew
 
 
-def get_y_fit(X, y, XNew):
+def get_y_fit(x, y, xNew):
     """
     Fit a random forest regressor, output new values for NewData; this is the parasitic_load
     """
     reg = RandomForestRegressor(n_estimators=1, max_depth=250)
-    reg.fit(X=X, y=y)
-    y_fit = reg.predict(XNew)
+    reg.fit(X=x, y=y)
+    y_fit = reg.predict(xNew)
     return y_fit
 
 
-def predict_parasitic_load(DataBySubplant, NewData):
+def predict_parasitic_load(dataBySubplant, newData):
     """
     Pull all previous functions together:
         data QC
         data cleaning/feature engineering
         and predict parasitic_load
     """
-    check_data_by_subplant(DataBySubplant, is_data_by_subplant=True)
-    check_data_by_subplant(NewData, is_data_by_subplant=False)
-    X, y, XNew = feature_engineering(DataBySubplant, NewData)
-    y_fit = get_y_fit(X, y, XNew)
-    NewData["parasitic_load"] = y_fit
-    return NewData
+    check_data_by_subplant(dataBySubplant, is_data_by_subplant=True)
+    check_data_by_subplant(newData, is_data_by_subplant=False)
+    x, y, xNew = feature_engineering(dataBySubplant, newData)
+    y_fit = get_y_fit(x, y, xNew)
+    newData["parasitic_load"] = y_fit
+    return newData
