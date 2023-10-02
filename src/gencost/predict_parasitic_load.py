@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# ruff: noqa: N803, N806, F401
 """
 Using DataBySubplant as ground truth, fit a random forest regressor, and predict a new data set's
 parasitic load.
