@@ -24,10 +24,12 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
+    COLS_FOR_REGRESSION,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
+from gencost import predict_parasitic_load
 
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -239,6 +241,7 @@ def allocate_col_by(
     if drop:
         return df.drop(columns=old_cols)
     return df
+
 
 def rime_sort_key(string: str):
     """Sort strings starting from the end."""
@@ -455,6 +458,7 @@ class DataBySubplant:
             df_860 = self.get_860_by_x(subplant_id_col="generator_id")
             df_923 = self.get_gf923_by_generator()
             df_cems = self.get_cems_by_generator()
+            data_by_subplant = self.get_exa_by_subplant()
 
             # merge cems and 923 for gen-fuel level allocation of gross gen
             df = pd.merge(
@@ -463,7 +467,28 @@ class DataBySubplant:
                 on=["plant_id_eia", "generator_id", "report_date"],
                 how="outer",
                 validate="1:1",
-                indicator="cems_923_merge",
+                indicator="cems_923_merge",  # merge in cols for regression
+            ).merge(
+                df_860[COLS_FOR_REGRESSION],
+                on=["plant_id_eia", "generator_id", "report_date"],
+                validate="1:1",
+                how="left",
+            )
+
+            # fill in gross gen for gens not in CEMS & non zero net gen
+            df_w_predictions = predict_parasitic_load.predict_parasitic_load(
+                data_by_subplant, df
+            ).assign(
+                predicted_gross_generation_mwh=lambda x: x["parasitic_load"]
+                * (x["capacity_mw"] * 8760)
+                + x["net_generation_mwh"],
+                gross_generation_mwh=lambda x: np.where(
+                    (x["cems_923_merge"] == "left_only")
+                    & (abs(x["net_generation_mwh"]) > 0)
+                    & (x["net_generation_mwh"].notna()),
+                    x["predicted_gross_generation_mwh"],
+                    x["gross_generation_mwh"],
+                ),
             )
             # allocate cems gross gen using pivoted gf 923
             cems_and_923 = allocate_col_by(
@@ -1337,7 +1362,7 @@ class DataBySubplant:
                     ]
                 ]
                 .drop_duplicates(),
-                on=["plant_id_eia", "generator_id"],
+                on=["plant_id_eia", "generator_id", "report_date"],
                 how="left",
                 # indicator=True,
                 validate="m:1",
