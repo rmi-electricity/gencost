@@ -257,4 +257,5 @@ COLS_FOR_REGRESSION = [
     "age_of_observation",
     "age_relative_to_prime_avg",
     "pollution_control_costs_per_kw",
+    "technology_description",
 ]
