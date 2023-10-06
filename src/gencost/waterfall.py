@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pandera as pa
-import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
 from etoolbox.utils.pudl_helpers import (
