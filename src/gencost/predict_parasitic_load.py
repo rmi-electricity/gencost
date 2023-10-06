@@ -191,7 +191,7 @@ def predict_parasitic_load(databysubplant, newdata):
     """
     check_data_by_subplant(databysubplant, is_data_by_subplant=True)
     check_data_by_subplant(newdata, is_data_by_subplant=False)
-    x, y, xNew = feature_engineering(databysubplant, newdata)
-    y_fit = get_y_fit(x, y, xNew)
+    x, y, xnew = feature_engineering(databysubplant, newdata)
+    y_fit = get_y_fit(x, y, xnew)
     newdata["parasitic_load"] = y_fit
     return newdata
