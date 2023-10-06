@@ -624,9 +624,7 @@ class DataBySubplant:
             new = (
                 predict_parasitic_load.predict_parasitic_load(data_by_subplant, merged)
                 .assign(
-                    predicted_gross_generation_mwh=lambda x: lambda x: x[
-                        "parasitic_load"
-                    ]
+                    predicted_gross_generation_mwh=lambda x: x["parasitic_load"]
                     * (x["capacity_mw"] * 8760)
                     + x["net_generation_mwh"],
                     gross_generation_mwh=lambda x: np.where(
@@ -634,12 +632,24 @@ class DataBySubplant:
                         | (
                             (x["gross_generation_mwh"] == 0)
                             & abs(x["net_generation_mwh"])
-                            > 0
+                            > 0 & (x["net_generation_mwh"].notna())
                         )
                         | x["gross_generation_mwh"]
                         < 0,
                         x["predicted_gross_generation_mwh"],
                         x["gross_generation_mwh"],
+                    ),
+                    gross_gen_value=lambda x: np.where(
+                        (x["gross_cf"] > 1.5)
+                        | (
+                            (x["gross_generation_mwh"] == 0)
+                            & abs(x["net_generation_mwh"])
+                            > 0 & (x["net_generation_mwh"].notna())
+                        )
+                        | x["gross_generation_mwh"]
+                        < 0,
+                        "predicted",
+                        "reported",
                     ),
                 )  # two plants from 2001 with 0 mw cap in 860
                 .query("capacity_mw > 0")
@@ -675,6 +685,7 @@ class DataBySubplant:
                 .assign(report_year=lambda x: x.report_date.dt.year)
                 # drop 2021 values, not in previous version
                 .query("report_year <= 2020")
+                .query("gross_generation_mwh >= 0")
             )
 
             self._dfs["exa_by_gen"] = self.core_validation(out, level="generator")
@@ -1433,7 +1444,8 @@ class DataBySubplant:
                 / 365.25,
                 age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
                 - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
-            )
+            )  # filter out when generator operating date is na for pandera
+            .query("age_in_report_year.notna()")
         )
 
         if subplant_id_col == "generator_id":
@@ -2436,7 +2448,8 @@ class DataBySubplant:
                 "age_relative_to_prime_avg": Column(float),
             }
             | {f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0)) for k in fuels}
-            | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 1.0))}
+            # 1 generator error
+            | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 2.0))}
             | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
             # not used in regression
             | {
@@ -2963,7 +2976,11 @@ class DataBySubplant:
             df = (
                 missing[FILL_IN_EP_COLS]
                 .query("match == @col")
-                .merge(historical[HIST_EP_COLS + [col]], on=[col], how="inner")
+                .merge(
+                    historical[HIST_EP_COLS + [col]].drop_duplicates(subset=col),
+                    on=[col],
+                    how="inner",
+                )
                 .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
             )
 
