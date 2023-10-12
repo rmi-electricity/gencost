@@ -1,0 +1,11 @@
+prime_mover,cls,formula
+CC,1,real_opex ~ 0 + capacity_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj + oil_age_fixed_adj + duct_burners_fixed_adj
+CC,2,real_opex ~ 0 + capacity_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj
+CC,3,real_opex ~ 0 + capacity_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj + gen_adj
+CC,4,real_opex ~ 0 + capacity_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj + age_fixed_adj + duct_burners_fixed_adj + oil_starts_adj
+GT,1,real_opex ~ 0 + capacity_adj + age_fixed_adj + age_obs_fixed_adj + gen_adj + age_variable_adj + age_obs_variable_adj + starts_adj + oil_fixed_adj + oil_age_fixed_adj + oil_starts_adj
+GT,2,real_opex ~ 0 + capacity_adj + age_fixed_adj + age_obs_fixed_adj + gen_adj + age_variable_adj + age_obs_variable_adj + starts_adj + oil_fixed_adj + oil_variable_adj
+GT,3,real_opex ~ 0 + capacity_adj + age_fixed_adj + age_obs_fixed_adj + gen_adj + age_variable_adj + age_obs_variable_adj + starts_adj + oil_fixed_adj + oil_starts_adj
+ST,1,real_opex ~ 0 + capacity_adj + age_fixed_adj + pollution_fixed_adj + gen_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj + gas_fixed_adj + oil_fixed_adj + pulverized_coal_fixed_adj + gas_age_variable_adj + gas_starts_adj
+ST,2,real_opex ~ 0 + capacity_adj + age_fixed_adj + pollution_fixed_adj + gen_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj + gas_fixed_adj + oil_fixed_adj + gas_age_fixed_adj + pulverized_coal_fixed_adj + gas_age_variable_adj + CHP_variable_adj + fluidized_bed_variable_adj + gas_starts_adj
+ST,3,real_opex ~ 0 + capacity_adj + age_fixed_adj + pollution_fixed_adj + gen_adj + age_variable_adj + age_obs_variable_adj + pollution_variable_adj + starts_adj + gas_fixed_adj + oil_fixed_adj + supercritical_fixed_adj + gas_age_variable_adj + CHP_variable_adj + supercritical_variable_adj + gas_starts_adj
