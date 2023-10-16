@@ -25,7 +25,7 @@ NewData <- arrow::read_parquet('../input_data/eternally_present_by_generator.par
 
 # Datasets created by prev scripts
 CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
-CleanedEternallyPresent <- read_csv('cleaned_new_data.csv')
+CleanedNewData <- read_csv('cleaned_new_data.csv')
 
 ChosenCoefficients <- read_csv('chosen_coefficients.csv')
 ChosenFormulas <- read_csv('chosen_formulas.csv')

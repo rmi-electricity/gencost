@@ -292,29 +292,29 @@ Results %>%
 #
 
 # sanity check on number of clusters * formulas to make sure we fit the right #
-# NumClusters <-
-# 	ClustersFit %>%
-# 	select(prime_mover, num_clusters)
-# NumFormulas <-
-# 	AllFormulas %>%
-# 	count(prime_mover) %>%
-# 	inner_join(NumClusters, by = 'prime_mover') %>%
-# 	mutate(subtotal = n * num_clusters)
-# sum(NumFormulas$subtotal)
-#
-# ChosenModsFit <-
-# 	AllModsFit %>%
-# 	inner_join(ChosenFormulas)
-#
-# ChosenCoefficients <-
-# 	ChosenModsFit %>%
-# 	mutate(
-# 		coefficients = map(lm_fit, coefficients),
-# 		coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient')
-# 	) %>%
-# 	select(prime_mover, cls, formula, coefficients) %>%
-# 	unnest(coefficients) %>%
-# 	left_join(LongVariableKey, by = c('prime_mover', 'variable'))
+NumClusters <-
+	ClustersFit %>%
+	select(prime_mover, num_clusters)
+NumFormulas <-
+	AllFormulas %>%
+	count(prime_mover) %>%
+	inner_join(NumClusters, by = 'prime_mover') %>%
+	mutate(subtotal = n * num_clusters)
+sum(NumFormulas$subtotal)
+
+ChosenModsFit <-
+	AllModsFit %>%
+	inner_join(ChosenFormulas)
+
+ChosenCoefficients <-
+	ChosenModsFit %>%
+	mutate(
+		coefficients = map(lm_fit, coefficients),
+		coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient')
+	) %>%
+	select(prime_mover, cls, formula, coefficients) %>%
+	unnest(coefficients) %>%
+	left_join(LongVariableKey, by = c('prime_mover', 'variable'))
 
 # Ensure each category of variable is accounted for
 ChosenCoefficients %>%
