@@ -18,7 +18,7 @@ This Python module presents a Random Forest implementation of a regression model
 ## Introduction
 We define *parasitic load* as:
 
-> `(gross\_generation\_mwh - net\_generation\_mwh) / (capacity\_mw \* 8,760)`
+> `(gross_generation_mwh - net_generation_mwh) / (capacity_mw * 8,760)`
 
 \...where the denomenator seeks to normalize each plant\'s parasitic
 load based on the plant\'s capacity; 8,760 represents the approximate
@@ -32,15 +32,15 @@ than competing models
 * Easily accomodates non-gaussian variables
 
 This module is set up so that the user doesn\'t need to worry about the random forest model per se.
-There is one function in the module, called `predict\_parasitic\_load()`.
+There is one function in the module, called `predict_parasitic_load()`.
 This function takes two arguments:
 * a dataset describing plants for whom we can mathematically calculate parasitic load
 * \... and a dataset listing plants for whom we cannot
 
 Under the hood, this function is actually calling three functions:
-* `check\_data\_by\_subplant()`: This function can be called to check either the training data, or the new data for which we need fitted values. It will confirm that all of the right variables are in place, and that these variables are the desired types. This module runs this quality control step on both the training and new datasets.
-* `feature\_engineering()`: This function fits the feature engineering steps on the training data, and then applies them to the new data.
-* `get\_y\_fit()`: Fits a sci-kit learn random forest model, using the hyper parameters we already selected; then, it predicts the parasitic\_load for the new data.
+* `check_data_by_subplant()`: This function can be called to check either the training data, or the new data for which we need fitted values. It will confirm that all of the right variables are in place, and that these variables are the desired types. This module runs this quality control step on both the training and new datasets.
+* `feature_engineering()`: This function fits the feature engineering steps on the training data, and then applies them to the new data.
+* `get_y_fit()`: Fits a sci-kit learn random forest model, using the hyper parameters we already selected; then, it predicts the parasitic\_load for the new data.
 
 On my desktop, which is about three years old and not extraordinary fast, this entire set of steps takes about one second to run.
 
