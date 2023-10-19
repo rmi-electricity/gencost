@@ -6,7 +6,7 @@ This module contains a function that, out of the box, allows any user to use a r
 Because we have already coded our desired hyper-parameters into the script, and because fitting a random forest is so computationally-cheap, this module is speedy and easy to use.
 
 ## Background
-When a power plant is activated, some of the energy that it produces is lost ([Wikipedia.org](https://en.wikipedia.org/wiki/Losses\_in\_electrical\_systems\#Parasitic\_loss\)).
+When a power plant is activated, some of the energy that it produces is lost ([Wikipedia.org](https://en.wikipedia.org/wiki/Losses\_in\_electrical\_systems\#Parasitic\_loss\)\).
 Regardless of why this energy is lost (perhaps, for example, the plant loses some electrical efficiency to heat), the difference between the *gross electric yield* and the *productive yield* is termed the *parasitic load*.
 
 In order to run our GenCost algorithm, we needed to be able to describe the parasitic load of all of the power plants in the USA.
