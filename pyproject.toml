@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools<66", "setuptools_scm[toml]>=3.5.0"]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
 ]
 requires-python = ">=3.10,<3.12"
 dependencies = [
@@ -24,9 +25,10 @@ dependencies = [
     "networkx >= 3.0,< 3.3",
     "pandas >= 1.4,< 1.6",
     "pandera >= 0.12, < 0.18",
-    "platformdirs >=2.6,<3.12",
-    "plotly>5.10,<5.18",
-    "pyarrow>=7, <14",
+    "platformdirs >=2.6,<4.1",
+    "plotly>5.10,<5.19",
+    "pyarrow>=7, <15",
+    "polars>=0.16,<0.20",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
     "scikit-learn>1.1, <1.4",
     "tqdm >= 4.63,< 4.67",
@@ -40,7 +42,7 @@ dev = [
     "pytest>=7.2.1,<7.5",  # test framework
     "pytest-console-scripts>=1.1,<1.5",  # Allow automatic testing of scripts
     "pytest-cov>=4.0,<4.2",  # Pytest plugin for working with coverage
-    "ruff>0.0.259,<0.1.2",
+    "ruff>0.0.259,<0.1.6",
     "tox>=4.2,<4.12",
 ]
 doc = [
@@ -50,7 +52,7 @@ doc = [
     "sphinx>=4.1,<7.2.7",
     "sphinx-autoapi>=2.0,<3.1",
     "sphinx-issues>=3.0,<3.1",
-    "sphinx-autodoc-typehints>1.21,<1.25.0",
+    "sphinx-autodoc-typehints>1.21,<1.26.0",
     "sphinxcontrib-mermaid>0.7,<0.10.0",
 ]
 tests = []
@@ -85,10 +87,6 @@ include = "\\.pyi?$"
 max-line-length = 88
 ignore-path = "docs/_build"
 
-[tool.isort]
-profile = "black"
-known_first_party = ["gencost"]
-
 [tool.pytest.ini_options]
 testpaths = ["."]
 addopts = ["--verbose"]
@@ -109,43 +107,62 @@ ignore_messages = '(Hyperlink target .* is not referenced\.$|Duplicate implicit 
 ignore_directives = ["bibliography", "todo", "include"]
 
 [tool.ruff]
-# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
-select = ["A", "B", "C", "E", "F", "N", "S", "SIM", "TCH", "W"]
-ignore = ["E501"]
+select = [
+    "A", # flake8-builtins
+    "B", # flake8-bugbear
+    "C",
+    "C4", # flake8-comprehensions
+    "E",  # pycodestyle
+    "F",  # Pyflakes
+    "I", # isort
+    "TID", # flake8-tidy-imports
+    "N", # pep8-naming
+    "PT", # flake8-pytest-style
+    "PGH", # pygrep-hooks
+    "S", # bandit
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "UP", # pyupgrade
+    "W",  # pycodestyle
+]
+ignore = [
+    "E501",
+    # conflict with ruff format
+    "W191",  # tab-indentation
+    "E111",  # indentation-with-invalid-multiple
+    "E114",  # indentation-with-invalid-multiple-comment
+    "E117",  # over-indented
+    "D206",  # indent-with-spaces
+    "D300",  # triple-single-quotes
+    "Q000",  # bad-quotes-inline-string
+    "Q001",  # bad-quotes-multiline-string
+    "Q002",  # bad-quotes-docstring
+    "Q003",  # avoidable-escaped-quote
+    "COM812",  # missing-trailing-comma
+    "COM819",  # prohibited-trailing-comma
+    "ISC001",  # single-line-implicit-string-concatenation
+    "ISC002",  # multi-line-implicit-string-concatenation
+]
 # Allow autofix for all enabled rules (when `--fix`) is provided.
-fixable = ["A", "B", "C", "D", "E", "F",]
-unfixable = []
+unfixable = ["ISC"]
 # By default, always enumerate fixed violations.
 show-fixes = true
-# Exclude a variety of commonly ignored directories.
-exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-]
-# Same as Black.
 line-length = 88
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-# Assume Python 3.10.
-target-version = "py310"
+
+[tool.ruff.isort]
+known-first-party = ["gencost"]
+
+[tool.ruff.pycodestyle]
+max-doc-length = 88
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.ruff.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.flake8-type-checking]
+strict = true
 
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]

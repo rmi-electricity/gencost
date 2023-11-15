@@ -16,7 +16,9 @@ from etoolbox.utils.pudl_helpers import (
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
+from gencost import predict_parasitic_load
 from gencost.constants import (
+    COLS_FOR_REGRESSION,
     CURRENT_EP_COLS,
     FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
@@ -1458,11 +1460,10 @@ class DataBySubplant:
                     "when `subplant_id_col`='generator_id', `merge_only` has no effect"
                 )
 
-            return (
-                merged
+            return merged[
                 # .query('_merge == "both"')
-                [GET_860_GEN_COLS].pipe(add_ba_code)
-            )
+                GET_860_GEN_COLS
+            ].pipe(add_ba_code)
 
         else:
             xwalk = {"pf_subplant_id": self.safe_xwalk, "subplant_id": self.xwalk}[
@@ -2272,11 +2273,11 @@ class DataBySubplant:
                 )
             )
             cost = cost[cost.counts == 1]
-            assert cost.query(  # noqa: S101
-                "sbi_count > 1"
-            ).empty, (
-                "adding subplants to costs created non-unique costs per subplant_id"
-            )
+            assert (  # noqa: S101
+                cost.query(  # noqa: S101
+                    "sbi_count > 1"
+                ).empty
+            ), "adding subplants to costs created non-unique costs per subplant_id"
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
                 "non-unique costs per pf_subplant_id"
@@ -2520,7 +2521,7 @@ class DataBySubplant:
                         gross_ge_net,
                         title="net_gen >= gross_gen",
                         description="Gross generation should always be greater than net",
-                        # I don't think we want to error here yet, so just raise a warning
+                        # I don't think we want to error here yet, so just raise a warning  # noqa: W505
                         raise_warning=True,
                     ),
                     Check(
@@ -2554,7 +2555,7 @@ class DataBySubplant:
                         gross_ge_net,
                         title="net_gen >= gross_gen",
                         description="Gross generation should always be greater than net",
-                        # I don't think we want to error here yet, so just raise a warning
+                        # I don't think we want to error here yet, so just raise a warning  # noqa: W505
                         raise_warning=True,
                     ),
                     Check(x_gen_allocation, title="net_gen aggregation", kind="net"),
@@ -2685,12 +2686,13 @@ class DataBySubplant:
                 .agg({"mmbtu": "sum", "net_mwh": "sum"})
                 .reset_index()  # keep latest prime fuel observation in gf 923 (largest single fuel)
                 # .query('report_date == "2020-01-01"')
-                # .query("mmbtu > 0 & net_mwh > 0") do we want to put prime/fuel of gens in GF
+                # .query("mmbtu > 0 & net_mwh > 0") do we want to put prime/fuel of gens in GF  # noqa: W505
                 # reporting zeros?
                 .sort_values(
                     by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
                     ascending=True,
-                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                )
+                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2723,13 +2725,13 @@ class DataBySubplant:
                         "final_ba_code",
                         "generator_operating_date",
                         "final_respondent_id",
-                        "balancing_authority_code_eia"
-                        # "age_in_current_year", not sure what we wanna do about age in this scenario
+                        "balancing_authority_code_eia",
+                        # "age_in_current_year", not sure what we wanna do about age in this scenario  # noqa: W505
                     ]
                 ],
                 on=["plant_id_eia", "generator_id"],
                 how="left",
-                validate="m:1"
+                validate="m:1",
                 # indicator=True,
             )
             .drop_duplicates(
@@ -2841,7 +2843,7 @@ class DataBySubplant:
                     "final_ba_code",
                     "generator_operating_date",
                     "final_respondent_id",
-                    "balancing_authority_code_eia"
+                    "balancing_authority_code_eia",
                     # "age_in_current_year", not sure what we w
                 ]
             ],
@@ -2862,7 +2864,8 @@ class DataBySubplant:
                     # "fuel_group",
                 ],
                 keep="first",
-            ).assign(
+            )
+            .assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
                 ).round(2)
@@ -2969,9 +2972,9 @@ class DataBySubplant:
         filled_in = []
 
         for col in cols:
-            # core columns we want to get from historical, append column we're going to merge on
+            # core columns we want to get from historical, append column we're going to merge on  # noqa: W505
 
-            # keep plant specific id columns - plant/gen/utility/ba ids (don't want to fill that in with historical)
+            # keep plant specific id columns - plant/gen/utility/ba ids (don't want to fill that in with historical)  # noqa: W505
             df = (
                 missing[FILL_IN_EP_COLS]
                 .query("match == @col")
