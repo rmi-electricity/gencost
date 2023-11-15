@@ -17,6 +17,7 @@ from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
 from gencost import predict_parasitic_load
+from gencost import predict_parasitic_load
 from gencost.constants import (
     COLS_FOR_REGRESSION,
     CURRENT_EP_COLS,
@@ -25,15 +26,12 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
-    COLS_FOR_REGRESSION,
+    # COLS_FOR_REGRESSION,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
-from gencost import predict_parasitic_load
 
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
@@ -2273,11 +2271,11 @@ class DataBySubplant:
                 )
             )
             cost = cost[cost.counts == 1]
-            assert (  # noqa: S101
-                cost.query(  # noqa: S101
-                    "sbi_count > 1"
-                ).empty
-            ), "adding subplants to costs created non-unique costs per subplant_id"
+            assert cost.query(  # noqa: S101  # noqa: S101
+                "sbi_count > 1"
+            ).empty, (
+                "adding subplants to costs created non-unique costs per subplant_id"
+            )
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
                 "non-unique costs per pf_subplant_id"
@@ -2691,8 +2689,7 @@ class DataBySubplant:
                 .sort_values(
                     by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
                     ascending=True,
-                )
-                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2864,8 +2861,7 @@ class DataBySubplant:
                     # "fuel_group",
                 ],
                 keep="first",
-            )
-            .assign(
+            ).assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
                 ).round(2)
