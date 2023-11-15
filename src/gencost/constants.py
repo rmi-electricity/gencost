@@ -143,6 +143,7 @@ GET_860_GEN_COLS = [
     "age_relative_to_prime_avg",
     "pollution_control_costs_per_kw",
     "generator_operating_date",
+    "technology_description",
 ]
 
 HIST_EP_COLS = [
@@ -187,6 +188,7 @@ HIST_EP_COLS = [
     "wage_scale",
     "age_of_observation_secular_adj",
     "inflator_to_2021",
+    "technology_description",
 ]
 
 CURRENT_EP_COLS = [  # "renew_gross_mwh",
@@ -228,4 +230,31 @@ FILL_IN_EP_COLS = [
     "state",
     "utility_id_eia",
     "balancing_authority_code_eia",
+]
+
+COLS_FOR_REGRESSION = [
+    "plant_id_eia",
+    "generator_id",
+    "report_date",
+    "prime_mover",
+    "state",
+    "capacity_mw",
+    "associated_combined_heat_power",
+    "duct_burners",
+    "bypass_heat_recovery",
+    "solid_fuel_gasification",
+    "carbon_capture",
+    "fluidized_bed_tech",
+    "pulverized_coal_tech",
+    "stoker_tech",
+    "other_combustion_tech",
+    "subcritical_tech",
+    "supercritical_tech",
+    "ultrasupercritical_tech",
+    "age_in_report_year",
+    "age_in_current_year",
+    "age_of_observation",
+    "age_relative_to_prime_avg",
+    "pollution_control_costs_per_kw",
+    "technology_description",
 ]

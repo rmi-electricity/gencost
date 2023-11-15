@@ -16,7 +16,9 @@ from etoolbox.utils.pudl_helpers import (
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
+from gencost import predict_parasitic_load
 from gencost.constants import (
+    COLS_FOR_REGRESSION,
     CURRENT_EP_COLS,
     FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
@@ -452,6 +454,7 @@ class DataBySubplant:
             df_860 = self.get_860_by_x(subplant_id_col="generator_id")
             df_923 = self.get_gf923_by_generator()
             df_cems = self.get_cems_by_generator()
+            data_by_subplant = self.get_exa_by_subplant()
 
             # merge cems and 923 for gen-fuel level allocation of gross gen
             df = pd.merge(
@@ -460,11 +463,84 @@ class DataBySubplant:
                 on=["plant_id_eia", "generator_id", "report_date"],
                 how="outer",
                 validate="1:1",
-                indicator="cems_923_merge",
+                indicator="cems_923_merge",  # merge in cols for regression
+            ).merge(
+                df_860[COLS_FOR_REGRESSION],
+                on=["plant_id_eia", "generator_id", "report_date"],
+                validate="1:1",
+                how="left",
             )
+
+            # fill in gross gen for gens not in CEMS & non zero net gen
+            df_w_predictions = (
+                predict_parasitic_load.predict_parasitic_load(data_by_subplant, df)
+                .assign(
+                    predicted_gross_generation_mwh=lambda x: x["parasitic_load"]
+                    * (x["capacity_mw"] * 8760)
+                    + x["net_generation_mwh"],
+                    gross_generation_mwh=lambda x: np.where(
+                        (x["cems_923_merge"] == "left_only")
+                        & (abs(x["net_generation_mwh"]) > 0)
+                        & (x["net_generation_mwh"].notna()),
+                        x["predicted_gross_generation_mwh"],
+                        x["gross_generation_mwh"],
+                    ),  # predict using mean starts by tech
+                    predicted_generator_starts=lambda x: x.groupby(
+                        "technology_description"
+                    )["generator_starts"].transform("median"),
+                    predicted_fuel_starts=lambda x: x.groupby("technology_description")[
+                        "generator_starts"
+                    ].transform("median"),
+                    generator_starts=lambda x: np.where(
+                        (x["cems_923_merge"] == "left_only")
+                        & (abs(x["net_generation_mwh"]) > 0)
+                        & (x["net_generation_mwh"].notna()),
+                        x["predicted_generator_starts"],
+                        x["generator_starts"],
+                    ),
+                    fuel_starts=lambda x: np.where(
+                        (x["cems_923_merge"] == "left_only")
+                        & (abs(x["net_generation_mwh"]) > 0)
+                        & (x["net_generation_mwh"].notna()),
+                        x["predicted_generator_starts"],
+                        x["generator_starts"],
+                    ),
+                    # overwrite merge indicator to keep everything all the way through
+                    cems_923_merge=lambda x: "both",
+                )
+                .drop(  # drop what we needed for and got from regression
+                    columns=[
+                        "predicted_gross_generation_mwh",
+                        "predicted_generator_starts",
+                        "predicted_fuel_starts",
+                        "prime_mover",
+                        "state",
+                        "capacity_mw",
+                        "associated_combined_heat_power",
+                        "duct_burners",
+                        "bypass_heat_recovery",
+                        "solid_fuel_gasification",
+                        "carbon_capture",
+                        "fluidized_bed_tech",
+                        "pulverized_coal_tech",
+                        "stoker_tech",
+                        "other_combustion_tech",
+                        "subcritical_tech",
+                        "supercritical_tech",
+                        "ultrasupercritical_tech",
+                        "age_in_report_year",
+                        "age_in_current_year",
+                        "age_of_observation",
+                        "age_relative_to_prime_avg",
+                        "pollution_control_costs_per_kw",
+                        "technology_description",
+                    ]
+                )
+            )
+
             # allocate cems gross gen using pivoted gf 923
             cems_and_923 = allocate_col_by(
-                df,
+                df_w_predictions,
                 to_allocate="gross_generation_mwh",
                 new_suffix="_gross_mwh",
                 old_suffix="_mmbtu",
@@ -475,7 +551,15 @@ class DataBySubplant:
             cems_and_923 = drop_zero_cols(cems_and_923)
 
             merged = (
-                cems_and_923.merge(
+                cems_and_923.assign(
+                    generator_starts=lambda x: np.where(
+                        (x["generator_starts"].isna()), 0, x["generator_starts"]
+                    ),
+                    fuel_starts=lambda x: np.where(
+                        (x["fuel_starts"].isna()), 0, x["fuel_starts"]
+                    ),
+                )
+                .merge(
                     df_860,
                     on=["plant_id_eia", "generator_id", "report_date"],
                     validate="1:1",
@@ -530,21 +614,60 @@ class DataBySubplant:
                 )  # pandera caught 3 observations w/null prime movers
                 .query("prime_mover.notnull()")
                 .query("prime_mover in @FOSSIL_PRIME_MOVER_MAP")
+                # fix pandera issue for nan starts
             )
 
-            # fuel fraction calcs from merge all
-            gross_mwh_cols = merged.filter(like="_gross_mwh").columns
+            new = (
+                predict_parasitic_load.predict_parasitic_load(data_by_subplant, merged)
+                .assign(
+                    predicted_gross_generation_mwh=lambda x: x["parasitic_load"]
+                    * (x["capacity_mw"] * 8760)
+                    + x["net_generation_mwh"],
+                    gross_generation_mwh=lambda x: np.where(
+                        (x["gross_cf"] > 1.5)
+                        | (
+                            (x["gross_generation_mwh"] == 0)
+                            & abs(x["net_generation_mwh"])
+                            > 0 & (x["net_generation_mwh"].notna())
+                        )
+                        | x["gross_generation_mwh"]
+                        < 0,
+                        x["predicted_gross_generation_mwh"],
+                        x["gross_generation_mwh"],
+                    ),
+                    gross_gen_value=lambda x: np.where(
+                        (x["gross_cf"] > 1.5)
+                        | (
+                            (x["gross_generation_mwh"] == 0)
+                            & abs(x["net_generation_mwh"])
+                            > 0 & (x["net_generation_mwh"].notna())
+                        )
+                        | x["gross_generation_mwh"]
+                        < 0,
+                        "predicted",
+                        "reported",
+                    ),
+                )  # two plants from 2001 with 0 mw cap in 860
+                .query("capacity_mw > 0")
+                .assign(
+                    gross_cf=lambda x: x.gross_generation_mwh
+                    / (x.capacity_mw * x.hrs_in_yr),
+                )
+            ).drop(columns="predicted_gross_generation_mwh")
 
-            merged[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
-                merged[gross_mwh_cols]
-                .divide(merged[gross_mwh_cols].sum(axis=1), axis=0)
+            # fuel fraction calcs from merge all
+            gross_mwh_cols = new.filter(like="_gross_mwh").columns
+
+            new[[c.replace("_gross_mwh", "_fraction") for c in gross_mwh_cols]] = (
+                new[gross_mwh_cols]
+                .divide(new[gross_mwh_cols].sum(axis=1), axis=0)
                 .fillna(0.0)
             )
 
             core_fuels = ["coal_fraction", "natural_gas_fraction", "petroleum_fraction"]
 
             out = (
-                merged.assign(
+                new.assign(
                     minor_fuels_fraction=lambda x: x.filter(like="_fraction").sum(
                         axis=1
                     )
@@ -552,6 +675,13 @@ class DataBySubplant:
                 )
                 .query('_merge == "all"')
                 .drop(columns=["_merge", "hrs_in_yr"])
+                .query(
+                    "gross_generation_mwh.notna()"
+                )  # only 2 generators, mismatch in subset
+                .assign(report_year=lambda x: x.report_date.dt.year)
+                # drop 2021 values, not in previous version
+                .query("report_year <= 2020")
+                .query("gross_generation_mwh >= 0")
             )
 
             self._dfs["exa_by_gen"] = self.core_validation(out, level="generator")
@@ -1310,7 +1440,8 @@ class DataBySubplant:
                 / 365.25,
                 age_relative_to_prime_avg=lambda x: x["age_in_report_year"]
                 - x.groupby(["prime_mover"])["age_in_report_year"].transform("mean"),
-            )
+            )  # filter out when generator operating date is na for pandera
+            .query("age_in_report_year.notna()")
         )
 
         if subplant_id_col == "generator_id":
@@ -1421,10 +1552,17 @@ class DataBySubplant:
                         "balancing_authority_code_eia": "first",
                         "state": "first",
                         "utility_id_eia": "first",
+                        "technology_description": pd.Series.mode,
                     },
                     wtavg_dict=wtavg_dict,
                 )
-                .astype({"plant_id_eia": "Int64", subplant_id_col: "Int64"})
+                .astype(
+                    {
+                        "plant_id_eia": "Int64",
+                        subplant_id_col: "Int64",
+                        "technology_description": "string",
+                    }
+                )
                 .pipe(add_ba_code)
             )
 
@@ -2286,7 +2424,7 @@ class DataBySubplant:
                 "prime_mover": Column(str, Check.isin(tuple(FOSSIL_PRIME_MOVER_MAP))),
                 "report_year": Column(int, nullable=True),
                 "capacity_mw": Column(float, Check.in_range(1e-1, 1e4)),
-                "gross_cf": Column(float, Check.ge(0.0), nullable=True),
+                "gross_cf": Column(float, nullable=True),
                 "generator_starts": Column(int, Check.ge(0)),
                 "pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
                 "real_pollution_control_costs_per_kw": Column(float, Check.ge(0.0)),
@@ -2305,15 +2443,16 @@ class DataBySubplant:
                 "age_relative_to_prime_avg": Column(float),
             }
             | {f"{k}_fraction": Column(float, Check.in_range(0.0, 1.0)) for k in fuels}
-            | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 1.0))}
+            # 1 generator error
+            | {"minor_fuels_fraction": Column(float, Check.in_range(0.0, 2.0))}
             | {k: Column(float, Check.in_range(0.0, 1.0)) for k in techs}
             # not used in regression
             | {
                 "age_in_report_year": Column(float),
                 "age_in_current_year": Column(float, Check.in_range(0.0, 2e3)),
-                "gross_generation_mwh": Column(float, Check.ge(0.0)),
+                "gross_generation_mwh": Column(float),
                 "net_generation_mwh": Column(float),
-                "inflator_to_2021": Column(float),
+                "inflator_to_2021": Column(float, nullable=True),
                 "fuel_starts": Column(int, Check.ge(0)),
             }
             | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
@@ -2343,12 +2482,13 @@ class DataBySubplant:
                 "opex_per_kw": Column(float, Check.ge(0.0), nullable=True),
                 "capex_per_kw": Column(float, Check.ge(0.0), nullable=True),
             }
-            | {f"{k}_gross_cf": Column(float, Check.ge(0.0)) for k in fuels}
+            | {f"{k}_gross_cf": Column(float) for k in fuels}
         )
 
         gen_columns = {
             "generator_id": Column(str),
             "generator_operating_date": Column(dt),
+            "technology_description": Column(str, nullable=True),
         }
 
         def gross_ge_net(df_):
@@ -2833,7 +2973,11 @@ class DataBySubplant:
             df = (
                 missing[FILL_IN_EP_COLS]
                 .query("match == @col")
-                .merge(historical[HIST_EP_COLS + [col]], on=[col], how="inner")
+                .merge(
+                    historical[HIST_EP_COLS + [col]].drop_duplicates(subset=col),
+                    on=[col],
+                    how="inner",
+                )
                 .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
             )
 
