@@ -62,6 +62,7 @@ def get_all_gens(latest_month_year_860m):
             operating_date=lambda x: x["generator_operating_date"],
             retirement_date=lambda x: x["generator_retirement_date"],
         )
-    ).to_parquet(
-        "/Users/mcastillo/GitHub/patio-model/notebooks/baseline_outputs/all_gens.parquet"
     )
+    # .to_parquet(
+    # "/Users/mcastillo/GitHub/patio-model/notebooks/baseline_outputs/all_gens.parquet"
+    # )
