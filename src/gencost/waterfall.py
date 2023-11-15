@@ -16,22 +16,19 @@ from etoolbox.utils.pudl_helpers import (
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
+from gencost import predict_parasitic_load
 from gencost.constants import (
+    COLS_FOR_REGRESSION,
     CURRENT_EP_COLS,
     FILL_IN_EP_COLS,
     FOSSIL_PRIME_MOVER_MAP,
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
-    COLS_FOR_REGRESSION,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
-from gencost import predict_parasitic_load
-
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
@@ -1425,7 +1422,7 @@ class DataBySubplant:
                     ]
                 ]
                 .drop_duplicates(),
-                on=["plant_id_eia", "generator_id", "report_date"],
+                on=["plant_id_eia", "generator_id"],
                 how="left",
                 # indicator=True,
                 validate="m:1",
