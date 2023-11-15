@@ -54,6 +54,8 @@ Then setup some tools...
 
 Now everything should be ready!
 
+
+
 Development guidance
 =======================================================================================
 
@@ -61,6 +63,8 @@ See
 `git guidance <https://github.com/rmi-electricity/.github-private/blob/main/profile/notes_on_git.md>`_
 and
 `notes on tests and linters <https://github.com/rmi-electricity/.github-private/blob/main/profile/notes_on_tests_and_linters.md>`_.
+
+BEFORE COMMITTING PLEASE RUN ``tox``.
 
 Stuff from the template README
 =======================================================================================

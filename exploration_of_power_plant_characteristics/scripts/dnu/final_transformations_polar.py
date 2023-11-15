@@ -31,9 +31,9 @@ ExtraVariables = (
 # Table that assigns each rowid to a cluster
 Cls = pl.read_csv("clean_data/clustered_data_by_subplant.csv")
 
-# Table that shows the RMSE for each formula, for each cluster; these are ranked in terms of their  # noqa: E501
-# goodness-of-fit, which means that if we limit to the top n best-fitting models, and then semi-join  # noqa: E501
-# this table into the AllPossibleCoef table, we can drastically limit how large our joins will get.  # noqa: E501
+# Table that shows the RMSE for each formula, for each cluster; these are ranked in terms of their  # noqa: E501, W505
+# goodness-of-fit, which means that if we limit to the top n best-fitting models, and then semi-join  # noqa: E501, W505
+# this table into the AllPossibleCoef table, we can drastically limit how large our joins will get.  # noqa: E501, W505
 MeanRmse = (
     pl.scan_csv("clean_data/mean_rmse.csv")
     .filter(pl.col("rank") == 1)  # <- THIS IS WHAT LIMITS OUTPUT SIZE
@@ -41,15 +41,15 @@ MeanRmse = (
     .collect()
 )
 
-# Collect the coefficients previously extracted from fitted models for each possible formula.  # noqa: E501
+# Collect the coefficients previously extracted from fitted models for each possible formula.  # noqa: E501, W505
 AllPossibleCoef = (  # Semijoin with MeanRmse, in order to only include the most useful formulas  # noqa: E501
     pl.read_csv("clean_data/all_possible_coefficients.csv")
     .select(["prime_mover", "cls", "formula", "variable", "category", "coefficient"])
     .join(MeanRmse, on=["prime_mover", "cls", "formula"], how="semi")
 )
 
-# Cluster the dataset, apply the top n best-fitting formulas' coefficients, multiply the coefficients  # noqa: E501
-# by their values, and sum up these values by their category (fixed cost, variable, or starts) in order  # noqa: E501
+# Cluster the dataset, apply the top n best-fitting formulas' coefficients, multiply the coefficients  # noqa: E501, W505
+# by their values, and sum up these values by their category (fixed cost, variable, or starts) in order  # noqa: E501, W505
 # to ultimately create human-readable metrics; fom, vom, som, and om_per_mwh
 Results = (
     pl.scan_csv(
@@ -81,9 +81,7 @@ Results = (
         (
             pl.col("start")
             / (pl.col("capacity_mw") * pl.col("generator_starts") * 1000)
-        ).alias(
-            "som"
-        ),  # som = start / (capacity_mw * generator_starts * 1000),
+        ).alias("som"),  # som = start / (capacity_mw * generator_starts * 1000),
     )
     .with_columns(
         (
