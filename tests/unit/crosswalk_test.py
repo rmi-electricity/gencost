@@ -110,7 +110,7 @@ class TestCrosswalk:
         df = crosswalk.make_comp_key().copy()
         assert not df.empty
 
-    @pytest.mark.skip
+    @pytest.mark.skip()
     def test_fuel_weights(self, crosswalk):
         df = crosswalk.reassign_fuel_group()
         assert not df.empty

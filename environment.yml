@@ -3,11 +3,11 @@ channels:
   - conda-forge
 dependencies:
   # Packages required for setting up the environment
-  - pip>=21,<24
+  - pip>=21,<25
   - python>=3.10,<3.12
 
   # Jupyter packages:
-  - jupyterlab>=3.2,<4
+  - jupyter
   - nbconvert>=6,<7 # Used to clear notebook outputs in pre-commit hooks
 
   # Use pip to install the package defined by this repo for development:
