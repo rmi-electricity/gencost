@@ -2,7 +2,7 @@
 # 5. Final Transformations
 # Andrew Bartnof, for RMI, 2023
 
-# Combine the clustered data with the modelled coefficients in order to 
+# Combine the clustered data with the modelled coefficients in order to
 # calculate our outcome variables, modelling power plant costs.
 
 #### Import libraries ####
@@ -17,25 +17,25 @@ conflicted::conflict_prefer('filter', 'dplyr')
 
 #### Load data ####
 
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/module')
+setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
 
 # Raw datasets
-DataBySubplant <- arrow::read_parquet('../input_data/data_by_subplant.parquet')
-NewData <- arrow::read_parquet('../input_data/eternally_present_by_generator.parquet')
+DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet')
+EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
 
 # Datasets created by prev scripts
-CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
-CleanedEternallyPresent <- read_csv('cleaned_new_data.csv')
+CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv')
+CleanedEternallyPresent <- read_csv('clean_data/cleaned_eternally_present.csv')
 
-ChosenCoefficients <- read_csv('chosen_coefficients.csv')
-ChosenFormulas <- read_csv('chosen_formulas.csv')
+ChosenCoefficients <- read_csv('clean_data/chosen_coefficients.csv')
+ChosenFormulas <- read_csv('clean_data/chosen_formulas.csv')
 # ChosenFormulas <- read_csv('clean_data/chosen_formulas.csv')
 # AllPossibleCoefficients <- read_csv('clean_data/all_possible_coefficients.csv')
 # FittedValues <- read_csv('clean_data/fitted_values.csv')
 
 # Clusters
-ClustersFit <- readRDS('clusters_fit.RDS')
-ClusteredNewData <- readRDS('clustered_new_data.RDS')
+ClustersFit <- readRDS('clean_data/clusters_fit.RDS')
+ClusteredEternallyPresent <- readRDS('clean_data/clustered_eternally_present.RDS')
 
 #### Fit Vom Fom Som, and om_per_mhw ####
 get_misc_variables <- function(X){
@@ -46,7 +46,7 @@ get_misc_variables <- function(X){
 }
 
 MiscVariablesDataBySubplant <- get_misc_variables(DataBySubplant)
-MiscVariablesNewData <- get_misc_variables(NewData)
+MiscVariablesEternallyPresent <- get_misc_variables(EternallyPresent)
 
 get_vom_etc <- function(XCls, XCleaned, XMisc){
 	# Get vom fom som and om_per_mwh
@@ -62,8 +62,8 @@ get_vom_etc <- function(XCls, XCleaned, XMisc){
 		# Join the full dataset based on prime_mover and row_id
 		inner_join(XCleaned, by = c('prime_mover', 'rowid')) %>%
 		pivot_longer(
-			cols = !c(prime_mover, rowid, cls), 
-			names_to = 'variable', 
+			cols = !c(prime_mover, rowid, cls),
+			names_to = 'variable',
 			values_to = 'value'
 		) %>%
 		# Once the data is in long format, inner join to the relevant variables
@@ -83,7 +83,7 @@ get_vom_etc <- function(XCls, XCleaned, XMisc){
 			vom = variable / gross_generation_mwh,
 			som = start / (capacity_mw * generator_starts * 1000)
 		)
-	
+
 	Limits <-
 		CTE %>%
 		select(prime_mover, cls, vom, fom, som) %>%
@@ -95,7 +95,7 @@ get_vom_etc <- function(XCls, XCleaned, XMisc){
 			high = quantile(value, 0.9)
 		) %>%
 		ungroup
-	
+
 	ValuesWithinBoundaries <-
 		CTE %>%
 		select(rowid, prime_mover, cls, vom, fom, som) %>%
@@ -110,7 +110,7 @@ get_vom_etc <- function(XCls, XCleaned, XMisc){
 		) %>%
 		select(rowid, prime_mover, cls, variable, value_adj) %>%
 		spread(variable, value_adj)
-	
+
 	Output <-
 		ValuesWithinBoundaries %>%
 		left_join(XMisc, by = 'rowid') %>%
@@ -122,25 +122,32 @@ get_vom_etc <- function(XCls, XCleaned, XMisc){
 		select(rowid, cls, prime_mover, fom, vom, som, om_per_mwh)
 }
 
-ResultsNewData <-
+ResultsEternallyPresent <-
 	get_vom_etc(
-		XCls = ClusteredNewData,
-		XCleaned = CleanedNewData,
-		XMisc =  MiscVariablesNewData
+		XCls = ClusteredEternallyPresent,
+		XCleaned = CleanedEternallyPresent,
+		XMisc =  MiscVariablesEternallyPresent
 	)
-print(ResultsNewData)
+# print(ResultsEternallyPresent)
 
 ResultsDataBySubplant <-
 	get_vom_etc(
-		XCls = ClustersFit, 
-		XCleaned = CleanedDataBySubplant, 
+		XCls = ClustersFit,
+		XCleaned = CleanedDataBySubplant,
 		XMisc =  MiscVariablesDataBySubplant
 	)
 
 #### Export results ####
-NewData %>%
+EternallyPresent %>%
 	rowid_to_column %>%
 	select(rowid, plant_id_eia, generator_id, report_date) %>%
 	mutate(report_date = lubridate::as_date(report_date)) %>%
-	inner_join(ResultsNewData) %>%
-	write_csv('results_new_data.csv')
+	inner_join(ResultsEternallyPresent) %>%
+	write_csv('clean_data/results_eternally_present.csv')
+
+DataBySubplant %>%
+	rowid_to_column %>%
+	select(rowid, plant_id_eia, report_date) %>%
+	mutate(report_date = lubridate::as_date(report_date)) %>%
+	inner_join(ResultsDataBySubplant) %>%
+	write_csv('clean_data/results_data_by_subplant.csv')
