@@ -1,5 +1,6 @@
 """
-Using DataBySubplant as ground truth, fit a random forest regressor, and predict a new data set's
+Using DataBySubplant as ground truth
+,fit a random forest regressor, and predict a new data set's
 parasitic load.
 """
 
@@ -15,10 +16,14 @@ def check_data_by_subplant(input_data, is_data_by_subplant=True):
     """
     Ensure DataBySubplant has all of the columns and rows we need.
     Arguments:
-        input_data=DataBySubplant (or the new data to be inputted into the model). The only difference is that DataBySubplant needs gross_generation_mwh in order to calculate the dependent variable.
+        input_data=DataBySubplant
+        (or the new data to be inputted into the model).
+        The only difference is that DataBySubplant
+        needs gross_generation_mwh in order to calculate the dependent variable.
         is_data_by_subplant=Boolean; if FALSE, don't look for gross_generation_mwh
     Returns:
-        Nothing, just performs checks, and returns a pandera error if any check fails.
+        Nothing, just performs checks
+         and returns a pandera error if any check fails.
     """
 
     reference = "DataBySubplant" if is_data_by_subplant else "New data"
@@ -76,13 +81,17 @@ def feature_engineering(databysubplant, newdata):
     Perform feature engineering on cleaned data, so that it's ready for modeling:
         - add parasitic load to DataBySubplant
             - remove gross_generation_mwh
-        - select only predictors (and for DataBySubplant, parasitic_load as output value)
+        - select only predictors
+        (and for DataBySubplant,parasitic_load as output value)
         - encode categorical data as numeric
         - scale all data
         - impute missing rows
     Arguments:
         DataBySubplant: Pandas table, use this as the 'training' set for the model
-        NewData: Pandas table with the same columns as DataBySubplant (excluding gross_generation_mwh, which is used to calculate parasitic_load); this will be scaled, encoded, etc just like DataBySubplant. The model will predict new values for NewData in a subsequent step.
+        NewData: Pandas table with the same columns as DataBySubplant
+        (excluding gross_generation_mwh, which is used to calculate parasitic_load);
+         this will be scaled, encoded, etc just like DataBySubplant.
+         The model will predict new values for NewData in a subsequent step.
     Returns:
         X: Numpy array used as predictors for the model
         y: Ground truth values for training the model (corresponds with TrainStep2)
@@ -174,7 +183,8 @@ def feature_engineering(databysubplant, newdata):
 
 def get_y_fit(x, y, xnew):
     """
-    Fit a random forest regressor, output new values for NewData; this is the parasitic_load
+    Fit a random forest regressor, output new values for NewData;
+     this is the parasitic_load
     """
     reg = RandomForestRegressor(n_estimators=1, max_depth=250)
     reg.fit(X=x, y=y)

@@ -2269,9 +2269,7 @@ class DataBySubplant:
             )
             cost = cost[cost.counts == 1]
             assert (  # noqa: S101
-                cost.query(  # noqa: S101
-                    "sbi_count > 1"
-                ).empty
+                cost.query("sbi_count > 1").empty
             ), "adding subplants to costs created non-unique costs per subplant_id"
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
