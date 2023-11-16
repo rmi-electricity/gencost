@@ -25,6 +25,7 @@ def main():
         required=False,
         dest="out_file",
     )
+
     args = parser.parse_args()
 
     if args.out_file is None:
