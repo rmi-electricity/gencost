@@ -26,11 +26,9 @@ from gencost.constants import (
     GET_860_GEN_COLS,
     HIST_EP_COLS,
 )
-
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
-
 
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
@@ -1424,7 +1422,7 @@ class DataBySubplant:
                     ]
                 ]
                 .drop_duplicates(),
-                on=["plant_id_eia", "generator_id", "report_date"],
+                on=["plant_id_eia", "generator_id"],
                 how="left",
                 # indicator=True,
                 validate="m:1",
@@ -2270,11 +2268,9 @@ class DataBySubplant:
                 )
             )
             cost = cost[cost.counts == 1]
-            assert cost.query(  # noqa: S101  # noqa: S101
-                "sbi_count > 1"
-            ).empty, (
-                "adding subplants to costs created non-unique costs per subplant_id"
-            )
+            assert (  # noqa: S101
+                cost.query("sbi_count > 1").empty
+            ), "adding subplants to costs created non-unique costs per subplant_id"
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
                 "non-unique costs per pf_subplant_id"
@@ -2688,7 +2684,8 @@ class DataBySubplant:
                 .sort_values(
                     by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
                     ascending=True,
-                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                )
+                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2860,7 +2857,8 @@ class DataBySubplant:
                     # "fuel_group",
                 ],
                 keep="first",
-            ).assign(
+            )
+            .assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
                 ).round(2)
