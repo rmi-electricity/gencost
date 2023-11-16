@@ -3,7 +3,7 @@
 # Andrew Bartnof, for RMI, 2023
 # abartnof.contractor@rmi.org
 
-# Perform initial data transformations that will allow this data 
+# Perform initial data transformations that will allow this data
 # to be clustered and ultimately fed into linear regression models.
 
 #### Import packages ####
@@ -22,7 +22,7 @@ DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
 
 # Note to user: this is where you'll load eternally present or historical data.
 # Pls feel free to change the function to read_csv() if you're using a csv!
-NewData <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
+EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
 LongVariableKey <- read_csv('module/long_variable_key.csv', col_types = 'cccc')
 
 
@@ -34,7 +34,7 @@ percentile = function(xx){
 }
 
 create_independent_variables <- function(X){
-	# This function creates the myriad predictor variables (IV) that are 
+	# This function creates the myriad predictor variables (IV) that are
 	# used to run the regressions.
 	# Input should either be DataBySubplant or a NewData set
 	X %>%
@@ -86,7 +86,7 @@ create_independent_variables <- function(X){
 			gas_age_obs_fixed = natural_gas_fraction * capacity_mw * age_of_observation_secular_adj,
 			oil_age_obs_fixed = petroleum_fraction * capacity_mw * age_of_observation_secular_adj,
 			other_age_obs_fixed = other_gas_fraction * capacity_mw * age_of_observation_secular_adj,
-			
+
 			# Now define state wage level adjusted, real cost variables for OpEx regression
 			capacity_adj = wage_scale * capacity_mw,
 			starts_adj = generator_starts * capacity_adj,
@@ -160,7 +160,7 @@ create_independent_variables <- function(X){
 create_consolidated_regression_filter <- function(X){
 	# Uday set up a few rules about what kind of data is acceptable, which
 	# allows us to rule out outliers in the DataBySubplant training data.
-	# This function will accept DataBySubplant, and add a new column, 
+	# This function will accept DataBySubplant, and add a new column,
 	# 'consolidated regression filter'
 	X %>%
 		mutate(real_opex_per_kw = real_opex / capacity_mw) %>%
@@ -172,12 +172,12 @@ create_consolidated_regression_filter <- function(X){
 			is_outlier_general = ifelse(opex_over_capex >= 0.5 | opex_over_capex <= 0.002 | gross_cf > 1.1, TRUE, FALSE),
 			is_safe_st = (prime_mover == 'ST') & (!is_outlier_general) &
 				(gross_cf <= 1.1),  # NB this is redundent logic
-			is_safe_cc = (prime_mover == 'CC') & (!is_outlier_general) & 
+			is_safe_cc = (prime_mover == 'CC') & (!is_outlier_general) &
 				(real_opex_percentile >= 0.03) & (real_opex_percentile <= 0.97) &
 				(coal_fraction == 0),
-			is_safe_gt = (prime_mover == 'GT') & (!is_outlier_general) & 
+			is_safe_gt = (prime_mover == 'GT') & (!is_outlier_general) &
 				(real_opex_percentile<=0.97) & (real_opex_percentile>=0.03),
-			
+
 			# Collect all of the above filters into one column
 			consolidated_regression_filter = case_when(
 				prime_mover == 'CC' ~ is_safe_cc,
@@ -206,10 +206,10 @@ CleanedDataBySubplant <-
 	filter(consolidated_regression_filter) %>%
 	select(all_of(variables_to_use), real_opex)  # Only this dataset contains 'real_opex'
 
-CleanedNewData <-
-	NewData %>%
+CleanedEternallyPresent <-
+	EternallyPresent %>%
 	create_independent_variables %>%
 	select(all_of(variables_to_use))
 
 write_csv(CleanedDataBySubplant, 'module/cleaned_data_by_subplant_data.csv')
-write_csv(CleanedNewData, 'module/cleaned_new_data.csv')
+write_csv(CleanedEternallyPresent, 'module/cleaned_eternally_present.csv')

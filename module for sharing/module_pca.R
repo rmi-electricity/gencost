@@ -5,13 +5,13 @@
 
 # We want to fit a clustering model on these data, but first, we have to
 # account for colinearity in the data. If we represent these data
-# with PCA models, then we don't have the same issue. 
+# with PCA models, then we don't have the same issue.
 # In order to decide how many components we'll use, we'll resample the data
 # and apply parallel tests (psych package), and see, in general, if these
 # parallel tests tend to agree on how many components would be parsimoneous.
-# Also note that we'll scale the PCA scores before clustering; use the 
+# Also note that we'll scale the PCA scores before clustering; use the
 # DataBySubplant PCA score mean and sd in order to scale the EternallyPresent
-# and HistoricalData PCA scores, so that our clustering models are all 
+# and HistoricalData PCA scores, so that our clustering models are all
 # fit to the same data
 
 #### Import packages ####
@@ -22,7 +22,7 @@ library(conflicted)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
-set.seed(1)	
+set.seed(1)
 
 
 #### Load local data ####
@@ -31,14 +31,14 @@ setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/module
 CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv',
 																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
 																								.default = 'd'))
-CleanedNewData <- read_csv('cleaned_new_data.csv',
+CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv',
 																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
 																								.default = 'd'))
 
 LongVariableKey <- read_csv('long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
-#### Define functions #### 
+#### Define functions ####
 get_variables_with_variance <- function(X){
 	sapply(X, var) %>%
 		enframe('variable', 'variance') %>%
@@ -49,14 +49,14 @@ get_variables_with_variance <- function(X){
 
 #### Define key variables ####
 #  Ensure that all variables are present in the datasets
-core_variables <-
-	LongVariableKey  %>%
-	filter(variable_type == 'core') %>%
-	distinct(variable) %>%
-	pull
-
-all(core_variables %in% colnames(CleanedDataBySubplant))
-all(core_variables %in% colnames(CleanedNewData))
+# core_variables <-
+# 	LongVariableKey  %>%
+# 	filter(variable_type == 'core') %>%
+# 	distinct(variable) %>%
+# 	pull
+#
+# all(core_variables %in% colnames(CleanedDataBySubplant))
+# all(core_variables %in% colnames(CleanedNewData))
 
 # For each prime_mover type, select ALL variables that are core and/or optional
 CandidateVariables <-
@@ -99,19 +99,19 @@ NestedParallelTests <-
 	)
 
 # Visualize
-NestedParallelTests %>%
-	count(prime_mover, num_components) %>%
-	ggplot(aes(x = num_components, y = n)) +
-	geom_col() +
-	facet_wrap(~prime_mover, ncol = 1) +
-	theme(
-		axis.ticks = element_blank(),
-		text = element_text(family = 'serif')
-	) +
-	labs(
-		x = 'Number of components', 
-		y = 'n', 
-		title = 'Frequency with which a number of components is recommended')
+# NestedParallelTests %>%
+# 	count(prime_mover, num_components) %>%
+# 	ggplot(aes(x = num_components, y = n)) +
+# 	geom_col() +
+# 	facet_wrap(~prime_mover, ncol = 1) +
+# 	theme(
+# 		axis.ticks = element_blank(),
+# 		text = element_text(family = 'serif')
+# 	) +
+# 	labs(
+# 		x = 'Number of components',
+# 		y = 'n',
+# 		title = 'Frequency with which a number of components is recommended')
 
 # Put the outcome in a table, so we know how many PCA components per prime_mover
 NumPcaComponents <-
@@ -121,7 +121,7 @@ NumPcaComponents <-
 	slice(which.max(n)) %>%
 	ungroup %>%
 	select(prime_mover, num_components)
-print(NumPcaComponents)
+# print(NumPcaComponents)
 
 #### Fit the PCA models to the dataset ####
 
@@ -132,7 +132,7 @@ VariablesToSelect <-
 	mutate(variables = map(data, colnames)) %>%
 	select(prime_mover, variables)
 
-# Fit the mods (previous fitting was based on resampling; 
+# Fit the mods (previous fitting was based on resampling;
 # this is fit on the data, unperturbed)
 NestedPcaMods <-
 	NestedCandidateDataBySubplant %>%
@@ -140,20 +140,20 @@ NestedPcaMods <-
 	mutate(
 		n_obs = map_int(data, nrow),
 		Cor = map(data, cor, method = 's', use = 'pairwise.complete.obs'),
-		pca_fit = pmap(list(r = Cor, nfactors = num_components, n.obs = n_obs), 
+		pca_fit = pmap(list(r = Cor, nfactors = num_components, n.obs = n_obs),
 									 pca, rotate = 'promax'),
 		# scores = map2(pca_fit, data, predict.psych)
 	) %>%
 	select(prime_mover, rowid, data, pca_fit)  # removed: scores
 
-# Apply these pca models to the NewData to get the 
+# Apply these pca models to the NewData to get the
 # scores for those data.
 JoinablePcaMods <-
 	NestedPcaMods %>%
 	select(prime_mover, pca_fit, data)
 
 get_pca_scores <- function(X){
-	# X is either CleanedHistoricalData or CleanedEternallyPresent
+	# X is either CleanedDataBySubplantData or CleanedEternallyPresent
 	X %>%
 		group_by(prime_mover) %>%
 		nest %>%
@@ -172,11 +172,13 @@ get_pca_scores <- function(X){
 		) %>%
 		select(prime_mover, rowid, scores)
 }
-NewDataPcaScores <- get_pca_scores(CleanedNewData)
+
+DataBySubplantPcaScores <- get_pca_scores(CleanedDataBySubplant)
+EternallyPresentPcaScores <- get_pca_scores(CleanedEternallyPresent)
 
 
 #### Get scores ####
-# note how much variance was explained by each component for each prime mover 
+# note how much variance was explained by each component for each prime mover
 # class
 VarianceExplainedPerComponent <-
 	NestedPcaMods %>%
@@ -191,12 +193,12 @@ VarianceExplainedPerComponent <-
 	select(-pca_fit, -variable) %>%
 	gather(component, variance_explained, -prime_mover) %>%
 	drop_na(variance_explained)
-print(VarianceExplainedPerComponent)
+# print(VarianceExplainedPerComponent)
 
 # sanity check! cumulative variance should sum up to one, per prime_mover
-VarianceExplainedPerComponent %>% 
-	group_by(prime_mover) %>%
-	summarize(sum(variance_explained))
+# VarianceExplainedPerComponent %>%
+# 	group_by(prime_mover) %>%
+# 	summarize(sum(variance_explained))
 
 # Scale the Data scores, multiply by variance explained per component
 # Note the mean and sd for each component!
@@ -213,7 +215,7 @@ MeansAndSds <-
 	group_by(prime_mover, component) %>%
 	summarize(mean = mean(score), sd = sd(score)) %>%
 	ungroup
-print(MeansAndSds)
+# print(MeansAndSds)
 
 WeightedDataBySubplantScores <-
 	NestedPcaMods %>%
@@ -231,12 +233,12 @@ WeightedDataBySubplantScores <-
 	mutate(weighted_scaled_score = variance_explained * scaled_score) %>%
 	select(prime_mover, rowid, component, weighted_scaled_score) %>%
 	spread(component, weighted_scaled_score)
-WeightedDataBySubplantScores
+# WeightedDataBySubplantScores
 
-# Scale the historical and EP data according to Data mean and sd; 
+# Scale the historical and EP data according to Data mean and sd;
 # weight acc'd to variance explained per PCA component
 get_weighted_scores <- function(X){
-	# X is HistoricalDataPcaScores or EternallyPresentPcaScores 
+	# X is HistoricalDataPcaScores or EternallyPresentPcaScores
 	X %>%
 		mutate(scores = map(scores, as.data.frame)) %>%
 		unnest(c(rowid, scores)) %>%
@@ -249,9 +251,9 @@ get_weighted_scores <- function(X){
 		spread(component, weighted_scaled_score)
 }
 
-WeightedNewDataScores <- get_weighted_scores(NewDataPcaScores)
+WeightedEternallyPresentScores <- get_weighted_scores(EternallyPresentPcaScores)
 
 WeightedDataBySubplantScores %>%
 	write_csv('weighted_data_by_subplant_scores.csv')
-WeightedNewDataScores %>%
-	write_csv('weighted_new_data_scores.csv')
+WeightedEternallyPresentScores %>%
+	write_csv('weighted_eternally_present_scores.csv')
