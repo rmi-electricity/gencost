@@ -81,7 +81,8 @@ def feature_engineering(databysubplant, newdata):
     Perform feature engineering on cleaned data, so that it's ready for modeling:
         - add parasitic load to DataBySubplant
             - remove gross_generation_mwh
-        - select only predictors (and for DataBySubplant, parasitic_load as output value)
+        - select only predictors
+        (and for DataBySubplant,parasitic_load as output value)
         - encode categorical data as numeric
         - scale all data
         - impute missing rows

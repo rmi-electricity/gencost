@@ -17,7 +17,6 @@ from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
 from gencost import predict_parasitic_load
-from gencost import predict_parasitic_load
 from gencost.constants import (
     COLS_FOR_REGRESSION,
     CURRENT_EP_COLS,
@@ -26,8 +25,8 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
-    # COLS_FOR_REGRESSION,
 )
+
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
