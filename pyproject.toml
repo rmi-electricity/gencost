@@ -28,7 +28,7 @@ dependencies = [
     "platformdirs >=2.6,<4.1",
     "plotly>5.10,<5.19",
     "pyarrow>=7, <15",
-    "polars>=0.16,<0.20",
+    "polars[connectorx]>=0.16,<0.20",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
     "scikit-learn>1.1, <1.4",
     "tqdm >= 4.63,< 4.67",
@@ -59,6 +59,7 @@ tests = []
 
 [project.scripts]  # entry points
 gencost-setup = "gencost.data_setup:main"
+gencost = "gencost.main:main"
 
 [tool.setuptools]
 include-package-data = true
@@ -168,6 +169,7 @@ strict = true
 "__init__.py" = ["F401"]
 "docs/conf.py" = ["E501"]
 "tests/*.py" = ["S101"]
+"main.py" = ["S603", "S607"]
 
 [tool.ruff.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
