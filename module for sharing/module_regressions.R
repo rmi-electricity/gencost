@@ -18,7 +18,6 @@ library(tidyverse)
 library(skimr)
 library(broom)
 library(conflicted)
-library(gtools)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
@@ -26,13 +25,13 @@ set.seed(1)
 
 
 #### Load data ####
+my_folder <- '~/Downloads/temp_folder/'
+setwd(my_folder)
 
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-ClustersFit <- readRDS('clean_data/clusters_fit.RDS')
-CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv')
-CleanedEternallyPresent <- read_csv('clean_data/cleaned_eternally_present.csv')
-
-LongVariableKey <- read_csv('module/long_variable_key.csv', col_types = c(
+ClustersFit <- readRDS('clusters_fit.RDS')
+CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
+CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv')
+LongVariableKey <- read_csv('long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
 # Count variables
@@ -177,7 +176,7 @@ RMSE <-
 	ungroup
 
 ####
-write_csv(RMSE, 'clean_data/all_models_rmse.csv')
+write_csv(RMSE, 'all_models_rmse.csv')
 
 
 #### Start here if you simply want to read extant RMSE data ####
@@ -319,6 +318,6 @@ ChosenCoefficients <-
 # 	count(prime_mover, cls, category, .drop = F) %>%
 # 	spread(category, n)
 
-write_csv(ChosenCoefficients, 'clean_data/chosen_coefficients.csv')
-write_csv(ChosenFormulas, 'clean_data/chosen_formulas.csv')
-write_csv(MeanRMSE, 'clean_data/mean_rmse.csv')
+write_csv(ChosenCoefficients, 'chosen_coefficients.csv')
+write_csv(ChosenFormulas, 'chosen_formulas.csv')
+write_csv(MeanRMSE, 'mean_rmse.csv')

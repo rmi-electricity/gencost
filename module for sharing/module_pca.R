@@ -26,7 +26,8 @@ set.seed(1)
 
 
 #### Load local data ####
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/module/')
+my_folder <- '~/Downloads/temp_folder/'
+setwd(my_folder)
 
 CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv',
 																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',

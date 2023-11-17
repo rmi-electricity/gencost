@@ -16,15 +16,14 @@ conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 
 #### Load data ####
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
-DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet') %>%
+my_folder <- commandArgs(trailingOnly = TRUE)
+setwd(my_folder)
+
+DataBySubplant <- arrow::read_parquet('data_by_subplant.parquet') %>%
 	filter(prime_mover %in% c('CC', 'GT', 'ST'))
 
-# Note to user: this is where you'll load eternally present or historical data.
-# Pls feel free to change the function to read_csv() if you're using a csv!
-EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
-LongVariableKey <- read_csv('module/long_variable_key.csv', col_types = 'cccc')
-
+EternallyPresent <- arrow::read_parquet('epd.parquet')
+LongVariableKey <- read_csv('long_variable_key.csv', col_types = 'cccc')
 
 #### Define functions ####
 
@@ -211,5 +210,5 @@ CleanedEternallyPresent <-
 	create_independent_variables %>%
 	select(all_of(variables_to_use))
 
-write_csv(CleanedDataBySubplant, 'module/cleaned_data_by_subplant_data.csv')
-write_csv(CleanedEternallyPresent, 'module/cleaned_eternally_present.csv')
+write_csv(CleanedDataBySubplant, 'cleaned_data_by_subplant_data.csv')
+write_csv(CleanedEternallyPresent, 'cleaned_eternally_present.csv')
