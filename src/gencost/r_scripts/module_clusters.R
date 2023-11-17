@@ -19,17 +19,16 @@ conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 conflicted::conflict_prefer('all_of', 'dplyr')
-set.seed(1)	
+set.seed(1)
 
 #### Load data ####
+my_folder <- commandArgs(trailingOnly = TRUE)
+setwd(my_folder)
 
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/module/')
+WeightedDataBySubplantScores <- read_csv('../../../weighted_data_by_subplant_scores.csv')
+WeightedEternallyPresentScores <- read_csv('weighted_eternally_present_scores.csv')
 
-WeightedDataBySubplantScores <- read_csv('weighted_data_by_subplant_scores.csv')
-WeightedNewDataScores <- read_csv('weighted_new_data_scores.csv')
-
-#LongVariableKey <- read_csv('clean_data/long_variable_key.csv') # for appendix EDA only
-DataBySubplant <- read_parquet('input_data/data_by_subplant.parquet') %>%
+DataBySubplant <- read_parquet('data_by_subplant.parquet') %>%
 	rowid_to_column()
 
 #### Define functions ####
@@ -98,13 +97,13 @@ get_clustered_data <- function(X){
 		select(prime_mover, rowid, cls)
 }
 
-ClusteredNewData <- get_clustered_data(WeightedNewDataScores)
+ClusteredEternallyPresent <- get_clustered_data(WeightedEternallyPresentScores)
 
 
-#### Save data to disk #### 
+#### Save data to disk ####
 
 saveRDS(object = ClustersFit, file = 'clusters_fit.RDS')
-saveRDS(object = ClusteredNewData, file = 'clustered_new_data.RDS')
+saveRDS(object = ClusteredEternallyPresent, file = 'clustered_eternally_present.RDS')
 
 ClustersFit %>%
 	select(rowid, cls) %>%

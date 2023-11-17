@@ -18,9 +18,6 @@ library(tidyverse)
 library(skimr)
 library(broom)
 library(conflicted)
-library(gtools)
-# library(leaps)
-# library(Metrics)
 conflicted::conflict_prefer('map', 'purrr')
 conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
@@ -28,22 +25,21 @@ set.seed(1)
 
 
 #### Load data ####
+my_folder <- commandArgs(trailingOnly = TRUE)
+setwd(my_folder)
 
-setwd('~/Documents/GitHub/gencost/')
-
-ClustersFit <- readRDS('temp_output/clusters_fit.RDS')
-CleanedDataBySubplant <- read_csv('temp_output/cleaned_data_by_subplant_data.csv')
-CleanedNewData <- read_csv('temp_output/cleaned_new_data.csv')
-
-LongVariableKey <- read_csv('module for sharing/long_variable_key.csv', col_types = c(
+ClustersFit <- readRDS('clusters_fit.RDS')
+CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
+CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv')
+LongVariableKey <- read_csv('../package_data/long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
 # Count variables
-LongVariableKey %>%
-	filter(variable_type != 'unused') %>%
-	count(prime_mover, variable_type) %>%
-	spread(variable_type, n) %>%
-	mutate(subtotal = core + optional)
+# LongVariableKey %>%
+# 	filter(variable_type != 'unused') %>%
+# 	count(prime_mover, variable_type) %>%
+# 	spread(variable_type, n) %>%
+# 	mutate(subtotal = core + optional)
 
 #### Fit the DataBySubplant dataset agnostically, and with core variables ####
 # put core_variables in a list, per prime_mover
@@ -76,7 +72,7 @@ JoinmeSequence <-
 		sequence = map2(low, high, seq)
 	) %>%
 	select(prime_mover, sequence)
-JoinmeSequence
+# JoinmeSequence
 
 RowsWhichSignifyNoOptionalVariables <-
 	# Since we'll make formulas be concatenating the core bits with the
@@ -87,7 +83,7 @@ RowsWhichSignifyNoOptionalVariables <-
 		c('CC', 'GT', 'ST'), 0L, ''
 	) %>%
 	unnest(prime_mover)
-RowsWhichSignifyNoOptionalVariables
+# RowsWhichSignifyNoOptionalVariables
 
 ComponentsOfFormulasOptional <-
 	# The optional halves of formulas that will be appended to the core halves
@@ -107,7 +103,7 @@ ComponentsOfFormulasOptional <-
 	mutate(optional_variables = str_c(' + ', optional_variables)) %>%
 	bind_rows(RowsWhichSignifyNoOptionalVariables) %>% # add above-created placeholders
 	arrange(prime_mover, pull_size, optional_variables)
-ComponentsOfFormulasOptional
+# ComponentsOfFormulasOptional
 
 ComponentsOfFormulasCoreAndDv <-
 	# the core parts of the formulas, as well as the DV
@@ -117,15 +113,15 @@ ComponentsOfFormulasCoreAndDv <-
 		core_variables_and_dv = str_c('real_opex ~ 0 + ', core_variables)
 	) %>%
 	select(prime_mover, core_variables_and_dv)
-ComponentsOfFormulasCoreAndDv
+# ComponentsOfFormulasCoreAndDv
 
 AllFormulas <-
 	ComponentsOfFormulasCoreAndDv %>%
 	inner_join(ComponentsOfFormulasOptional, by = 'prime_mover') %>%
 	unite('formula', c('core_variables_and_dv', 'optional_variables'), sep = '')
 
-AllFormulas %>%
-	count(prime_mover)
+# AllFormulas %>%
+# 	count(prime_mover)
 
 
 #### Train and Test the models ####
@@ -152,7 +148,7 @@ TrainTest <-
 		Train = map2(data, train_indices, filter),
 		Test = map2(data, test_indices, filter)
 	)
-TrainTest
+# TrainTest
 
 # Fan out by joining each train/test row to all of the prime mover's formulas
 # Get fitted values and note RMSE
@@ -180,13 +176,13 @@ RMSE <-
 	ungroup
 
 ####
-write_csv(RMSE, 'temp_output/all_models_rmse.csv')
+write_csv(RMSE, 'all_models_rmse.csv')
 
 
 #### Start here if you simply want to read extant RMSE data ####
-RMSE <- read_csv('temp_output/all_models_rmse.csv',
-								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i',
-								 							boot_num = 'i', rmse = 'd'))
+# RMSE <- read_csv('temp_output/all_models_rmse.csv',
+# 								 col_types = c(prime_mover = 'c', formula = 'c', cls = 'i',
+# 								 							boot_num = 'i', rmse = 'd'))
 
 # Aggregate the RMSE over each of the CV folds, so that we have a mean
 # RMSE value per formula, per prime_mover, per cluster
@@ -248,47 +244,47 @@ ChosenFormulas <-
 	ungroup %>%
 	select(prime_mover, cls, formula)
 
-print(ChosenFormulas)
+# print(ChosenFormulas)
 
 # Dataviz to show the models we chose
 # x axis is add'l variables, y is rmse, colors indicate functional and is_chosen
-Results <-
-	AllFormulas %>%
-	full_join(MeanRMSE, by = c('prime_mover', 'formula')) %>%
-	full_join(FunctionalModelCheck) %>%
-	left_join(
-		ChosenFormulas %>% mutate(is_chosen = TRUE)
-	) %>%
-	mutate(
-		is_chosen = replace_na(is_chosen, FALSE),
-		my_color = case_when(
-			is_chosen ~ 'Chosen',
-			is_functional_model ~ 'Valid model, not chosen',
-			!is_functional_model ~ 'Non-valid model',
-			TRUE ~ 'DEFAULT UNKNOWN'
-		),
-		my_color = ordered(my_color, c('Chosen', 'Valid model, not chosen', 'Non-valid model')),
-		# my_color = fct_rev(my_color)
-	)
-Results
+# Results <-
+# 	AllFormulas %>%
+# 	full_join(MeanRMSE, by = c('prime_mover', 'formula')) %>%
+# 	full_join(FunctionalModelCheck) %>%
+# 	left_join(
+# 		ChosenFormulas %>% mutate(is_chosen = TRUE)
+# 	) %>%
+# 	mutate(
+# 		is_chosen = replace_na(is_chosen, FALSE),
+# 		my_color = case_when(
+# 			is_chosen ~ 'Chosen',
+# 			is_functional_model ~ 'Valid model, not chosen',
+# 			!is_functional_model ~ 'Non-valid model',
+# 			TRUE ~ 'DEFAULT UNKNOWN'
+# 		),
+# 		my_color = ordered(my_color, c('Chosen', 'Valid model, not chosen', 'Non-valid model')),
+# 		# my_color = fct_rev(my_color)
+# 	)
+# Results
 
-Results %>%
-	filter(prime_mover == 'ST') %>%  # NB change to CC or GT to see how number of variables influences RMSE
-	ggplot(aes(x = pull_size, y = mean_rmse)) +
-	geom_smooth(method = 'lm', formula = 'y ~ poly(x, 3)') +
-	# expand_limits(y = 0) +
-	scale_x_continuous(breaks = seq(0, 10)) +
-	scale_y_continuous(labels = scales::comma_format(1)) +
-	facet_wrap(~cls, scales = 'free') +
-	theme(
-		axis.ticks = element_blank(),
-		panel.grid.minor.x = element_blank(),
-		text = element_text(family = 'serif')
-	) +
-	labs(x = 'Number of optional variables',
-			 y = 'Mean RMSE',
-			 title = 'Mean RMSE across training/test sets: ST',
-			 caption = 'Note that these are zoomed in, and the y-axes do not include zero')
+# Results %>%
+# 	filter(prime_mover == 'ST') %>%  # NB change to CC or GT to see how number of variables influences RMSE
+# 	ggplot(aes(x = pull_size, y = mean_rmse)) +
+# 	geom_smooth(method = 'lm', formula = 'y ~ poly(x, 3)') +
+# 	# expand_limits(y = 0) +
+# 	scale_x_continuous(breaks = seq(0, 10)) +
+# 	scale_y_continuous(labels = scales::comma_format(1)) +
+# 	facet_wrap(~cls, scales = 'free') +
+# 	theme(
+# 		axis.ticks = element_blank(),
+# 		panel.grid.minor.x = element_blank(),
+# 		text = element_text(family = 'serif')
+# 	) +
+# 	labs(x = 'Number of optional variables',
+# 			 y = 'Mean RMSE',
+# 			 title = 'Mean RMSE across training/test sets: ST',
+# 			 caption = 'Note that these are zoomed in, and the y-axes do not include zero')
 #
 
 # sanity check on number of clusters * formulas to make sure we fit the right #
@@ -301,27 +297,27 @@ Results %>%
 # 	inner_join(NumClusters, by = 'prime_mover') %>%
 # 	mutate(subtotal = n * num_clusters)
 # sum(NumFormulas$subtotal)
-# 
-# ChosenModsFit <-
-# 	AllModsFit %>%
-# 	inner_join(ChosenFormulas)
-# 
-# ChosenCoefficients <-
-# 	ChosenModsFit %>%
-# 	mutate(
-# 		coefficients = map(lm_fit, coefficients),
-# 		coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient')
-# 	) %>%
-# 	select(prime_mover, cls, formula, coefficients) %>%
-# 	unnest(coefficients) %>%
-# 	left_join(LongVariableKey, by = c('prime_mover', 'variable'))
+#
+ChosenModsFit <-
+	AllModsFit %>%
+	inner_join(ChosenFormulas)
+#
+ChosenCoefficients <-
+	ChosenModsFit %>%
+	mutate(
+		coefficients = map(lm_fit, coefficients),
+		coefficients = map(coefficients, enframe, name = 'variable', value = 'coefficient')
+	) %>%
+	select(prime_mover, cls, formula, coefficients) %>%
+	unnest(coefficients) %>%
+	left_join(LongVariableKey, by = c('prime_mover', 'variable'))
 
 # Ensure each category of variable is accounted for
-ChosenCoefficients %>%
-	mutate_at(c('prime_mover', 'category'), factor) %>%
-	count(prime_mover, cls, category, .drop = F) %>%
-	spread(category, n)
+# ChosenCoefficients %>%
+# 	mutate_at(c('prime_mover', 'category'), factor) %>%
+# 	count(prime_mover, cls, category, .drop = F) %>%
+# 	spread(category, n)
 
 write_csv(ChosenCoefficients, 'chosen_coefficients.csv')
 write_csv(ChosenFormulas, 'chosen_formulas.csv')
-write_csv(MeanRMSE, 'mean_rmse.csv')
+write_csv(MeanRMSE, '../../../mean_rmse.csv')
