@@ -25,13 +25,13 @@ set.seed(1)
 
 
 #### Load data ####
-my_folder <- '~/Downloads/temp_folder/'
+my_folder <- commandArgs(trailingOnly = TRUE)
 setwd(my_folder)
 
 ClustersFit <- readRDS('clusters_fit.RDS')
 CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
 CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv')
-LongVariableKey <- read_csv('long_variable_key.csv', col_types = c(
+LongVariableKey <- read_csv('../package_data/long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
 # Count variables
@@ -320,4 +320,4 @@ ChosenCoefficients <-
 
 write_csv(ChosenCoefficients, 'chosen_coefficients.csv')
 write_csv(ChosenFormulas, 'chosen_formulas.csv')
-write_csv(MeanRMSE, 'mean_rmse.csv')
+write_csv(MeanRMSE, '../../../mean_rmse.csv')

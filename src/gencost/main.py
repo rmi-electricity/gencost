@@ -9,6 +9,7 @@ import pandas as pd
 from platformdirs import user_cache_path, user_documents_path
 
 from gencost.crosswalk import Crosswalk
+from gencost.package_data import PACKAGE_PATH
 from gencost.waterfall import DataBySubplant
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,10 @@ def main():
     if not temp_dir.exists():
         temp_dir.mkdir(parents=True)
 
+    shutil.copy(
+        PACKAGE_PATH / "long_variable_key.csv", temp_dir / "long_variable_key.csv"
+    )
+
     try:
         logger.info("Setting up python data processing objects")
         xwalk = Crosswalk()
@@ -61,24 +66,32 @@ def main():
         logger.info("Installing R packages")
         _ = subprocess.run(["Rscript", r_scripts / "module_setup.R"])
         # just an arg parsing example
-        _ = subprocess.run(["Rscript", r_scripts / "test.R", "--file", "weeee"])
-
-        logger.info("Starting regressions")
-        result = subprocess.run(["Rscript", r_scripts / "1_elt.R", "--file", "path"])
-        logger.info("%s", result.stdout)
-
-        logger.info("Doing more stuff")
+        logger.info("Running module_initial_transformations")
         result = subprocess.run(
-            ["Rscript", r_scripts / "2_elt_specific_to_linear_regressions.R"]
+            ["Rscript", r_scripts / "module_initial_transformations.R", temp_dir]
         )
         logger.info("%s", result.stdout)
 
-        ...
+        result = subprocess.run(["Rscript", r_scripts / "module_pca.R", temp_dir])
+        logger.info("%s", result.stdout)
+
+        result = subprocess.run(["Rscript", r_scripts / "module_clusters.R", temp_dir])
+        logger.info("%s", result.stdout)
+
+        result = subprocess.run(
+            ["Rscript", r_scripts / "module_regressions.R", temp_dir]
+        )
+        logger.info("%s", result.stdout)
+
+        result = subprocess.run(
+            ["Rscript", r_scripts / "module_final_transformations.R", temp_dir]
+        )
+        logger.info("%s", result.stdout)
 
         # not quite sure about this part but the idea is that the final result gets
         # saved to result_path
         out = data_by_subplant.get_eternally_present_by_generator().merge(
-            vom_fom_som=pd.read_csv(temp_dir / "results_new_data.csv").assign(
+            vom_fom_som=pd.read_csv(temp_dir / "results_eternally_present.csv").assign(
                 report_date=lambda x: pd.to_datetime(
                     x["report_date"], format="%Y-%m-%d"
                 )
