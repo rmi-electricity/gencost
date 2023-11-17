@@ -16,26 +16,26 @@ conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 
 #### Load data ####
-
-setwd('~/Documents/rmi/gencost/exploration_of_power_plant_characteristics/')
+my_folder <- '~/Downloads/temp_folder/'
+setwd(my_folder)
 
 # Raw datasets
-DataBySubplant <- arrow::read_parquet('input_data/data_by_subplant.parquet')
-EternallyPresent <- arrow::read_parquet('input_data/eternally_present_by_generator.parquet')
+DataBySubplant <- arrow::read_parquet('data_by_subplant.parquet')
+EternallyPresent <- arrow::read_parquet('epd.parquet')
 
 # Datasets created by prev scripts
-CleanedDataBySubplant <- read_csv('clean_data/cleaned_data_by_subplant_data.csv')
-CleanedEternallyPresent <- read_csv('clean_data/cleaned_eternally_present.csv')
+CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
+CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv')
 
-ChosenCoefficients <- read_csv('clean_data/chosen_coefficients.csv')
-ChosenFormulas <- read_csv('clean_data/chosen_formulas.csv')
+ChosenCoefficients <- read_csv('chosen_coefficients.csv')
+ChosenFormulas <- read_csv('chosen_formulas.csv')
 # ChosenFormulas <- read_csv('clean_data/chosen_formulas.csv')
 # AllPossibleCoefficients <- read_csv('clean_data/all_possible_coefficients.csv')
 # FittedValues <- read_csv('clean_data/fitted_values.csv')
 
 # Clusters
-ClustersFit <- readRDS('clean_data/clusters_fit.RDS')
-ClusteredEternallyPresent <- readRDS('clean_data/clustered_eternally_present.RDS')
+ClustersFit <- readRDS('clusters_fit.RDS')
+ClusteredEternallyPresent <- readRDS('clustered_eternally_present.RDS')
 
 #### Fit Vom Fom Som, and om_per_mhw ####
 get_misc_variables <- function(X){
@@ -143,11 +143,11 @@ EternallyPresent %>%
 	select(rowid, plant_id_eia, generator_id, report_date) %>%
 	mutate(report_date = lubridate::as_date(report_date)) %>%
 	inner_join(ResultsEternallyPresent) %>%
-	write_csv('clean_data/results_eternally_present.csv')
+	write_csv('results_eternally_present.csv')
 
 DataBySubplant %>%
 	rowid_to_column %>%
 	select(rowid, plant_id_eia, report_date) %>%
 	mutate(report_date = lubridate::as_date(report_date)) %>%
 	inner_join(ResultsDataBySubplant) %>%
-	write_csv('clean_data/results_data_by_subplant.csv')
+	write_csv('results_data_by_subplant.csv')
