@@ -20,7 +20,7 @@ self = DataBySubplant(xwalk)
 
 def get_epd_w_vom_fom_som():
     return self.get_eternally_present_by_generator().merge(
-        vom_fom_som=pd.read_csv(PACKAGE_PATH / "results_new_data.csv").assign(
+        pd.read_csv(PACKAGE_PATH / "results_new_data.csv").assign(
             report_date=lambda x: pd.to_datetime(x["report_date"], format="%Y-%m-%d")
             + pd.DateOffset(days=1)
         ),

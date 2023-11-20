@@ -2268,9 +2268,11 @@ class DataBySubplant:
                 )
             )
             cost = cost[cost.counts == 1]
-            assert (  # noqa: S101
-                cost.query("sbi_count > 1").empty
-            ), "adding subplants to costs created non-unique costs per subplant_id"
+            assert cost.query(  # noqa: S101
+                "sbi_count > 1"
+            ).empty, (
+                "adding subplants to costs created non-unique costs per subplant_id"
+            )
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
                 "non-unique costs per pf_subplant_id"
@@ -2684,8 +2686,7 @@ class DataBySubplant:
                 .sort_values(
                     by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
                     ascending=True,
-                )
-                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2857,8 +2858,7 @@ class DataBySubplant:
                     # "fuel_group",
                 ],
                 keep="first",
-            )
-            .assign(
+            ).assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
                 ).round(2)
