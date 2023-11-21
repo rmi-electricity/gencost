@@ -2,9 +2,74 @@ import pandas as pd
 
 from gencost.package_data import PACKAGE_PATH
 
+BA_REPLACE = {
+    "GLHB": "MISO",
+    "HGMA": "SRP",
+    "HST": "FMPP",
+    "SPA": "SWPP",
+    "TAL": "FPC",  # TAL is very small, EIA 930 shows it connected to FPC
+    "GVL": "FPC",  # GVL is very small, EIA 930 shows it connected to FPC
+    "DUK": "DUKE",  # combine Duke Carolinas and Duke Progress
+    "CPLE": "DUKE",  # combine Duke Carolinas and Duke Progress
+    "CPLW": "DUKE",  # combine Duke Carolinas and Duke Progress
+    "BPAT": "PNW",
+    "CHPD": "PNW",
+    "DOPD": "PNW",
+    "AVA": "PNW",
+    "SCL": "PNW",
+    "TPWR": "PNW",
+    "GRID": "PNW",
+    "AVRN": "PNW",
+    "IPCO": "PNW",
+    "NWMT": "PNW",
+    "PGE": "PNW",
+    "PSEI": "PNW",
+    "CISO": "CAISO",
+    "BANC": "CAISO",
+    "IID": "CAISO",
+    "TIDC": "CAISO",
+    "SEPA": "SOCO",  # EIA 930 shows most outgoing transfers to SOCO
+}
+RESPS_TO_KEEP = (
+    # 12,  # Black hills  (small)
+    # 100,  # Entergy Mississippi, LLC (varies over time) -> merged into ENTERGY
+    # 120,  # Northern States Power Co. (MISO) -> big deficit so merged into MISO
+    130,  # Oklahoma Gas & Electric Co. (SWPP)
+    # 144,  # Duke Indiana (PJM) unclear FRR
+    # 166,  # Southwestern Public Service (SWPP) -> big deficit so merged into SWPP
+    177,  # Ameren Missouri (MISO)
+    186,  # Dominion Energy Virginia (PJM) DOM is mostly FRR
+    # 191,  # Evergy Kansas Central, Inc. (SWPP) -> merged into EVERGY
+    # 193,  # Wisconsin Electric Power Co. (MISO) -> big deficit so merged into MISO
+    # 194,  # Wisconsin Power & Light Co. (MISO) -> merged into LNT
+    195,  # Wisconsin Public Service Corp. (MISO)
+    210,  # MidAmerican Energy Co. (MISO)
+    22,  # Cleco Power LLC (MISO)
+    # 41,  # Consumers Energy Co. (MISO) -> big deficit so merged into MISO
+    # 44,  # DTE Electric Co. (MISO) -> big deficit so merged into MISO
+    # 529,  # Tri-State G & T (PNM, PSCO, WACM)
+    531,  # Basin (OK)
+    552,  # Cooperative Energy (MISO, TVA)
+    # 554,  # Dairyland Power Coop (MISO) -> big deficit so merged into MISO
+    556,  # East Kentucky Power Coop, Inc (LGEE, PJM)
+    # transfering 560 to MISO because nearly half of gen there already
+    # 560,  # Great River Energy (MISO)
+    # getting rid of 562 because too small, generation goes to MISO and PJM
+    # 562,  # Hoosier Energy R E C, Inc (MISO)
+    # 567,  # North Carolina El Member Corp (too limited)
+    58,  # Golden Spread Electric Coop., Inc. (SWPP)
+    656,  # Nebraska Public Power District (SWPP)
+    658,  # Omaha Public Power District (SWPP)
+    # 79,  # Evergy Metro, Inc. (SWPP) -> merged into EVERGY
+)
+
 
 def add_ba_code(
-    input_df: pd.DataFrame, new_ba_col: str = "final_ba_code", drop_interim=False
+    input_df: pd.DataFrame,
+    new_ba_col: str = "final_ba_code",
+    *,
+    drop_interim: bool = False,
+    apply_purchaser: bool = True,
 ):
     """Add respondent and final ba_codes.
 
@@ -12,54 +77,63 @@ def add_ba_code(
         input_df: frame to add BA / respondent columns to
         new_ba_col: name of ultimate BA code column
         drop_interim: if True, drop all the intermediate respondent / BA code columns
+        apply_purchaser: if True, change respondent to respondent of purchaser,
+            requires plant_id_eia
 
     Returns:
 
     """
-    if missing := {
-        "plant_id_eia",
-        "utility_id_eia",
-        "balancing_authority_code_eia",
-    } - set(input_df):
+    reqd_cols = {"utility_id_eia", "balancing_authority_code_eia"} | (
+        {"plant_id_eia"} if apply_purchaser else set()
+    )
+    if missing := reqd_cols - set(input_df):
         raise ValueError(f"`input_df` is missing {missing}")
     ferc_match = pd.read_parquet(
         PACKAGE_PATH / "utility_information.parquet.gzip"
     ).astype({"respondent_id": "Int64"})
-    purchased = (
-        pd.read_parquet(PACKAGE_PATH / "f1_purchased_power_tagged.parquet.gzip")
-        .astype({"respondent_id": "Int64"})
-        .query("report_year == 2020 & plant_id_eia.notna()")
-        .assign(
-            proportion_purchased=lambda x: x.mwh_purchased
-            / x.groupby(["plant_id_eia"]).mwh_purchased.transform("sum"),
-        )
-        .query("proportion_purchased >= 0.9")
-        .rename(columns={"respondent_id": "respondent_id_purchaser"})
+
+    out = input_df.merge(
+        ferc_match[["respondent_id", "utility_id_eia"]].dropna().drop_duplicates(),
+        on="utility_id_eia",
+        how="left",
+        validate="m:1",
     )
-    # https://github.com/rmi-electricity/utility-transition-hub/issues/444
-    purchased = purchased.query("plant_id_eia != 2164", engine="python")
-    out = (
-        input_df.merge(
-            ferc_match[["respondent_id", "utility_id_eia"]].dropna().drop_duplicates(),
-            on="utility_id_eia",
-            how="left",
-            validate="m:1",
+
+    if apply_purchaser:
+        purchased = (
+            pd.read_parquet(PACKAGE_PATH / "f1_purchased_power_tagged.parquet.gzip")
+            .astype({"respondent_id": "Int64"})
+            .query("report_year == 2020 & plant_id_eia.notna()")
+            .assign(
+                proportion_purchased=lambda x: x.mwh_purchased
+                / x.groupby(["plant_id_eia"]).mwh_purchased.transform("sum"),
+            )
+            .query("proportion_purchased >= 0.9")
+            .rename(columns={"respondent_id": "respondent_id_purchaser"})
         )
-        .merge(
+        # https://github.com/rmi-electricity/utility-transition-hub/issues/444
+        purchased = purchased.query("plant_id_eia != 2164", engine="python")
+
+        out = out.merge(
             purchased[["respondent_id_purchaser", "plant_id_eia"]],
             on="plant_id_eia",
             how="left",
             validate="m:1",
-        )
-        .assign(
+        ).assign(
             final_respondent_id=lambda x: x.respondent_id.fillna(
                 x.respondent_id_purchaser
             )  # .astype("Int64")
         )
-        .pipe(adjust_ba_codes, new_ba_col=new_ba_col)
-    )
+    else:
+        out = out.assign(final_respondent_id=lambda x: x.respondent_id)
+    out = out.pipe(adjust_ba_codes, new_ba_col=new_ba_col)
+
     if drop_interim:
-        return out.drop(columns=["respondent_id_purchaser", "final_respondent_id"])
+        return out.drop(
+            columns=out.columns.intersection(
+                ("respondent_id_purchaser", "final_respondent_id")
+            )
+        )
     return out
 
 
@@ -68,66 +142,7 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
     # Source for PJM FRR data
     # https://www.pjm.com/-/media/markets-ops/rpm/rpm-auction-info/2024-2025/2024-2025-planning-period-parameters-for-base-residual-auction.ashx
     # map https://www.pjm.com/-/media/about-pjm/pjm-zones.ashx
-    resps_to_keep = (
-        # 12,  # Black hills  (small)
-        # 100,  # Entergy Mississippi, LLC (varies over time) -> merged into ENTERGY
-        # 120,  # Northern States Power Co. (MISO) -> big deficit so merged into MISO
-        130,  # Oklahoma Gas & Electric Co. (SWPP)
-        # 144,  # Duke Indiana (PJM) unclear FRR
-        # 166,  # Southwestern Public Service (SWPP) -> big deficit so merged into SWPP
-        177,  # Ameren Missouri (MISO)
-        186,  # Dominion Energy Virginia (PJM) DOM is mostly FRR
-        # 191,  # Evergy Kansas Central, Inc. (SWPP) -> merged into EVERGY
-        # 193,  # Wisconsin Electric Power Co. (MISO) -> big deficit so merged into MISO
-        # 194,  # Wisconsin Power & Light Co. (MISO) -> merged into LNT
-        195,  # Wisconsin Public Service Corp. (MISO)
-        210,  # MidAmerican Energy Co. (MISO)
-        22,  # Cleco Power LLC (MISO)
-        # 41,  # Consumers Energy Co. (MISO) -> big deficit so merged into MISO
-        # 44,  # DTE Electric Co. (MISO) -> big deficit so merged into MISO
-        # 529,  # Tri-State G & T (PNM, PSCO, WACM)
-        531,  # Basin (OK)
-        552,  # Cooperative Energy (MISO, TVA)
-        # 554,  # Dairyland Power Coop (MISO) -> big deficit so merged into MISO
-        556,  # East Kentucky Power Coop, Inc (LGEE, PJM)
-        # transfering 560 to MISO because nearly half of gen there already
-        # 560,  # Great River Energy (MISO)
-        # getting rid of 562 because too small, generation goes to MISO and PJM
-        # 562,  # Hoosier Energy R E C, Inc (MISO)
-        # 567,  # North Carolina El Member Corp (too limited)
-        58,  # Golden Spread Electric Coop., Inc. (SWPP)
-        656,  # Nebraska Public Power District (SWPP)
-        658,  # Omaha Public Power District (SWPP)
-        # 79,  # Evergy Metro, Inc. (SWPP) -> merged into EVERGY
-    )
-    ba_replace = {
-        "GLHB": "MISO",
-        "HGMA": "SRP",
-        "HST": "FMPP",
-        "SPA": "SWPP",
-        "TAL": "FPC",  # TAL is very small, EIA 930 shows it connected to FPC
-        "GVL": "FPC",  # GVL is very small, EIA 930 shows it connected to FPC
-        "DUK": "DUKE",  # combine Duke Carolinas and Duke Progress
-        "CPLE": "DUKE",  # combine Duke Carolinas and Duke Progress
-        "CPLW": "DUKE",  # combine Duke Carolinas and Duke Progress
-        "BPAT": "PNW",
-        "CHPD": "PNW",
-        "DOPD": "PNW",
-        "AVA": "PNW",
-        "SCL": "PNW",
-        "TPWR": "PNW",
-        "GRID": "PNW",
-        "AVRN": "PNW",
-        "IPCO": "PNW",
-        "NWMT": "PNW",
-        "PGE": "PNW",
-        "PSEI": "PNW",
-        "CISO": "CAISO",
-        "BANC": "CAISO",
-        "IID": "CAISO",
-        "TIDC": "CAISO",
-        "SEPA": "SOCO",  # EIA 930 shows most outgoing transfers to SOCO
-    }
+
     df[new_ba_col] = (
         pd.Series("PAC", index=df.index)
         # Aggregate Pacificorp
@@ -222,7 +237,7 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
         .fillna(
             # keep safe respondent ids
             df.final_respondent_id.astype(str).where(
-                df.final_respondent_id.isin(resps_to_keep),
+                df.final_respondent_id.isin(RESPS_TO_KEEP),
                 pd.NA,
             ),
         )
@@ -236,7 +251,7 @@ def adjust_ba_codes(df: pd.DataFrame, new_ba_col="final_ba_code") -> pd.DataFram
         )
         .fillna(
             # apply BA maps / safe codes
-            df.balancing_authority_code_eia.replace(ba_replace)
+            df.balancing_authority_code_eia.replace(BA_REPLACE)
         )
     )
     return df
