@@ -22,7 +22,7 @@ conflicted::conflict_prefer('all_of', 'dplyr')
 set.seed(1)
 
 #### Load data ####
-my_folder <- '~/Downloads/temp_folder/'
+my_folder <- commandArgs(trailingOnly = TRUE)
 setwd(my_folder)
 
 WeightedDataBySubplantScores <- read_csv('weighted_data_by_subplant_scores.csv')

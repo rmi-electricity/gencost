@@ -26,7 +26,7 @@ set.seed(1)
 
 
 #### Load local data ####
-my_folder <- '~/Downloads/temp_folder/'
+my_folder <- commandArgs(trailingOnly = TRUE)
 setwd(my_folder)
 
 CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv',

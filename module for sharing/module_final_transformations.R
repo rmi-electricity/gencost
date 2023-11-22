@@ -16,7 +16,7 @@ conflicted::conflict_prefer('map2', 'purrr')
 conflicted::conflict_prefer('filter', 'dplyr')
 
 #### Load data ####
-my_folder <- '~/Downloads/temp_folder/'
+my_folder <- commandArgs(trailingOnly = TRUE)
 setwd(my_folder)
 
 # Raw datasets
