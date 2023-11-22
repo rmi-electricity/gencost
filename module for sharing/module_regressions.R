@@ -25,7 +25,7 @@ set.seed(1)
 
 
 #### Load data ####
-my_folder <- '~/Downloads/temp_folder/'
+my_folder <- commandArgs(trailingOnly = TRUE)
 setwd(my_folder)
 
 ClustersFit <- readRDS('clusters_fit.RDS')
@@ -301,6 +301,18 @@ ChosenFormulas <-
 ChosenModsFit <-
 	AllModsFit %>%
 	inner_join(ChosenFormulas)
+#
+# Export a report of chosen mods
+ChosenModsFit %>%
+	mutate(
+		summary = map(lm_fit, summary),
+		summary = map(summary, tidy)
+		) %>%
+	select(prime_mover, cls, formula, summary) %>%
+	unnest(summary) %>%
+	rename(cluster_num = cls) %>%
+	mutate_if(is.numeric, round, 3) %>%
+	write_csv('chosen_model_coefficients.csv')
 #
 ChosenCoefficients <-
 	ChosenModsFit %>%
