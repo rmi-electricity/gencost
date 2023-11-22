@@ -52,6 +52,28 @@ Then setup some tools...
    mamba activate gencost
    pre-commit install
 
+Finally, you'll need `R <https://en.wikipedia.org/wiki/R_(programming_language)>`_. 
+If you don't already have R installed on your machine, you can download it `here <https://cran.r-project.org/mirrors.html>`_.
+
+Once you have R installed, open it.
+In BASH, you can open R by simply typing:
+
+.. code-block:: bash
+
+   R
+
+Within R, install the necessary packages by running the following commands:
+
+.. code-block::
+
+   install.packages("tidyverse")                                                                                                                                      
+   install.packages("arrow")
+   install.packages("broom")
+   install.packages("conflicted")
+   install.packages("flexclust")
+   install.packages("psych")
+   install.packages("skimr")
+
 Now everything should be ready!
 
 
