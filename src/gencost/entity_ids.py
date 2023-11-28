@@ -14,6 +14,8 @@ BA_REPLACE = {
     "CPLW": "DUKE",  # combine Duke Carolinas and Duke Progress
     "BPAT": "PNW",
     "CHPD": "PNW",
+    "GCPD": "PNW",  # Public Utility District No. 2 of Grant County, Washington
+    "GWA": "PNW",  # NaturEner Power Watch, LLC
     "DOPD": "PNW",
     "AVA": "PNW",
     "SCL": "PNW",
@@ -34,6 +36,10 @@ BA_REPLACE = {
     "AZPS": "APS",
     "DEAA": "APS",
     "GRIF": "APS",
+    "YAD": "DUKE",  # based on S&P interconnected utility
+    "WWA": "PNW",
+    # weird not real BAs
+    "GRIS": "CAISO",  # based on S&P BA of only power plant
 }
 RESPS_TO_KEEP = (
     # 12,  # Black hills  (small)
