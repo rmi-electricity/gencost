@@ -1,6 +1,6 @@
 import pytest
 
-from gencost.entity_ids import add_ba_code
+from gencost.entity_ids import BA_REPLACE, add_ba_code
 from gencost.waterfall import subplants_in_scenario_one
 
 
@@ -100,7 +100,17 @@ class TestFullWaterfall:
 
 class TestEntityID:
     def test_add_ba_code(self, crosswalk):
-        """Test that we can add"""
+        """Test that we can add BA codes."""
         gens = crosswalk.pudl_tabl.gens_eia860m()
         df = add_ba_code(gens)
         assert df.final_ba_code.notna().shape == df.final_ba_code.shape
+
+    def test_add_ba_code_rollup(self, crosswalk):
+        """Test that we can rollup EIA BAs."""
+        gens = crosswalk.pudl_tabl.gens_eia860m()
+        df = add_ba_code(gens, ba_rollup_only=True)
+        assert (
+            df.balancing_authority_code_eia.notna().shape
+            == df.final_ba_code.notna().shape
+        )
+        assert all(x not in BA_REPLACE for x in df.final_ba_code.unique())

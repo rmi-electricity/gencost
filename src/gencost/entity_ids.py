@@ -29,6 +29,11 @@ BA_REPLACE = {
     "IID": "CAISO",
     "TIDC": "CAISO",
     "SEPA": "SOCO",  # EIA 930 shows most outgoing transfers to SOCO
+    "PACE": "PAC",
+    "PACW": "PAC",
+    "AZPS": "APS",
+    "DEAA": "APS",
+    "GRIF": "APS",
 }
 RESPS_TO_KEEP = (
     # 12,  # Black hills  (small)
@@ -68,6 +73,7 @@ def add_ba_code(
     input_df: pd.DataFrame,
     new_ba_col: str = "final_ba_code",
     *,
+    ba_rollup_only: bool = False,
     drop_interim: bool = False,
     apply_purchaser: bool = True,
 ):
@@ -76,6 +82,7 @@ def add_ba_code(
     Args:
         input_df: frame to add BA / respondent columns to
         new_ba_col: name of ultimate BA code column
+        ba_rollup_only: if True, we only rollup EIA BA codes using :const:`BA_REPLACE`
         drop_interim: if True, drop all the intermediate respondent / BA code columns
         apply_purchaser: if True, change respondent to respondent of purchaser,
             requires plant_id_eia
@@ -83,6 +90,10 @@ def add_ba_code(
     Returns:
 
     """
+    if ba_rollup_only:
+        input_df[new_ba_col] = input_df.balancing_authority_code_eia.replace(BA_REPLACE)
+        return input_df
+
     reqd_cols = {"utility_id_eia", "balancing_authority_code_eia"} | (
         {"plant_id_eia"} if apply_purchaser else set()
     )
