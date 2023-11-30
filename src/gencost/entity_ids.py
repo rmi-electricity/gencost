@@ -85,6 +85,40 @@ def add_ba_code(
 ):
     """Add respondent and final ba_codes.
 
+    Steps if ``ba_rollup_only`` is False. If it is True, we simply apply the
+    :const:`BA_REPLACE` map to ``balancing_authority_code_eia``.
+    1.  First we read in UTH utility information which associates ``utility_id_eia``
+        to FERC ``respondent_id``. In that dataset we grab those two columns, drop rows
+        where either is null and remove duplicates. For the next step it is critical
+        that a given ``utility_id_eia`` map to one and only one ``respondent_id``,
+        though multiple ``utility_id_eia`` can map to single a ``respondent_id``.
+    2.  We then merge the result of (1) onto the incoming :class:`pandas.DataFrame`
+    3.  [Optional if applying purchaser data] Read in UTH purchased power data, select
+        only purchase data from 2020 (the last manually tagged year) where
+        ``plant_id_eia`` is not null, i.e. cases where the purchased power tagging
+        found a plant-level match. This data will allow us to associate
+        ``plant_id_eia`` with the ``respondent_id`` that purchases its power. To make
+        this unique we require that the ``respondent_id`` purchases ≥90% of power that
+        the plant sells (NOTE: this is not as a % of the total plant generation, just
+        that plant's sales that we have identified in the purchase power tagging
+        process). We then merge this onto the result of (2) on ``plant_id_eia``. The
+        resulting ``final_respondent_id`` for a ``plant_id_eia`` only uses the
+        ``respondent_id_purchaser`` if that ``plant_id_eia`` did not have a
+        ``respondent_id`` assigned in step (2).
+    4.  The final step is to adjust the final ba codes using :func:`.adjust_ba_codes`.
+        This process attempts to group the rows of ``input_df`` into planning areas by
+        doing one of the following:
+
+        1.  Using the ``final_respondent_id`` irrespective of a given row's
+            ``balancing_authority_code_eia``.
+        2.  Using the ``balancing_authority_code_eia`` irrespective of a given row's
+            ``final_respondent_id``.
+        2.  Combining one or more ``balancing_authority_code_eia`` into a single new
+            region.
+        3.  Doing something more complicated (see :func:`.adjust_ba_codes` body for the
+            8 special cases).
+
+
     Args:
         input_df: frame to add BA / respondent columns to
         new_ba_col: name of ultimate BA code column
@@ -105,12 +139,23 @@ def add_ba_code(
     )
     if missing := reqd_cols - set(input_df):
         raise ValueError(f"`input_df` is missing {missing}")
-    ferc_match = pd.read_parquet(
-        PACKAGE_PATH / "utility_information.parquet.gzip"
-    ).astype({"respondent_id": "Int64"})
+    ferc_match = (
+        pd.read_parquet(PACKAGE_PATH / "utility_information.parquet.gzip")
+        .astype({"respondent_id": "Int64"})
+        .dropna()
+        .drop_duplicates()
+    )
+
+    if not (
+        ferc_match.groupby("utility_id_eia", as_index=False)
+        .respondent_id.nunique()
+        .query("respondent_id > 1")
+        .empty
+    ):
+        raise AssertionError("utility_id_eia -> respondent_id not unique")
 
     out = input_df.merge(
-        ferc_match[["respondent_id", "utility_id_eia"]].dropna().drop_duplicates(),
+        ferc_match[["respondent_id", "utility_id_eia"]],
         on="utility_id_eia",
         how="left",
         validate="m:1",
