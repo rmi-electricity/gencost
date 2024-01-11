@@ -40,6 +40,7 @@ def main():
         result_path = (_ofp / "fom_som_vom" if _ofp.is_dir() else _ofp).with_suffix(
             ".parquet"
         )
+        doc_dir = result_path.parent
 
     start_time = time()
 
@@ -63,8 +64,6 @@ def main():
         logger.info("Creating data_by_subplant")
         data_by_subplant.merge_all().to_parquet(temp_dir / "data_by_subplant.parquet")
 
-        logger.info("Installing R packages")
-        _ = subprocess.run(["Rscript", r_scripts / "module_setup.R"])
         # just an arg parsing example
         logger.info("Running module_initial_transformations")
         result = subprocess.run(
@@ -103,6 +102,11 @@ def main():
         )
 
         out.to_parquet(result_path)
+
+        # write regression model data to disk
+        fn_model_temp = temp_dir / "chosen_model_coefficients.csv"
+        fn_model_output = doc_dir / "chosen_model_coefficients.csv"
+        shutil.copy(fn_model_temp, fn_model_output)
 
     finally:
         # only delete temp directory if results were exported in the time since
