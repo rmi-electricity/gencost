@@ -5,14 +5,15 @@ parasitic load.
 """
 
 import numpy as np
-
-# import pandas as pd
+import pandas as pd
 import pandera as pa
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-def check_data_by_subplant(input_data, is_data_by_subplant=True):
+def check_data_by_subplant(
+    input_data: pd.DataFrame, *, is_data_by_subplant: bool = True
+):
     """
     Ensure DataBySubplant has all of the columns and rows we need.
     Arguments:
@@ -76,7 +77,9 @@ def check_data_by_subplant(input_data, is_data_by_subplant=True):
     print(f"{reference} QC results: pass")
 
 
-def feature_engineering(databysubplant, newdata):
+def feature_engineering(
+    databysubplant: pd.DataFrame, newdata: pd.DataFrame
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Perform feature engineering on cleaned data, so that it's ready for modeling:
         - add parasitic load to DataBySubplant

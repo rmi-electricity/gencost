@@ -36,7 +36,7 @@ CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv',
 																	col_types = c('prime_mover' = 'c', 'rowid' = 'i',
 																								.default = 'd'))
 
-LongVariableKey <- read_csv('long_variable_key.csv', col_types = c(
+LongVariableKey <- read_csv('../package_data/long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
 #### Define functions ####
@@ -255,6 +255,6 @@ get_weighted_scores <- function(X){
 WeightedEternallyPresentScores <- get_weighted_scores(EternallyPresentPcaScores)
 
 WeightedDataBySubplantScores %>%
-	write_csv('weighted_data_by_subplant_scores.csv')
+	write_csv('../../../weighted_data_by_subplant_scores.csv')
 WeightedEternallyPresentScores %>%
 	write_csv('weighted_eternally_present_scores.csv')

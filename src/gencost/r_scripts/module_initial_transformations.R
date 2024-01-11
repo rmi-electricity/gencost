@@ -23,7 +23,7 @@ DataBySubplant <- arrow::read_parquet('data_by_subplant.parquet') %>%
 	filter(prime_mover %in% c('CC', 'GT', 'ST'))
 
 EternallyPresent <- arrow::read_parquet('epd.parquet')
-LongVariableKey <- read_csv('long_variable_key.csv', col_types = 'cccc')
+LongVariableKey <- read_csv('../package_data/long_variable_key.csv', col_types = 'cccc')
 
 #### Define functions ####
 
