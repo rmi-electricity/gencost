@@ -31,7 +31,7 @@ setwd(my_folder)
 ClustersFit <- readRDS('clusters_fit.RDS')
 CleanedDataBySubplant <- read_csv('cleaned_data_by_subplant_data.csv')
 CleanedEternallyPresent <- read_csv('cleaned_eternally_present.csv')
-LongVariableKey <- read_csv('../package_data/long_variable_key.csv', col_types = c(
+LongVariableKey <- read_csv('long_variable_key.csv', col_types = c(
 	variable = 'c', .default = 'f'))
 
 # Count variables
@@ -302,6 +302,18 @@ ChosenModsFit <-
 	AllModsFit %>%
 	inner_join(ChosenFormulas)
 #
+# Export a report of chosen mods
+ChosenModsFit %>%
+	mutate(
+		summary = map(lm_fit, summary),
+		summary = map(summary, tidy)
+		) %>%
+	select(prime_mover, cls, formula, summary) %>%
+	unnest(summary) %>%
+	rename(cluster_num = cls) %>%
+	mutate_if(is.numeric, round, 3) %>%
+	write_csv('chosen_model_coefficients.csv')
+#
 ChosenCoefficients <-
 	ChosenModsFit %>%
 	mutate(
@@ -320,4 +332,4 @@ ChosenCoefficients <-
 
 write_csv(ChosenCoefficients, 'chosen_coefficients.csv')
 write_csv(ChosenFormulas, 'chosen_formulas.csv')
-write_csv(MeanRMSE, '../../../mean_rmse.csv')
+write_csv(MeanRMSE, 'mean_rmse.csv')
