@@ -42,7 +42,7 @@ dev = [
     "pytest>=7.2.1,<7.5",  # test framework
     "pytest-console-scripts>=1.1,<1.5",  # Allow automatic testing of scripts
     "pytest-cov>=4.0,<4.2",  # Pytest plugin for working with coverage
-    "ruff>0.0.259,<0.1.6",
+    "ruff>0.0.259,<0.2.2",
     "tox>=4.2,<4.12",
 ]
 doc = [
