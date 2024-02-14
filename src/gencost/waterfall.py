@@ -2866,7 +2866,7 @@ class DataBySubplant:
                     )
                     .agg({"net_mwh": "sum", "mmbtu": "sum"})
                     .reset_index()
-                    .query("net_generation > 0 & mmbtu > 0")
+                    .query("net_generation ! 0 & mmbtu > 0")
                     .assign(
                         share_of_gens_fuel_consump=lambda x: x["mmbtu"]
                         / x.groupby(["plant_id_eia", "generator_id", "report_date"])[
