@@ -2268,9 +2268,11 @@ class DataBySubplant:
                 )
             )
             cost = cost[cost.counts == 1]
-            assert (  # noqa: S101
-                cost.query("sbi_count > 1").empty
-            ), "adding subplants to costs created non-unique costs per subplant_id"
+            assert cost.query(  # noqa: S101
+                "sbi_count > 1"
+            ).empty, (
+                "adding subplants to costs created non-unique costs per subplant_id"
+            )
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
                 "non-unique costs per pf_subplant_id"
@@ -2452,6 +2454,7 @@ class DataBySubplant:
                 "net_generation_mwh": Column(float),
                 "inflator_to_2021": Column(float, nullable=True),
                 "fuel_starts": Column(int, Check.ge(0)),
+                # "mmbtu": Column(float)
             }
             | {f"{k}_mmbtu": Column(float, Check.ge(0.0), nullable=True) for k in fuels}
             | {f"{k}_net_mwh": Column(float, nullable=True) for k in fuels}
@@ -2684,8 +2687,7 @@ class DataBySubplant:
                 .sort_values(
                     by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
                     ascending=True,
-                )
-                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2792,7 +2794,7 @@ class DataBySubplant:
         reporting zero net gen and fuel consumption
 
         """
-        zero_reported = (
+        zero_reported_single_fuel = (
             df_923_cf.assign(
                 n_fuels=lambda x: x.groupby(
                     ["plant_id_eia", "generator_id", "report_date"]
@@ -2823,7 +2825,78 @@ class DataBySubplant:
             )
             # .drop(columns=["percent_of_gen", "single_fuel", "single_fuel_present"])
         )
-        zero_and_fuel_switch = pd.concat([single_fuel_switch, zero_reported]).merge(
+        mf_zeroes = (
+            df_923_cf.assign(
+                n_fuels=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id", "report_date"]
+                )["energy_source_code_num"].transform("nunique")
+            )
+            .query("n_fuels > 1")
+            .drop(columns=["n_fuels"])
+            .groupby(
+                [
+                    "plant_id_eia",
+                    "generator_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                    "prime_mover_code",
+                    "fuel_group",
+                ]
+            )
+            .agg({"net_mwh": "sum", "mmbtu": "sum"})
+            .reset_index()
+            .query(
+                'net_mwh == 0 & mmbtu == 0 & report_date >= "2006-01-01" & report_date <= "2020-01-01"'
+            )
+            .assign(
+                prime_mover=lambda x: x.prime_mover_code.replace(
+                    FOSSIL_PRIME_MOVER_MAP
+                ),
+                # year=lambda x: x["report_date"].dt.year,
+                fuss="zeroes",
+            )
+            .merge(
+                (
+                    df_923_cf.groupby(
+                        [
+                            "plant_id_eia",
+                            "generator_id",
+                            pd.Grouper(key="report_date", freq="YS"),
+                            "fuel_group",
+                        ]
+                    )
+                    .agg({"net_mwh": "sum", "mmbtu": "sum"})
+                    .reset_index()
+                    .query("mmbtu > 0")
+                    .assign(
+                        share_of_gens_fuel_consump=lambda x: x["mmbtu"]
+                        / x.groupby(["plant_id_eia", "generator_id", "report_date"])[
+                            "mmbtu"
+                        ].transform("sum")
+                    )
+                    .sort_values(
+                        by=[
+                            "plant_id_eia",
+                            "generator_id",
+                            "report_date",
+                            "share_of_gens_fuel_consump",
+                        ],
+                        ascending=True,
+                    )
+                    .drop_duplicates(
+                        subset=["plant_id_eia", "generator_id"], keep="last"
+                    )
+                    #
+                )[["plant_id_eia", "generator_id", "fuel_group"]],
+                on=["plant_id_eia", "generator_id", "fuel_group"],
+                indicator=True,
+            )
+            .query('_merge == "both"')
+            .drop(columns=["_merge"])
+        )
+
+        zero_and_fuel_switch = pd.concat(
+            [single_fuel_switch, zero_reported_single_fuel, mf_zeroes]
+        ).merge(
             df_860[
                 [
                     "plant_id_eia",
@@ -2857,8 +2930,7 @@ class DataBySubplant:
                     # "fuel_group",
                 ],
                 keep="first",
-            )
-            .assign(
+            ).assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
                 ).round(2)
