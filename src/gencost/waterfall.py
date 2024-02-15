@@ -2866,11 +2866,11 @@ class DataBySubplant:
                     )
                     .agg({"net_mwh": "sum", "mmbtu": "sum"})
                     .reset_index()
-                    .query("net_generation ! 0 & mmbtu > 0")
+                    .query("net_mwh != 0")
                     .assign(
-                        share_of_gens_fuel_consump=lambda x: x["mmbtu"]
+                        fuel_share_of_net_gen=lambda x: x["net_mwh"]
                         / x.groupby(["plant_id_eia", "generator_id", "report_date"])[
-                            "mmbtu"
+                            "net_mwh"
                         ].transform("sum")
                     )
                     .sort_values(
@@ -2878,7 +2878,7 @@ class DataBySubplant:
                             "plant_id_eia",
                             "generator_id",
                             "report_date",
-                            "share_of_gens_fuel_consump",
+                            "fuel_share_of_net_gen",
                         ],
                         ascending=True,
                     )
