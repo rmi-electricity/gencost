@@ -2893,9 +2893,40 @@ class DataBySubplant:
             .query('_merge == "both"')
             .drop(columns=["_merge"])
         )
-
+        # manually grab largest missing gen that doesn't have a non-zero net gen value
+        mf_zero_exception = (
+            df_923_cf.assign(
+                n_fuels=lambda x: x.groupby(
+                    ["plant_id_eia", "generator_id", "report_date"]
+                )["energy_source_code_num"].transform("nunique")
+            )
+            .query("n_fuels > 1")
+            .drop(columns=["n_fuels"])
+            .groupby(
+                [
+                    "plant_id_eia",
+                    "generator_id",
+                    pd.Grouper(key="report_date", freq="YS"),
+                    "prime_mover_code",
+                    "fuel_group",
+                ]
+            )
+            .agg({"net_mwh": "sum", "mmbtu": "sum"})
+            .reset_index()
+            .query(
+                'net_mwh == 0 & mmbtu == 0 & report_date >= "2006-01-01" & report_date <= "2020-01-01" & plant_id_eia == 55939 & generator_id == "ST01"',
+                engine="python",
+            )
+            .assign(fuel_group=lambda x: "natural_gas")
+            .drop_duplicates(subset=["plant_id_eia", "generator_id", "report_date"])
+        )
         zero_and_fuel_switch = pd.concat(
-            [single_fuel_switch, zero_reported_single_fuel, mf_zeroes]
+            [
+                single_fuel_switch,
+                zero_reported_single_fuel,
+                mf_zeroes,
+                mf_zero_exception,
+            ]
         ).merge(
             df_860[
                 [
