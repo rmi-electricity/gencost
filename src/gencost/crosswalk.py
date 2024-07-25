@@ -12,6 +12,7 @@ from gencost.constants import (
     FOSSIL_PRIME_MOVER_MAP,
     FUEL_GROUP_MAP,
     UDAY_FOSSIL_FUEL_MAP,
+    PUDL_RELEASE_VERSION,
 )
 from gencost.data_setup import main as data_setup
 
@@ -272,7 +273,9 @@ def harmonize_eia_epa_orispl(
 class Crosswalk:
     def __init__(self, pudl_tabl=None, clobber=False):
 
-        df = self.pudl_tabl.epacamd_eia_subplant_ids()
+        df = pd_read_pudl(
+            "core_epa__assn_eia_epacamd_subplant_ids", release=PUDL_RELEASE_VERSION
+        )
         # see https://github.com/catalyst-cooperative/pudl/issues/2548#issuecomment-1530735429
         fixes = [
             (2708, "2A", "2"),
@@ -402,7 +405,7 @@ class Crosswalk:
 
         """
         eia_860 = (
-            self.pudl_tabl.gens_eia860()
+            pd_read_pudl("_out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
             .query("prime_mover_code.notnull() ")
             .sort_values(["plant_id_eia", "generator_id", "report_date"])
             .assign(
@@ -504,7 +507,10 @@ class Crosswalk:
 
         """
         df = (
-            self.pudl_tabl.gf_eia923()
+            pd_read_pudl(
+                "out_eia923__monthly_generation_fuel_combined",
+                release=PUDL_RELEASE_VERSION,
+            )
             .query(
                 "energy_source_code in @UDAY_FOSSIL_FUEL_MAP "
                 "& prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
