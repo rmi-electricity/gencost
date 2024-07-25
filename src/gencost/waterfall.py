@@ -13,7 +13,7 @@ from etoolbox.utils.pudl_helpers import (
     simplify_columns,
     sum_and_weighted_average_agg,
 )
-
+from etoolbox.utils.pudl import pd_read_pudl
 
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
@@ -27,7 +27,7 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
-    PUDL_RELEASE_VERSION
+    PUDL_RELEASE_VERSION,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
@@ -36,8 +36,6 @@ from gencost.package_data import PACKAGE_PATH
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
 logger = logging.getLogger(__name__)
-
-
 
 
 def subplants_in_scenario_one(gen_923_by_subplant):
@@ -1190,7 +1188,7 @@ class DataBySubplant:
 
     def compare_capacity_df(self, clean) -> pd.DataFrame:
         df860 = (
-            self.pudl_tabl.gens_eia860()
+            pd_read_pudl("_out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
             .query(
                 "operational_status == 'existing' "
                 "& prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"
@@ -1398,10 +1396,7 @@ class DataBySubplant:
             reference_date = dt.utcnow()
 
         merged = (
-            self.pudl_tabl.gens_eia860() 
-            """
-            change to pd_read_pudl("_out_eia__yearly_generators") ??
-            """
+            pd_read_pudl("_out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
             .query("operational_status == 'existing'")
             .assign(
                 prime_mover=lambda x: x.prime_mover_code.replace(
@@ -1591,7 +1586,7 @@ class DataBySubplant:
         """
 
         df = (
-            self.pudl_tabl.gen_original_eia923()
+            pd_read_pudl("out_eia923__monthly_generation", release=PUDL_RELEASE_VERSION)
             .merge(
                 self.xwalk.assign(
                     n_gens_subplant=lambda x: x.groupby(
@@ -1663,7 +1658,9 @@ class DataBySubplant:
 
         """
         bf923 = (
-            self.pudl_tabl.bf_eia923()
+            pd_read_pudl(
+                "out_eia923__monthly_boiler_fuel", release=PUDL_RELEASE_VERSION
+            )
             .pipe(fix_cc_in_prime)
             .pipe(add_fuel_group)
             .merge(
@@ -1830,7 +1827,10 @@ class DataBySubplant:
 
         # grab GF info from list of qualifying subplants
         df = (
-            self.pudl_tabl.gf_eia923()
+            pd_read_pudl(
+                "out_eia923__monthly_generation_fuel_combined",
+                release=PUDL_RELEASE_VERSION,
+            )
             # moving this up top to allow CC matches
             .pipe(fix_cc_in_prime)
             .pipe(add_fuel_group)
@@ -1994,7 +1994,10 @@ class DataBySubplant:
 
     def get_gf923_by_generator(self, counterfactuals=False):
         gf_923 = (
-            self.pudl_tabl.gen_fuel_by_generator_energy_source_eia923()
+            pd_read_pudl(
+                "out_eia923__monthly_generation_fuel_by_generator_energy_source",
+                release=PUDL_RELEASE_VERSION,
+            )
             .pipe(add_fuel_group)
             .rename(
                 columns={
