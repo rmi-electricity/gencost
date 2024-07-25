@@ -13,6 +13,8 @@ from etoolbox.utils.pudl_helpers import (
     simplify_columns,
     sum_and_weighted_average_agg,
 )
+
+
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
@@ -25,6 +27,7 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
+    PUDL_RELEASE_VERSION
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
@@ -33,6 +36,8 @@ from gencost.package_data import PACKAGE_PATH
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
 logger = logging.getLogger(__name__)
+
+
 
 
 def subplants_in_scenario_one(gen_923_by_subplant):
@@ -271,9 +276,6 @@ class DataBySubplant:
         return self._xwalk.safe_xwalk.copy()
 
     @property
-    def pudl_tabl(self):
-        return self._xwalk.pudl_tabl
-
     def query(self, expr):
         """Return all years and subplants related to the subplant/years
         that satisfy query."""
@@ -1396,7 +1398,10 @@ class DataBySubplant:
             reference_date = dt.utcnow()
 
         merged = (
-            self.pudl_tabl.gens_eia860()
+            self.pudl_tabl.gens_eia860() 
+            """
+            change to pd_read_pudl("_out_eia__yearly_generators") ??
+            """
             .query("operational_status == 'existing'")
             .assign(
                 prime_mover=lambda x: x.prime_mover_code.replace(
