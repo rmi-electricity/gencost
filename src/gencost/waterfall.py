@@ -2166,7 +2166,10 @@ class DataBySubplant:
         )
 
         merged_with_gf_frac = (
-            self.pudl_tabl.gen_fuel_allocated_eia923()
+            pd_read_pudl(
+                "out_eia923__monthly_generation_fuel_by_generator",
+                release=PUDL_RELEASE_VERSION,
+            )
             .groupby(
                 [
                     "plant_id_eia",
