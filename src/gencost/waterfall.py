@@ -27,7 +27,6 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
-    PUDL_RELEASE_VERSION,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
@@ -36,6 +35,9 @@ from gencost.package_data import PACKAGE_PATH
 pat_path = Path(__file__).parent
 CACHE_PATH = user_cache_path("gencost", "rmi")
 logger = logging.getLogger(__name__)
+
+# pudl release version, update here!
+PUDL_RELEASE_VERSION = "v2024.5.0"
 
 
 def subplants_in_scenario_one(gen_923_by_subplant):
@@ -1412,7 +1414,11 @@ class DataBySubplant:
             )
             .fillna({"pollution_control_costs_per_kw": 0.0})
             .merge(
-                self.pudl_tabl.gens_eia860m()
+                pd_read_pudl(
+                    "core_eia860m__changelog_generators", release=PUDL_RELEASE_VERSION
+                )
+                .groupby(["plant_id_eia", "generator_id"], as_index=False)
+                .last()
                 .query("report_date == report_date.max()")[
                     [
                         "plant_id_eia",
@@ -1920,7 +1926,9 @@ class DataBySubplant:
         # energy source codes that we grab from step 3
 
         merged = (
-            self.pudl_tabl.gf_eia923()
+            pd_read_pudl(
+                "out_eia923__generation_fuel_combined", release=PUDL_RELEASE_VERSION
+            )
             # AE - Uday categorizes wast heat as other so I made that change
             # in constants
             .query("energy_source_code not in ('GEO', 'NUC', 'SUN')")
@@ -2356,7 +2364,9 @@ class DataBySubplant:
             "net_generation_mwh": "gf_mwh",
         }
         prime_fuel_heat_rates = (
-            self.pudl_tabl.gf_eia923()
+            pd_read_pudl(
+                "out_eia923__generation_fuel_combined", release=PUDL_RELEASE_VERSION
+            )
             .pipe(fix_cc_in_prime)
             .rename(columns=rname)
             .groupby(["plant_id_eia", "prime_mover", "energy_source_code"])[

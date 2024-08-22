@@ -259,4 +259,4 @@ COLS_FOR_REGRESSION = [
     "technology_description",
 ]
 
-PUDL_RELEASE_VERSION = "v2024.5.0"
+
