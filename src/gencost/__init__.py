@@ -1,4 +1,5 @@
 """A tool for estimating generator unit costs from public utility data."""
+
 import logging
 
 # Create a root logger for use anywhere within the package.
