@@ -17,17 +17,18 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.10,<3.13"
 dependencies = [
-    "bottleneck >= 1.3,< 1.3.8",
-    "numexpr >= 2.8, < 2.8.8",
-    "numpy >= 1.18.5,<2",
-    "networkx >= 3.0,< 3.3",
-    "pandas >= 1.4,< 1.6",
-    "pandera >= 0.12, < 0.18",
-    "platformdirs >=2.6,<4.1",
+#    "bottleneck >= 1.3,< 1.3.8",
+    "gcsfs",
+#    "numexpr >= 2.8, < 2.8.8",
+    "numpy >= 1.18.5,<3",
+    "networkx >= 3.0,< 3.4",
+    "pandas >= 1.4,< 2.3",
+    "pandera >= 0.12, < 0.21",
+    "platformdirs >=2.6,<4.4",
     "plotly>5.10,<5.19",
-    "pyarrow>=7, <15",
+    "pyarrow>=7, <18",
     "polars[connectorx]>=1.1,<1.3",
     "rmi.etoolbox @ git+https://github.com/rmi/etoolbox.git",
     "scikit-learn>1.1, <1.4",
@@ -36,23 +37,22 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "black[jupyter] >= 22,< 24",
-    "coverage>=5.3,<7.4",  # Lets us track what code is being tested
-    "pre-commit>=2.9,<3.6",
-    "pytest>=7.2.1,<7.5",  # test framework
+    "coverage>=5.3,<7.7",
+    "pre-commit>=2.9,<3.9",
+    "pytest>=7.2.1,<8.4",  # test framework
     "pytest-console-scripts>=1.1,<1.5",  # Allow automatic testing of scripts
-    "pytest-cov>=4.0,<4.2",  # Pytest plugin for working with coverage
-    "ruff>0.0.259,<0.1.6",
-    "tox>=4.2,<4.12",
+    "pytest-cov>=4.0,<5.1",  # Pytest plugin for working with coverage
+    "ruff>0.0.215,<0.6.8",
+    "tox>=4.16.0,<4.21",
 ]
 doc = [
-    "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
-    "furo>=2022.4.7",  # A clean customisable Sphinx documentation theme.
+    "doc8>=0.9,<1.2",
+    "furo>=2023.09.10",
     "rstcheck[sphinx,toml]>=6.1,<6.3",  # ReStructuredText linter
-    "sphinx>=4.1,<7.2.7",
-    "sphinx-autoapi>=2.0,<3.1",
-    "sphinx-issues>=3.0,<3.1",
-    "sphinx-autodoc-typehints>1.21,<1.26.0",
+    "sphinx>=4,!=5.1.0,<8.0.3",
+    "sphinx-autoapi>=1.8,<3.4",
+    "sphinx-issues>=1.2,<4.2",
+    "sphinx-autodoc-typehints>1.19,<2.5.0",
     "sphinxcontrib-mermaid>0.7,<0.10.0",
 ]
 tests = []
@@ -79,11 +79,6 @@ write_to = "src/gencost/_version.py"
 #######################################################################################
 # Configurations for linters and other tools
 #######################################################################################
-[tool.black]
-line-length = 88
-target-version = ["py39", "py310", "py311"]
-include = "\\.pyi?$"
-
 [tool.doc8]
 max-line-length = 88
 ignore-path = "docs/_build"
@@ -108,6 +103,14 @@ ignore_messages = '(Hyperlink target .* is not referenced\.$|Duplicate implicit 
 ignore_directives = ["bibliography", "todo", "include"]
 
 [tool.ruff]
+line-length = 88
+show-fixes = true
+
+[tool.ruff.format]
+# Enable reformatting of code snippets in docstrings.
+docstring-code-format = true
+
+[tool.ruff.lint]
 select = [
     "A", # flake8-builtins
     "B", # flake8-bugbear
@@ -146,31 +149,15 @@ ignore = [
 ]
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 unfixable = ["ISC"]
-# By default, always enumerate fixed violations.
-show-fixes = true
-line-length = 88
+flake8-tidy-imports.ban-relative-imports = "all"
+flake8-type-checking.strict = true
+mccabe.max-complexity = 15  # Unlike Flake8, default to a complexity level of 10.
+pycodestyle.max-doc-length = 88
+pydocstyle.convention = "google"
 
-[tool.ruff.isort]
-known-first-party = ["gencost"]
-
-[tool.ruff.pycodestyle]
-max-doc-length = 88
-
-[tool.ruff.pydocstyle]
-convention = "google"
-
-[tool.ruff.flake8-tidy-imports]
-ban-relative-imports = "all"
-
-[tool.ruff.flake8-type-checking]
-strict = true
-
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "docs/conf.py" = ["E501"]
 "tests/*.py" = ["S101"]
 "main.py" = ["S603", "S607"]
-
-[tool.ruff.mccabe]
-# Unlike Flake8, default to a complexity level of 10.
-max-complexity = 15
+"notebooks/*.ipynb" = ["F401", "I001", "W505", "W291"]

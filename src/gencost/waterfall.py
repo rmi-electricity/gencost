@@ -8,13 +8,12 @@ import pandas as pd
 import pandera as pa
 import plotly.express as px
 import plotly.graph_objects as go
+from etoolbox.utils.pudl import pd_read_pudl
 from etoolbox.utils.pudl_helpers import (
     month_year_to_date,
     simplify_columns,
     sum_and_weighted_average_agg,
 )
-from etoolbox.utils.pudl import pd_read_pudl
-
 from pandera import Check, Column
 from platformdirs import user_cache_path, user_documents_path
 
@@ -27,6 +26,7 @@ from gencost.constants import (
     FUEL_GROUP_MAP,
     GET_860_GEN_COLS,
     HIST_EP_COLS,
+    PUDL_RELEASE_VERSION,
 )
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
@@ -37,7 +37,6 @@ CACHE_PATH = user_cache_path("gencost", "rmi")
 logger = logging.getLogger(__name__)
 
 # pudl release version, update here!
-PUDL_RELEASE_VERSION = "v2024.5.0"
 
 
 def subplants_in_scenario_one(gen_923_by_subplant):
@@ -1399,6 +1398,7 @@ class DataBySubplant:
 
         merged = (
             pd_read_pudl("_out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
+            .astype({"utility_id_eia": "Int64"})
             .query("operational_status == 'existing'")
             .assign(
                 prime_mover=lambda x: x.prime_mover_code.replace(
@@ -1434,6 +1434,10 @@ class DataBySubplant:
                 validate="m:1",
             )
             .assign(
+                report_date=lambda x: pd.to_datetime(x.report_date),
+                generator_operating_date=lambda x: pd.to_datetime(
+                    x.generator_operating_date
+                ),
                 age_in_report_year=lambda x: (
                     x["report_date"] - x["generator_operating_date"]
                 ).dt.days
@@ -2006,6 +2010,7 @@ class DataBySubplant:
                 "out_eia923__monthly_generation_fuel_by_generator_energy_source",
                 release=PUDL_RELEASE_VERSION,
             )
+            .assign(report_date=lambda x: pd.to_datetime(x.report_date))
             .pipe(add_fuel_group)
             .rename(
                 columns={
@@ -2170,6 +2175,7 @@ class DataBySubplant:
                 "out_eia923__monthly_generation_fuel_by_generator",
                 release=PUDL_RELEASE_VERSION,
             )
+            .assign(report_date=lambda x: pd.to_datetime(x.report_date))
             .groupby(
                 [
                     "plant_id_eia",
@@ -2287,11 +2293,9 @@ class DataBySubplant:
                 )
             )
             cost = cost[cost.counts == 1]
-            assert cost.query(  # noqa: S101
-                "sbi_count > 1"
-            ).empty, (
-                "adding subplants to costs created non-unique costs per subplant_id"
-            )
+            assert (  # noqa: S101
+                cost.query("sbi_count > 1").empty
+            ), "adding subplants to costs created non-unique costs per subplant_id"
             assert cost.query("psbi_count > 1").empty, (  # noqa: S101
                 "adding pf_subplants to costs created "
                 "non-unique costs per pf_subplant_id"
@@ -2708,7 +2712,8 @@ class DataBySubplant:
                 .sort_values(
                     by=["plant_id_eia", "generator_id", "report_date", "mmbtu"],
                     ascending=True,
-                ).drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
+                )
+                .drop_duplicates(subset=["plant_id_eia", "generator_id"], keep="last")[
                     [
                         "plant_id_eia",
                         "generator_id",
@@ -2982,7 +2987,8 @@ class DataBySubplant:
                     # "fuel_group",
                 ],
                 keep="first",
-            ).assign(
+            )
+            .assign(
                 age=lambda x: (
                     ((pd.datetime.now() - x.generator_operating_date).dt.days) / 365.25
                 ).round(2)

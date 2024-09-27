@@ -4,17 +4,14 @@ import warnings
 import networkx as nx
 import numpy as np
 import pandas as pd
-from etoolbox.datazip import DataZip
-from etoolbox.utils.pudl import PretendPudlTablCore, pd_read_pudl
-from platformdirs import user_cache_path
+from etoolbox.utils.pudl import pd_read_pudl
 
 from gencost.constants import (
     FOSSIL_PRIME_MOVER_MAP,
     FUEL_GROUP_MAP,
-    UDAY_FOSSIL_FUEL_MAP,
     PUDL_RELEASE_VERSION,
+    UDAY_FOSSIL_FUEL_MAP,
 )
-from gencost.data_setup import main as data_setup
 
 LOGGER = logging.getLogger(__name__)
 
@@ -272,7 +269,6 @@ def harmonize_eia_epa_orispl(
 
 class Crosswalk:
     def __init__(self, pudl_tabl=None, clobber=False):
-
         df = pd_read_pudl(
             "core_epa__assn_eia_epacamd_subplant_ids", release=PUDL_RELEASE_VERSION
         )
