@@ -8,7 +8,6 @@ import pandas as pd
 import pandera as pa
 import plotly.express as px
 import plotly.graph_objects as go
-from etoolbox.utils.pudl import pd_read_pudl
 from etoolbox.utils.pudl_helpers import (
     month_year_to_date,
     simplify_columns,
@@ -29,6 +28,7 @@ from gencost.constants import (
     PUDL_RELEASE_VERSION,
 )
 from gencost.crosswalk import Crosswalk
+from gencost.data_setup import pd_read_pudl  # custom for debugging
 from gencost.entity_ids import add_ba_code
 from gencost.package_data import PACKAGE_PATH
 
