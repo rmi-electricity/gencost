@@ -4,6 +4,7 @@ import warnings
 import networkx as nx
 import numpy as np
 import pandas as pd
+from etoolbox.utils.pudl import pd_read_pudl
 
 from gencost.constants import (
     FOSSIL_PRIME_MOVER_MAP,
@@ -11,7 +12,6 @@ from gencost.constants import (
     PUDL_RELEASE_VERSION,
     UDAY_FOSSIL_FUEL_MAP,
 )
-from gencost.data_setup import pd_read_pudl  # custom for debugging
 
 LOGGER = logging.getLogger(__name__)
 

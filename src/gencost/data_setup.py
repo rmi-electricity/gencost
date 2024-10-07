@@ -1,4 +1,3 @@
-import json
 import logging
 import shutil
 
@@ -6,14 +5,11 @@ import pandas as pd
 import pyarrow
 import pyarrow.dataset as ds
 from etoolbox.utils.misc import download
-from etoolbox.utils.pudl import CACHE_PATH as ETB_CACHE_PATH
-from etoolbox.utils.pudl import pd_read_pudl as etb_pd_read_pudl
 from etoolbox.utils.remote_zip import RemoteIOError, RemoteZip
 from platformdirs import user_cache_path
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from gencost.constants import PUDL_RELEASE_VERSION
 from gencost.package_data import PACKAGE_PATH
 
 CACHE_PATH = user_cache_path("gencost", "rmi")
@@ -93,42 +89,6 @@ def wage_data(
         data.to_parquet(par)
         shutil.rmtree(path)
         return data
-
-
-def pd_read_pudl(
-    table_name: str, release: str = "nightly", token: dict | str | None = None, **kwargs
-) -> pd.DataFrame:
-    """Required for debugging because of an issue in gcsfs/s3fs"""
-    try:
-        return etb_pd_read_pudl(table_name, release=release, token=token, **kwargs)
-    except TypeError:
-        return pd.read_parquet(_cache_path(table_name))
-
-
-def _cache_path(table_name: str):
-    """Determine the local path for a cached PUDL table if it exists.
-
-    Args:
-        table_name: name of pudl table
-
-    Returns: Path of cached PUDL table
-
-    """
-
-    base = (
-        "pudl.catalyst.coop"
-        if "aws" in str(ETB_CACHE_PATH)
-        else "parquet.catalyst.coop"
-    )
-    cache_info_path = ETB_CACHE_PATH / "cache"
-    if cache_info_path.exists():
-        with open(cache_info_path) as f:
-            cache_data = json.loads(f.read())
-        if table_cache_data := cache_data.get(
-            f"{base}/{PUDL_RELEASE_VERSION}/{table_name}.parquet"
-        ):
-            return ETB_CACHE_PATH / table_cache_data["fn"]
-    return None
 
 
 def main():
