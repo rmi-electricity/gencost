@@ -267,6 +267,31 @@ def harmonize_eia_epa_orispl(
     return df_merged
 
 
+def _cache_path(table_name: str):
+    """Determine the local path for a cached PUDL table if it exists.
+
+    Args:
+        table_name: name of pudl table
+
+    Returns: Path of cached PUDL table
+
+    """
+    import json
+
+    from etoolbox.utils.pudl import CACHE_PATH
+
+    cache_info_path = CACHE_PATH / "cache"
+    base = "pudl.catalyst.coop" if "aws" in str(CACHE_PATH) else "parquet.catalyst.coop"
+    if cache_info_path.exists():
+        with open(cache_info_path) as f:
+            cache_data = json.loads(f.read())
+        if table_cache_data := cache_data.get(
+            f"{base}/{PUDL_RELEASE_VERSION}/{table_name}.parquet"
+        ):
+            return CACHE_PATH / table_cache_data["fn"]
+    return None
+
+
 class Crosswalk:
     def __init__(self, pudl_tabl=None, clobber=False):
         df = pd_read_pudl(
@@ -278,6 +303,7 @@ class Crosswalk:
             (2708, "2B", "2"),
             (4042, "3", "2"),
             (55126, "CT02", "CA02"),
+            (2098, "6", "4"),
         ]
         for pid, to_gen, from_gen in fixes:
             replacement = df.loc[
