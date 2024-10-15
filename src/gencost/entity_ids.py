@@ -141,7 +141,7 @@ def add_ba_code(
         raise ValueError(f"`input_df` is missing {missing}")
     ferc_match = (
         pd.read_parquet(PACKAGE_PATH / "utility_information.parquet.gzip")
-        .astype({"respondent_id": "Int64"})
+        .astype({"respondent_id": "Int64"})[["respondent_id", "utility_id_eia"]]
         .dropna()
         .drop_duplicates()
     )
@@ -155,7 +155,7 @@ def add_ba_code(
         raise AssertionError("utility_id_eia -> respondent_id not unique")
 
     out = input_df.merge(
-        ferc_match[["respondent_id", "utility_id_eia"]],
+        ferc_match,
         on="utility_id_eia",
         how="left",
         validate="m:1",
