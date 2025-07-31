@@ -150,6 +150,8 @@ Thumbs.db
 /.idea
 *.iml
 
+uv.lock
+
 # ================= R related =================
 # History files
 .Rhistory
@@ -206,3 +208,4 @@ rsconnect/
 
 !regression_variables.csv
 .vscode/settings.json
+temp/

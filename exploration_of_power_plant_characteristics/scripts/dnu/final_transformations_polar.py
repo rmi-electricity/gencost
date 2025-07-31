@@ -4,6 +4,7 @@ Join the linear model coefficients to the observed values in the DataBySubplant 
 use Polars in lieu of R because this data fans out with the joins, and Polars might be
 optimal for this memory usage.
 """
+
 __author__ = "Andrew Bartnof for RMI"
 __email__ = "abartnof.contractor@rmi.org"
 __date__ = "July, 2023"

@@ -1,68 +1,8 @@
 import pytest
+from etoolbox.utils.pudl import pd_read_pudl
 
+from gencost.constants import PUDL_RELEASE_VERSION
 from gencost.entity_ids import BA_REPLACE, add_ba_code
-from gencost.waterfall import subplants_in_scenario_one
-
-
-@pytest.mark.skip(reason="duplicative")
-class TestDataBySubplant:
-    def test_get_860_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_860_by_x(merge_only=True, subplant_id_col="subplant_id")
-        assert not df.empty
-
-    def test_get_bf923_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_bf923_by_subplant()
-        assert not df.empty
-
-    def test_get_gen923_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_gen923_by_subplant()
-        assert not df.empty
-
-    def test_get_gf923_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df_gen923 = databysubplant.get_gen923_by_subplant()
-        df = databysubplant.get_gf923_by_subplant(subplants_in_scenario_one(df_gen923))
-        assert not df.empty
-
-    def test_get_cems_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_cems_by_x(subplant_id_col="subplant_id")
-        assert not df.empty
-
-    def test_get_exa_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_exa_by_subplant()
-        assert not df.empty
-
-
-@pytest.mark.skip(reason="duplicative")
-class TestDataByPrime:
-    """Test aggregations by plant, prime, fuel."""
-
-    def test_get_923_by_ppf(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_gf923_by_prime(merge_only=True)
-        assert not df.empty
-
-    def test_get_cems_by_subplant(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_cems_by_x(subplant_id_col="pf_subplant_id")
-        assert not df.empty
-
-    def test_get_860_by_prime(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_860_by_x(
-            merge_only=True, subplant_id_col="pf_subplant_id"
-        )
-        assert not df.empty
-
-    def test_get_exa_by_prime(self, databysubplant):
-        """Perfunctory test."""
-        df = databysubplant.get_exa_by_prime()
-        assert not df.empty
 
 
 class TestFullWaterfall:
@@ -99,15 +39,27 @@ class TestFullWaterfall:
 
 
 class TestEntityID:
-    def test_add_ba_code(self, crosswalk):
+    def test_add_ba_code(self):
         """Test that we can add BA codes."""
-        gens = crosswalk.pudl_tabl.gens_eia860m()
+        gens = (
+            pd_read_pudl(
+                "core_eia860m__changelog_generators", release=PUDL_RELEASE_VERSION
+            )
+            .groupby(["plant_id_eia", "generator_id"], as_index=False)
+            .last()
+        )
         df = add_ba_code(gens)
         assert df.final_ba_code.notna().shape == df.final_ba_code.shape
 
-    def test_add_ba_code_rollup(self, crosswalk):
+    def test_add_ba_code_rollup(self):
         """Test that we can rollup EIA BAs."""
-        gens = crosswalk.pudl_tabl.gens_eia860m()
+        gens = (
+            pd_read_pudl(
+                "core_eia860m__changelog_generators", release=PUDL_RELEASE_VERSION
+            )
+            .groupby(["plant_id_eia", "generator_id"], as_index=False)
+            .last()
+        )
         df = add_ba_code(gens, ba_rollup_only=True)
         assert (
             df.balancing_authority_code_eia.notna().shape

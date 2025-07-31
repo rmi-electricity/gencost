@@ -1,3 +1,5 @@
+from etoolbox.utils.pudl import pd_read_pudl
+
 from gencost.crosswalk import Crosswalk
 from gencost.entity_ids import add_ba_code
 from gencost.waterfall import DataBySubplant
@@ -48,7 +50,10 @@ def get_all_gens(latest_month_year_860m):
 
     """
     return (
-        self.pudl_tabl.gens_eia860m()
+        pd_read_pudl("core_eia860m__changelog_generators", release=self.pudl_release)
+        .sort_values("report_date", ascending=True)
+        .groupby(["plant_id_eia", "generator_id"], as_index=False)
+        .last(skipna=False)
         .pipe(add_ba_code)
         .query("report_date == @latest_month_year_860m")
         .assign(

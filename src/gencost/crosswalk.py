@@ -4,18 +4,16 @@ import warnings
 import networkx as nx
 import numpy as np
 import pandas as pd
-from etoolbox.datazip import DataZip
-from etoolbox.utils.pudl import PretendPudlTablCore
-from platformdirs import user_cache_path
+from etoolbox.utils.pudl import pd_read_pudl
 
 from gencost.constants import (
     FOSSIL_PRIME_MOVER_MAP,
     FUEL_GROUP_MAP,
+    PUDL_RELEASE_VERSION,
     UDAY_FOSSIL_FUEL_MAP,
 )
-from gencost.data_setup import main as data_setup
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("gencost")
 
 
 # from pudl
@@ -269,53 +267,63 @@ def harmonize_eia_epa_orispl(
     return df_merged
 
 
+def _cache_path(table_name: str):
+    """Determine the local path for a cached PUDL table if it exists.
+
+    Args:
+        table_name: name of pudl table
+
+    Returns: Path of cached PUDL table
+
+    """
+    import json
+
+    from etoolbox.utils.pudl import CACHE_PATH
+
+    cache_info_path = CACHE_PATH / "cache"
+    base = "pudl.catalyst.coop" if "aws" in str(CACHE_PATH) else "parquet.catalyst.coop"
+    if cache_info_path.exists():
+        with open(cache_info_path) as f:
+            cache_data = json.loads(f.read())
+        if table_cache_data := cache_data.get(
+            f"{base}/{PUDL_RELEASE_VERSION}/{table_name}.parquet"
+        ):
+            return CACHE_PATH / table_cache_data["fn"]
+    return None
+
+
 class Crosswalk:
     def __init__(self, pudl_tabl=None, clobber=False):
-        if pudl_tabl is None:
-            data_setup()
-            self.pudl_tabl = DataZip.load(
-                user_cache_path("gencost", "rmi") / "pdltbl",
-                klass=PretendPudlTablCore,
-            )
-        else:
-            self.pudl_tabl = pudl_tabl
-        file = user_cache_path("gencost", "rmi") / "xwalk_pudl.parquet"
-        if not file.exists() or clobber:
-            if not file.parent.exists():
-                file.parent.mkdir(parents=True)
-            df = self.pudl_tabl.epacamd_eia_subplant_ids()
-            # see https://github.com/catalyst-cooperative/pudl/issues/2548#issuecomment-1530735429
-            fixes = [
-                (2708, "2A", "2"),
-                (2708, "2B", "2"),
-                (4042, "3", "2"),
-                (55126, "CT02", "CA02"),
+        df = pd_read_pudl(
+            "core_epa__assn_eia_epacamd_subplant_ids", release=PUDL_RELEASE_VERSION
+        )
+        # see https://github.com/catalyst-cooperative/pudl/issues/2548#issuecomment-1530735429
+        fixes = [
+            (2708, "2A", "2"),
+            (2708, "2B", "2"),
+            (4042, "3", "2"),
+            (55126, "CT02", "CA02"),
+            (2098, "6", "4"),
+        ]
+        for pid, to_gen, from_gen in fixes:
+            replacement = df.loc[
+                (df.plant_id_eia == pid) & (df.generator_id == from_gen),
+                "subplant_id",
             ]
-            for pid, to_gen, from_gen in fixes:
-                replacement = df.loc[
-                    (df.plant_id_eia == pid) & (df.generator_id == from_gen),
-                    "subplant_id",
-                ]
-                if (
-                    isinstance(replacement, pd.Series)
-                    and len(replacement.unique()) == 1
-                ):
-                    replacement = replacement.unique()[0]
-                if not isinstance(replacement, np.int64 | np.int32 | int):
-                    raise AssertionError(
-                        f"Replacement subplant_id for ({pid=}, {to_gen=}) from "
-                        f"({pid=}, {from_gen=}) is not int-like"
-                    )
-                df.loc[
-                    (df.plant_id_eia == pid) & (df.generator_id == to_gen),
-                    "subplant_id",
-                ] = replacement
-            df = df.loc[~df.plant_id_eia.isin((55375,)), :]
+            if isinstance(replacement, pd.Series) and len(replacement.unique()) == 1:
+                replacement = replacement.unique()[0]
+            if not isinstance(replacement, np.int64 | np.int32 | int):
+                raise AssertionError(
+                    f"Replacement subplant_id for ({pid=}, {to_gen=}) from "
+                    f"({pid=}, {from_gen=}) is not int-like"
+                )
+            df.loc[
+                (df.plant_id_eia == pid) & (df.generator_id == to_gen),
+                "subplant_id",
+            ] = replacement
+        df = df.loc[~df.plant_id_eia.isin((55375,)), :]
 
-            df.to_parquet(file)
-            self.base_xwalk = df
-        else:
-            self.base_xwalk = pd.read_parquet(file)
+        self.base_xwalk = df
 
         # also need to get rid of proposed generators that will muck up the processes
         self.xwalk_w_pf = self.get_crosswalk_with_prime_fuel(self.base_xwalk).query(
@@ -419,7 +427,7 @@ class Crosswalk:
 
         """
         eia_860 = (
-            self.pudl_tabl.gens_eia860()
+            pd_read_pudl("out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
             .query("prime_mover_code.notnull() ")
             .sort_values(["plant_id_eia", "generator_id", "report_date"])
             .assign(
@@ -521,7 +529,10 @@ class Crosswalk:
 
         """
         df = (
-            self.pudl_tabl.gf_eia923()
+            pd_read_pudl(
+                "out_eia923__monthly_generation_fuel_combined",
+                release=PUDL_RELEASE_VERSION,
+            )
             .query(
                 "energy_source_code in @UDAY_FOSSIL_FUEL_MAP "
                 "& prime_mover_code in @FOSSIL_PRIME_MOVER_MAP"

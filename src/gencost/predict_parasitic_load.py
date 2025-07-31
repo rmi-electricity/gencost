@@ -6,7 +6,7 @@ parasitic load.
 
 import numpy as np
 import pandas as pd
-import pandera as pa
+import pandera.pandas as pa
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -34,33 +34,38 @@ def check_data_by_subplant(
         {
             "prime_mover": pa.Column(str, nullable=True),
             "state": pa.Column(str, nullable=True),
-            "capacity_mw": pa.Column(float, nullable=True),
-            "net_generation_mwh": pa.Column(float, nullable=True),
-            "associated_combined_heat_power": pa.Column(float, nullable=True),
-            "duct_burners": pa.Column(float, nullable=True),
-            "bypass_heat_recovery": pa.Column(float, nullable=True),
-            "solid_fuel_gasification": pa.Column(float, nullable=True),
-            "carbon_capture": pa.Column(float, nullable=True),
-            "fluidized_bed_tech": pa.Column(float, nullable=True),
-            "pulverized_coal_tech": pa.Column(float, nullable=True),
-            "stoker_tech": pa.Column(float, nullable=True),
-            "other_combustion_tech": pa.Column(float, nullable=True),
-            "subcritical_tech": pa.Column(float, nullable=True),
-            "supercritical_tech": pa.Column(float, nullable=True),
-            "ultrasupercritical_tech": pa.Column(float, nullable=True),
-            "age_in_report_year": pa.Column(float, nullable=True),
-            "age_in_current_year": pa.Column(float, nullable=True),
-            "age_of_observation": pa.Column(float, nullable=True),
-            "age_relative_to_prime_avg": pa.Column(float, nullable=True),
-            "pollution_control_costs_per_kw": pa.Column(float, nullable=True),
-            "biofuel_net_mwh": pa.Column(float, nullable=True),
-            "coal_net_mwh": pa.Column(float, nullable=True),
-            "natural_gas_net_mwh": pa.Column(float, nullable=True),
-            "other_net_mwh": pa.Column(float, nullable=True),
-            "other_gas_net_mwh": pa.Column(float, nullable=True),
-            "petroleum_net_mwh": pa.Column(float, nullable=True),
-            "petroleum_coke_net_mwh": pa.Column(float, nullable=True),
-        },
+        }
+        | dict.fromkeys(
+            (
+                "capacity_mw",
+                "net_generation_mwh",
+                "associated_combined_heat_power",
+                "duct_burners",
+                "bypass_heat_recovery",
+                "solid_fuel_gasification",
+                "carbon_capture",
+                "fluidized_bed_tech",
+                "pulverized_coal_tech",
+                "stoker_tech",
+                "other_combustion_tech",
+                "subcritical_tech",
+                "supercritical_tech",
+                "ultrasupercritical_tech",
+                "age_in_report_year",
+                "age_in_current_year",
+                "age_of_observation",
+                "age_relative_to_prime_avg",
+                "pollution_control_costs_per_kw",
+                "biofuel_net_mwh",
+                "coal_net_mwh",
+                "natural_gas_net_mwh",
+                "other_net_mwh",
+                "other_gas_net_mwh",
+                "petroleum_net_mwh",
+                "petroleum_coke_net_mwh",
+            ),
+            pa.Column(float, nullable=True, coerce=True),
+        ),
         checks=pa.Check(
             lambda df: df.shape[0] > 0, name="Table must contain at least 1 row"
         ),

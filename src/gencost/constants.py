@@ -258,3 +258,6 @@ COLS_FOR_REGRESSION = [
     "pollution_control_costs_per_kw",
     "technology_description",
 ]
+
+
+PUDL_RELEASE_VERSION = "v2025.7.0"
