@@ -13,7 +13,7 @@ from gencost.constants import (
     UDAY_FOSSIL_FUEL_MAP,
 )
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("gencost")
 
 
 # from pudl
@@ -427,7 +427,7 @@ class Crosswalk:
 
         """
         eia_860 = (
-            pd_read_pudl("_out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
+            pd_read_pudl("out_eia__yearly_generators", release=PUDL_RELEASE_VERSION)
             .query("prime_mover_code.notnull() ")
             .sort_values(["plant_id_eia", "generator_id", "report_date"])
             .assign(

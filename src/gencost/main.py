@@ -12,7 +12,7 @@ from gencost.crosswalk import Crosswalk
 from gencost.package_data import PACKAGE_PATH
 from gencost.waterfall import DataBySubplant
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("gencost")
 
 
 def main():

@@ -29,7 +29,9 @@ class TestCrosswalk:
             .agg({"pf_subplant_id": pd.Series.nunique})
             .query("pf_subplant_id > 1")
         )
-        assert q.empty, f"Multiple pf_subplant_id for the eia plant and epa unit id combos in {attr}: {list(q.query('pf_subplant_id > 1').index)}"
+        assert q.empty, (
+            f"Multiple pf_subplant_id for the eia plant and epa unit id combos in {attr}: {list(q.query('pf_subplant_id > 1').index)}"
+        )
 
     @pytest.mark.parametrize(
         "attr", ["base_xwalk", "grand_crosswalk", "safe_xwalk"], ids=idfn
@@ -42,7 +44,9 @@ class TestCrosswalk:
             {"subplant_id": pd.Series.nunique}
         )
         q = q[q.subplant_id > 1]
-        assert q.empty, f"Multiple subplant_id for the plant and generator id combos in {attr}: {list(q.query('subplant_id > 1').index)}"
+        assert q.empty, (
+            f"Multiple subplant_id for the plant and generator id combos in {attr}: {list(q.query('subplant_id > 1').index)}"
+        )
 
     @pytest.mark.parametrize(
         "attr", ["base_xwalk", "grand_crosswalk", "safe_xwalk"], ids=idfn
@@ -55,7 +59,9 @@ class TestCrosswalk:
             {"subplant_id": pd.Series.nunique}
         )
         q = q[q.subplant_id > 1]
-        assert q.empty, f"Multiple subplant_id for the eia plant and epa unit id combos in {attr}: {list(q.query('subplant_id > 1').index)}"
+        assert q.empty, (
+            f"Multiple subplant_id for the eia plant and epa unit id combos in {attr}: {list(q.query('subplant_id > 1').index)}"
+        )
 
     @pytest.mark.parametrize(
         "attr", ["base_xwalk", "grand_crosswalk", "safe_xwalk"], ids=idfn
@@ -68,7 +74,9 @@ class TestCrosswalk:
             {"subplant_id": pd.Series.nunique}
         )
         q = q[q.subplant_id > 1]
-        assert q.empty, f"Multiple subplant_id for the epa plant and unit id combos in {attr}: {list(q.query('subplant_id > 1').index)}"
+        assert q.empty, (
+            f"Multiple subplant_id for the epa plant and unit id combos in {attr}: {list(q.query('subplant_id > 1').index)}"
+        )
 
     @pytest.mark.parametrize(
         "attr",
@@ -84,7 +92,9 @@ class TestCrosswalk:
             .agg({"prime_mover": pd.Series.nunique})
             .query("prime_mover > 1")
         )
-        assert q.empty, f"Multiple primes for the plant and pf_subplant id combos in {attr}: {list(q.query('prime_mover > 1').index)}"
+        assert q.empty, (
+            f"Multiple primes for the plant and pf_subplant id combos in {attr}: {list(q.query('prime_mover > 1').index)}"
+        )
 
     @pytest.mark.parametrize(
         "attr",
@@ -100,7 +110,9 @@ class TestCrosswalk:
             .agg({"prime_mover": pd.Series.nunique})
             .query("prime_mover > 1")
         )
-        assert q.empty, f"Multiple primes for the plant and subplant id combos in {attr}: {list(q.query('prime_mover > 1').index)}"
+        assert q.empty, (
+            f"Multiple primes for the plant and subplant id combos in {attr}: {list(q.query('prime_mover > 1').index)}"
+        )
 
     def test_make_comp_key(self, crosswalk):
         """Test that make_comp_key works properly."""

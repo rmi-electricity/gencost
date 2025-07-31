@@ -2,6 +2,7 @@ import pytest
 
 
 @pytest.mark.skip(reason="not yet implemented")
+@pytest.mark.script_launch_mode("inprocess")
 def test_gencost_full(script_runner) -> None:
     """Run each deployed console script with --help as a basic test.
 
