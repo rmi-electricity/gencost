@@ -1,0 +1,80 @@
+gencost.predict_parasitic_load
+==============================
+
+.. py:module:: gencost.predict_parasitic_load
+
+.. autoapi-nested-parse::
+
+   Using DataBySubplant as ground truth
+   ,fit a random forest regressor, and predict a new data set's
+   parasitic load.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   gencost.predict_parasitic_load.check_data_by_subplant
+   gencost.predict_parasitic_load.feature_engineering
+   gencost.predict_parasitic_load.get_y_fit
+   gencost.predict_parasitic_load.predict_parasitic_load
+
+
+Module Contents
+---------------
+
+.. py:function:: check_data_by_subplant(input_data, *, is_data_by_subplant = True)
+
+   Ensure DataBySubplant has all of the columns and rows we need.
+   :param input_data=DataBySubplant:
+   :param (or the new data to be inputted into the model).:
+   :param The only difference is that DataBySubplant:
+   :param needs gross_generation_mwh in order to calculate the dependent variable.:
+   :param is_data_by_subplant=Boolean; if FALSE:
+   :param don't look for gross_generation_mwh:
+
+   :returns:
+
+             Nothing, just performs checks
+              and returns a pandera error if any check fails.
+
+
+.. py:function:: feature_engineering(databysubplant, newdata)
+
+   Perform feature engineering on cleaned data, so that it's ready for modeling:
+       - add parasitic load to DataBySubplant
+           - remove gross_generation_mwh
+       - select only predictors
+       (and for DataBySubplant,parasitic_load as output value)
+       - encode categorical data as numeric
+       - scale all data
+       - impute missing rows
+   :param DataBySubplant: Pandas table, use this as the 'training' set for the model
+   :param NewData: Pandas table with the same columns as DataBySubplant
+   :param (excluding gross_generation_mwh: this will be scaled, encoded, etc just like DataBySubplant.
+                                           The model will predict new values for NewData in a subsequent step.
+   :param which is used to calculate parasitic_load);: this will be scaled, encoded, etc just like DataBySubplant.
+                                                       The model will predict new values for NewData in a subsequent step.
+
+   :returns: Numpy array used as predictors for the model
+             y: Ground truth values for training the model (corresponds with TrainStep2)
+             XNew: Numpy array, fed into model, and we'll get fitted values for this
+   :rtype: X
+
+
+.. py:function:: get_y_fit(x, y, xnew)
+
+   Fit a random forest regressor, output new values for NewData;
+    this is the parasitic_load
+
+
+.. py:function:: predict_parasitic_load(databysubplant, newdata)
+
+   Pull all previous functions together:
+       data QC
+       data cleaning/feature engineering
+       and predict parasitic_load
+
+

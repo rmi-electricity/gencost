@@ -1,0 +1,32 @@
+gencost.main
+============
+
+.. py:module:: gencost.main
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   gencost.main.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   gencost.main.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: main()
+
+   Run the full gencost process.
+
+

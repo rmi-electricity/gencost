@@ -1,0 +1,234 @@
+gencost.crosswalk
+=================
+
+.. py:module:: gencost.crosswalk
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   gencost.crosswalk.LOGGER
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   gencost.crosswalk.Crosswalk
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   gencost.crosswalk._prep_for_networkx
+   gencost.crosswalk._subplant_ids_from_prepped_crosswalk
+   gencost.crosswalk._convert_global_id_to_composite_id
+   gencost.crosswalk.filter_crosswalk
+   gencost.crosswalk.make_subplant_ids
+   gencost.crosswalk.harmonize_eia_epa_orispl
+   gencost.crosswalk._cache_path
+
+
+Module Contents
+---------------
+
+.. py:data:: LOGGER
+
+.. py:function:: _prep_for_networkx(crosswalk, source_keys, source_name, target_keys, target_name)
+
+   Make surrogate keys for gen prime fuel and subplant generator.
+   :param crosswalk: crosswalk with prime fuel
+   :param source_keys: columns that comprise the source composite key
+   :param source_name: name of the source composite key column
+   :param target_keys: columns that comprise the target composite key
+   :param target_name: name of the target composite key column
+
+   :returns:
+
+             copy of crosswalk with prime fuel with new surrogate ID columns
+                 'prime_fuel' and 'subplant_gen'
+   :rtype: pd.DataFrame
+
+
+.. py:function:: _subplant_ids_from_prepped_crosswalk(prepped, source_name, target_name, new_key_name)
+
+   Use networkx graph analysis to create prime fuel subplant IDs from crosswalk
+   edge list.
+
+   :param prepped: crosswalk with prime fuel passed through
+                   _prep_for_networkx()
+   :param source_name: name of the source composite key column
+   :param target_name: name of the target composite key column
+   :param new_key_name: name of the new id/key column
+
+   :returns: copy of prime fuel crosswalk plus new column 'global_subplant_id'
+   :rtype: pd.DataFrame
+
+
+.. py:function:: _convert_global_id_to_composite_id(crosswalk_with_ids, new_key_name)
+
+   Convert global_subplant_id to a composite key (plant_id_eia, pf_subplant_id).
+   The composite key will be much more stable (though not fully stable!) in time.
+   The global ID changes if ANY unit or generator changes, whereas the
+   compound key only changes if units/generators change within that specific plant.
+   A global ID could also tempt users into using it as a crutch, even though it isn't
+   stable. A compound key should discourage that behavior.
+   :param crosswalk_with_ids: crosswalk with pf_subplant_id, as from
+                              _subplant_ids_from_prepped_crosswalk()
+   :param new_key_name: name of the new id/key column
+
+   :raises ValueError: if crosswalk_with_ids has a MultiIndex
+
+   :returns: copy of crosswalk_with_ids with an added column: 'pf_subplant_id'
+   :rtype: pd.DataFrame
+
+
+.. py:function:: filter_crosswalk(crosswalk, epacems)
+
+   Remove unmapped crosswalk rows or duplicates due to m2m boiler relationships.
+
+   :param crosswalk: The epacamd_eia crosswalk.
+   :type crosswalk: pd.DataFrame
+   :param epacems: Emissions data. Must contain
+                   columns named ["plant_id_eia", "emissions_unit_id_epa"]
+   :type epacems: Union[pd.DataFrame, dd.DataFrame]
+
+   :returns: A filtered copy of epacamd_eia crosswalk
+   :rtype: pd.DataFrame
+
+
+.. py:function:: make_subplant_ids(crosswalk, source_keys, source_name, target_keys, target_name, new_key_name)
+
+   Identify prime fuel sub-plants in the EPA/EIA crosswalk and EIA 860 graph.
+   Any row filtering should be done before this step.
+   Usage Example:
+   epacems = pudl.output.epacems.epacems(states=['ID']) # small subset for quick test
+   epacamd_eia = pudl_out.epacamd_eia()
+   filtered_crosswalk = filter_crosswalk(epacamd_eia, epacems)
+   crosswalk_with_subplant_ids = make_subplant_ids(filtered_crosswalk)
+   Note that sub-plant ids should be used in conjunction with `plant_id_eia` vs.
+   `plant_id_epa` because the former is more granular and integrated into CEMS during
+   the transform process.
+
+   :param crosswalk: The epacamd_eia crosswalk
+   :type crosswalk: pd.DataFrame
+   :param source_keys: columns that comprise the source composite key
+   :param source_name: name of the source composite key column
+   :param target_keys: columns that comprise the target composite key
+   :param target_name: name of the target composite key column
+   :param new_key_name: name of the new subplant column that makes up a
+                        composite key with plant_id_eia
+
+   :returns:
+
+             An edge list connecting EPA units to EIA generators, with
+                 connected pieces issued a subplant_id
+   :rtype: pd.DataFrame
+
+
+.. py:function:: harmonize_eia_epa_orispl(df, crosswalk_df)
+
+   Harmonize the ORISPL code to match the EIA data.
+
+   The EIA plant IDs and CEMS ORISPL codes almost match, but not quite. EPA has
+   compiled a crosswalk that maps one set of IDs to the other. The crosswalk is
+   integrated into the PUDL db.
+
+   This function merges the crosswalk with the cems data thus adding the official
+   plant_id_eia column to CEMS. In cases where there is no plant_id_eia value for a
+   given plant_id_epa (i.e., this plant isn't in the crosswalk yet), we use
+   fillna() to add the plant_id_epa value to the plant_id_eia column. Because the
+   plant_id_epa is almost always correct this is reasonable.
+
+   EIA IDs are more correct so use the crosswalk to fix any erronious EPA IDs and get
+   rid of that column to avoid confusion.
+
+   https://github.com/USEPA/camd-eia-crosswalk
+
+   Note that this transformation needs to be run *before* convert_to_utc, because
+   convert_to_utc uses the plant ID to look up timezones.
+
+   :param df: A CEMS hourly dataframe for one year-month-state.
+   :param crosswalk_df: The epacamd_eia dataframe from the database.
+
+   :returns: The same data, with the ORISPL plant codes corrected to match the EIA plant IDs.
+
+
+.. py:function:: _cache_path(table_name)
+
+   Determine the local path for a cached PUDL table if it exists.
+
+   :param table_name: name of pudl table
+
+   Returns: Path of cached PUDL table
+
+
+
+.. py:class:: Crosswalk(pudl_tabl=None, clobber=False)
+
+   .. py:attribute:: base_xwalk
+
+
+   .. py:attribute:: xwalk_w_pf
+
+
+   .. py:attribute:: _grand_xwalk
+
+
+   .. py:property:: grand_crosswalk
+
+
+   .. py:method:: multiprime(subplant_id_col)
+
+
+   .. py:property:: safe_xwalk
+
+
+   .. py:method:: _prep_grand_xwalk()
+
+
+   .. py:method:: get_crosswalk_with_prime_fuel(oge_xwalk)
+
+      Transformations:
+          1) convert CT and CA to CC
+          2) make duplicate rows for energy source code
+          3) convert fuel to fuel_group
+          4) only plant prime fuels that are in 860
+          5) only plant prime fuels that are in 923
+
+      Returns:
+
+
+
+
+   .. py:method:: make_comp_key()
+
+      Transform OGE's crosswalk.
+
+      based on assumptions that
+      1) we only care about when we have info from both EPA and EIA sides are
+          filled in, and that the pair we care about is plant plant subplant id
+      2) have to clean gen column - remove leading zero for merges to work
+          This part is now addressed when :attr:`Crosswalk.oge_xwalk` is made.
+      3) make an eia composite key for grabbing EIA data
+
+
+
+
+   .. py:method:: reassign_fuel_group(xwalk, when_below = 0.01)
+
+      Not sure this is a good idea...
+
+      :param xwalk:
+      :param when_below:
+
+      Returns:
+
+
+
+

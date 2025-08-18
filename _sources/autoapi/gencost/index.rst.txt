@@ -1,0 +1,112 @@
+gencost
+=======
+
+.. py:module:: gencost
+
+.. autoapi-nested-parse::
+
+   A tool for estimating generator unit costs from public utility data.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/gencost/_version/index
+   /autoapi/gencost/all_gens/index
+   /autoapi/gencost/constants/index
+   /autoapi/gencost/crosswalk/index
+   /autoapi/gencost/entity_ids/index
+   /autoapi/gencost/epd_with_vom_fom_som/index
+   /autoapi/gencost/main/index
+   /autoapi/gencost/predict_parasitic_load/index
+   /autoapi/gencost/r_scripts/index
+   /autoapi/gencost/waterfall/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   gencost.logger
+   gencost.__author__
+   gencost.__contact__
+   gencost.__maintainer__
+   gencost.__license__
+   gencost.__maintainer_email__
+   gencost.__docformat__
+   gencost.__description__
+   gencost.__long_description__
+   gencost.__version__
+   gencost.__projecturl__
+   gencost.__downloadurl__
+
+
+Package Contents
+----------------
+
+.. py:data:: logger
+
+.. py:data:: __author__
+   :value: 'RMI'
+
+
+.. py:data:: __contact__
+   :value: 'aengel@rmi.org'
+
+
+.. py:data:: __maintainer__
+   :value: 'RMI'
+
+
+.. py:data:: __license__
+   :value: 'BSD 3-Clause License'
+
+
+.. py:data:: __maintainer_email__
+   :value: '...@rmi.org'
+
+
+.. py:data:: __docformat__
+   :value: 'restructuredtext en'
+
+
+.. py:data:: __description__
+   :value: 'A tool for estimating generator unit costs from public utility data.'
+
+
+.. py:data:: __long_description__
+   :value: Multiline-String
+
+   .. raw:: html
+
+      <details><summary>Show Value</summary>
+
+   .. code-block:: python
+
+      """
+      A tool for estimating generator unit costs from public utility data.
+      """
+
+   .. raw:: html
+
+      </details>
+
+
+
+.. py:data:: __version__
+   :value: 'unknown'
+
+
+.. py:data:: __projecturl__
+   :value: 'https://github.com/rmi-electricity/gencost'
+
+
+.. py:data:: __downloadurl__
+   :value: 'https://github.com/rmi-electricity/gencost'
+
+

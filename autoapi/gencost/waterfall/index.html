@@ -1,0 +1,952 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html" /><link rel="search" title="Search" href="../../../search.html" /><link rel="prev" title="gencost.r_scripts" href="../r_scripts/index.html" />
+        <link rel="prefetch" href="../../../_static/Small_PNG-RMI_logo_PrimaryUse.PNG" as="image" />
+        <link rel="prefetch" href="../../../_static/Small_PNG-RMI_logo_PrimaryUse_White_Horizontal.PNG" as="image" />
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.07.19 -->
+        <title>gencost.waterfall - GenCost 0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=25af2a20" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=b1990d62" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #2b2b2b;
+  --color-code-foreground: #f8f8f2;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #2b2b2b;
+  --color-code-foreground: #f8f8f2;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">GenCost 0.0 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo only-light" src="../../../_static/Small_PNG-RMI_logo_PrimaryUse.PNG" alt="Light Logo"/>
+    <img class="sidebar-logo only-dark" src="../../../_static/Small_PNG-RMI_logo_PrimaryUse_White_Horizontal.PNG" alt="Dark Logo"/>
+  </div>
+  
+  <span class="sidebar-brand-text">GenCost 0.0 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../LICENSE.html">Licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../code_of_conduct.html">Code of Conduct</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../release_notes.html">Release Notes</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../../index.html">API Reference</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of API Reference</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
+<li class="toctree-l2 current has-children"><a class="reference internal" href="../index.html">gencost</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of gencost</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../_version/index.html">gencost._version</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../all_gens/index.html">gencost.all_gens</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../constants/index.html">gencost.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../crosswalk/index.html">gencost.crosswalk</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../entity_ids/index.html">gencost.entity_ids</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../epd_with_vom_fom_som/index.html">gencost.epd_with_vom_fom_som</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../main/index.html">gencost.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../predict_parasitic_load/index.html">gencost.predict_parasitic_load</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../r_scripts/index.html">gencost.r_scripts</a></li>
+<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">gencost.waterfall</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/rmi-electricity/gencost/blob/main/docs/autoapi/gencost/waterfall/index.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/rmi-electricity/gencost/edit/main/docs/autoapi/gencost/waterfall/index.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-gencost.waterfall">
+<span id="gencost-waterfall"></span><h1>gencost.waterfall<a class="headerlink" href="#module-gencost.waterfall" title="Link to this heading">¶</a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.logger" title="gencost.waterfall.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.DataBySubplant" title="gencost.waterfall.DataBySubplant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataBySubplant</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.subplants_in_scenario_one" title="gencost.waterfall.subplants_in_scenario_one"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subplants_in_scenario_one</span></code></a>(gen_923_by_subplant)</p></td>
+<td><p>Make a list of sub-plant composite key that work in scenario #1,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gencost.waterfall.mode" title="gencost.waterfall.mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mode</span></code></a>(x)</p></td>
+<td><p>Custom mode agg func.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.sorted_unique_cat" title="gencost.waterfall.sorted_unique_cat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sorted_unique_cat</span></code></a>(x)</p></td>
+<td><p>Custom unique cat function.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gencost.waterfall.fix_cc_in_prime" title="gencost.waterfall.fix_cc_in_prime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fix_cc_in_prime</span></code></a>(df[, old_col])</p></td>
+<td><p>Add prime_mover call with CCs rolled together.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.add_fuel_group" title="gencost.waterfall.add_fuel_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_fuel_group</span></code></a>(df[, old_col])</p></td>
+<td><p>Add new column with fuel groups.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gencost.waterfall.drop_zero_cols" title="gencost.waterfall.drop_zero_cols"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_zero_cols</span></code></a>(df[, keep])</p></td>
+<td><p>Drop numeric columns that sum to zero.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall._hr" title="gencost.waterfall._hr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">_hr</span></code></a>(df, by, mmbtu_col, mwh_col)</p></td>
+<td><p>Calculate aggregated heat rate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gencost.waterfall.positive_heat_rate" title="gencost.waterfall.positive_heat_rate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">positive_heat_rate</span></code></a>(df, mmbtu_col, mwh_col[, src])</p></td>
+<td><p>Find the best non-negative heat rate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.bio_into_other" title="gencost.waterfall.bio_into_other"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bio_into_other</span></code></a>(df, col_suffix)</p></td>
+<td><p>Filter with columns suffix and combine biofuel into other.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gencost.waterfall.allocate_col_by" title="gencost.waterfall.allocate_col_by"><code class="xref py py-obj docutils literal notranslate"><span class="pre">allocate_col_by</span></code></a>(df, *, to_allocate, new_suffix, ...[, ...])</p></td>
+<td><p>Allocate a column proportionally using values in a set of columns.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gencost.waterfall.rime_sort_key" title="gencost.waterfall.rime_sort_key"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rime_sort_key</span></code></a>(string)</p></td>
+<td><p>Sort strings starting from the end.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading">¶</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="gencost.waterfall.logger">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.logger" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.subplants_in_scenario_one">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">subplants_in_scenario_one</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gen_923_by_subplant</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#subplants_in_scenario_one"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.subplants_in_scenario_one" title="Link to this definition">¶</a></dt>
+<dd><p>Make a list of sub-plant composite key that work in scenario #1,
+so we don’t have to try to match them in scenario 2.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.mode">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#mode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.mode" title="Link to this definition">¶</a></dt>
+<dd><p>Custom mode agg func.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.sorted_unique_cat">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">sorted_unique_cat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#sorted_unique_cat"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.sorted_unique_cat" title="Link to this definition">¶</a></dt>
+<dd><p>Custom unique cat function.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.fix_cc_in_prime">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">fix_cc_in_prime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">old_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'prime_mover_code'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#fix_cc_in_prime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.fix_cc_in_prime" title="Link to this definition">¶</a></dt>
+<dd><p>Add prime_mover call with CCs rolled together.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.add_fuel_group">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">add_fuel_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">old_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'energy_source_code'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#add_fuel_group"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.add_fuel_group" title="Link to this definition">¶</a></dt>
+<dd><p>Add new column with fuel groups.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.drop_zero_cols">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">drop_zero_cols</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('solid_fuel_gasification',)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#drop_zero_cols"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.drop_zero_cols" title="Link to this definition">¶</a></dt>
+<dd><p>Drop numeric columns that sum to zero.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall._hr">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">_hr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">by</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmbtu_col</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mwh_col</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#_hr"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall._hr" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate aggregated heat rate.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.positive_heat_rate">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">positive_heat_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmbtu_col</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mwh_col</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#positive_heat_rate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.positive_heat_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Find the best non-negative heat rate.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> (<a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.3.1)"><em>pandas.DataFrame</em></a>) – input dataframe</p></li>
+<li><p><strong>mmbtu_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – name of fuel consumption column to use</p></li>
+<li><p><strong>mwh_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – name of generation column to use</p></li>
+<li><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – if True return source of heat rate rather than data</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a> | <a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v2.3.1)">pandas.Series</a></p>
+</dd>
+</dl>
+<p>Returns: array-like of non-negative heat rates or their source</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.bio_into_other">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">bio_into_other</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_suffix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#bio_into_other"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.bio_into_other" title="Link to this definition">¶</a></dt>
+<dd><p>Filter with columns suffix and combine biofuel into other.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.allocate_col_by">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">allocate_col_by</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_allocate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_suffix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">old_suffix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rollup_by</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop_bad_rows</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#allocate_col_by"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.allocate_col_by" title="Link to this definition">¶</a></dt>
+<dd><p>Allocate a column proportionally using values in a set of columns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> (<a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.3.1)"><em>pandas.DataFrame</em></a>) – input dataframe</p></li>
+<li><p><strong>to_allocate</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – the column that will be allocated</p></li>
+<li><p><strong>new_suffix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – suffix that will replace the old one in the new columns</p></li>
+<li><p><strong>old_suffix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – suffix of columns to use for allocation</p></li>
+<li><p><strong>rollup_by</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>) – columns to use in groupby, this rollup is used for allocations
+when a given row has only nans and more than one zero.</p></li>
+<li><p><strong>drop</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – drop the old_suffix columns</p></li>
+<li><p><strong>drop_bad_rows</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>) – drop rows where the allocation failed, rows are dropped if
+argument is not None, pass a string to insert into log message</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returns:</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gencost.waterfall.rime_sort_key">
+<span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">rime_sort_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">string</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#rime_sort_key"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.rime_sort_key" title="Link to this definition">¶</a></dt>
+<dd><p>Sort strings starting from the end.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>string</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gencost.waterfall.</span></span><span class="sig-name descname"><span class="pre">DataBySubplant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crosswalk</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>crosswalk</strong> (<a class="reference internal" href="../crosswalk/index.html#gencost.crosswalk.Crosswalk" title="gencost.crosswalk.Crosswalk"><em>gencost.crosswalk.Crosswalk</em></a>) – <code class="xref py py-class docutils literal notranslate"><span class="pre">patio.plant_prime_networkx.Crosswalk</span></code>.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant._dfs">
+<span class="sig-name descname"><span class="pre">_dfs</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant._dfs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant._dfs" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.xwalk">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xwalk</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.xwalk"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.xwalk" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.safe_xwalk">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">safe_xwalk</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.safe_xwalk"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.safe_xwalk" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.query">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">query</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.query"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.query" title="Link to this definition">¶</a></dt>
+<dd><p>Return all years and subplants related to the subplant/years
+that satisfy query.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.clear"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.clear" title="Link to this definition">¶</a></dt>
+<dd><p>Remove cached data so it can be recalculated.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_cems">
+<span class="sig-name descname"><span class="pre">get_cems</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_cems"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_cems" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.merge_all">
+<span class="sig-name descname"><span class="pre">merge_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rollup</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.merge_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.merge_all" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_eternally_present_by_generator">
+<span class="sig-name descname"><span class="pre">get_eternally_present_by_generator</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_eternally_present_by_generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_eternally_present_by_generator" title="Link to this definition">¶</a></dt>
+<dd><p>Objective: combine historical and counterfactual dataframes</p>
+<p>Process:</p>
+<p>Notes:
+Three types of counterfactuals
+1) missing years
+2) fuel switch
+3) zeroes reported</p>
+<p>For instances a generator switched fuel or
+reported zero fuel consumption or generation,
+the counterfactual observation replaces the
+historical one</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_historical_by_generator">
+<span class="sig-name descname"><span class="pre">get_historical_by_generator</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_historical_by_generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_historical_by_generator" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_exa_all">
+<span class="sig-name descname"><span class="pre">get_exa_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">by_fuel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_exa_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_exa_all" title="Link to this definition">¶</a></dt>
+<dd><p>Args:
+pf_crosswalk (dataframe): crosswalk with prime fuel from crosswalk class
+crosswalk (dataframe): grand crosswalk from crosswalk class
+pudl_out : class for extracting pudl data</p>
+<p>Put all data together for complete waterfall output. The shapes of each step in
+the waterfall are different, so merges cannot be done in one sweep.</p>
+<p>Steps:
+1) Complete waterfall step 1 by merging BF df to G 923 df
+2) Concat waterfall step 1 and 2 into single df
+3) Merge cems and 860 data in
+4) filter based on ppf totals - throw out everything that matches with PPF</p>
+<blockquote>
+<div><p>except ST’s</p>
+</div></blockquote>
+<ol class="arabic simple" start="5">
+<li><p>concat to ppf for all eia_cems_merge data</p></li>
+</ol>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_exa_by_prime">
+<span class="sig-name descname"><span class="pre">get_exa_by_prime</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_exa_by_prime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_exa_by_prime" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_exa_by_subplant">
+<span class="sig-name descname"><span class="pre">get_exa_by_subplant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">by_fuel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_exa_by_subplant"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_exa_by_subplant" title="Link to this definition">¶</a></dt>
+<dd><ol class="arabic simple">
+<li><p>Complete waterfall step 1 by merging BF df to G 923 df</p></li>
+<li><p>Concat waterfall step 1 and 2 into single df</p></li>
+<li><p>Merge cems and 860 data in</p></li>
+</ol>
+<p>Returns:</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.export_data_by_prime">
+<span class="sig-name descname"><span class="pre">export_data_by_prime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.export_data_by_prime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.export_data_by_prime" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.parasitic_load_distribution">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">parasitic_load_distribution</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.parasitic_load_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.parasitic_load_distribution" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.gross_cf_distribution">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">gross_cf_distribution</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.gross_cf_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.gross_cf_distribution" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.net_cf_distribution">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">net_cf_distribution</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.net_cf_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.net_cf_distribution" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.covered_generators">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">covered_generators</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.covered_generators"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.covered_generators" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.yr_groups">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">yr_groups</span></span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.yr_groups"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.yr_groups" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.draw_cems_eia_scatter">
+<span class="sig-name descname"><span class="pre">draw_cems_eia_scatter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">comparison</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facet_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facet_row</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.draw_cems_eia_scatter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.draw_cems_eia_scatter" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>plotly.graph_objects.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.draw_ecdf">
+<span class="sig-name descname"><span class="pre">draw_ecdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'net_cf'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'prime_mover'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facet_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facet_row</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">marginal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rug'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.draw_ecdf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.draw_ecdf" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.draw_capacity_ecdf">
+<span class="sig-name descname"><span class="pre">draw_capacity_ecdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">facet_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'prime_mover'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facet_row</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ecdfnorm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'probability'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ecdfmode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'standard'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.draw_capacity_ecdf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.draw_capacity_ecdf" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>plotly.graph_objects.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.draw_capacity_histogram">
+<span class="sig-name descname"><span class="pre">draw_capacity_histogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">facet_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'prime_mover'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facet_row</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ecdfnorm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'probability'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ecdfmode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'standard'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.draw_capacity_histogram"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.draw_capacity_histogram" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>plotly.graph_objects.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.compare_capacity_df">
+<span class="sig-name descname"><span class="pre">compare_capacity_df</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clean</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.compare_capacity_df"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.compare_capacity_df" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.3.1)">pandas.DataFrame</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_860_by_x">
+<span class="sig-name descname"><span class="pre">get_860_by_x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">subplant_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'pf_subplant_id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">merge_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">age_year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_860_by_x"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_860_by_x" title="Link to this definition">¶</a></dt>
+<dd><p>Map capacity and sum to plant prime fuel subplant level</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_gen923_by_subplant">
+<span class="sig-name descname"><span class="pre">get_gen923_by_subplant</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_gen923_by_subplant"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_gen923_by_subplant" title="Link to this definition">¶</a></dt>
+<dd><p>Args:
+crosswalk (dataframe): grand crosswalk from crosswalk class
+pudl_out : class for extracting pudl data</p>
+<p>Waterfall scenario 1: generation data from GF 923
+Transforms:
+1) create column counting how many gens are in each subplant group
+2) merge gen 923 with crosswalk to get subplant id
+3) filter out generators without a subplant match
+4) create column counting how many gens reported in g 923 are in each</p>
+<blockquote>
+<div><p>subplant group</p>
+</div></blockquote>
+<ol class="arabic simple" start="5">
+<li><p>keep rows where gens reported = gens in subplant</p></li>
+<li><p>throw out CCs reported before 15, we don’t trust this G 923 data</p></li>
+<li><p>aggregate to subplant level annually</p></li>
+</ol>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_bf923_by_subplant">
+<span class="sig-name descname"><span class="pre">get_bf923_by_subplant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">merge_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_bf923_by_subplant"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_bf923_by_subplant" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>by_fuel</strong> – pivot by fuel group</p></li>
+<li><p><strong>merge_only</strong></p></li>
+</ul>
+</dd>
+</dl>
+<p>transform BF 923
+1) make year and unit id pudl as it is in bf table
+2) merge with grand crosswalk on unit id pudl, drop na’s they mess up m:1 check
+3) roll up to subplant level</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_gf923_by_subplant">
+<span class="sig-name descname"><span class="pre">get_gf923_by_subplant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scenario_one_subplants</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_gf923_by_subplant"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_gf923_by_subplant" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>crosswalk</strong> (<em>dataframe</em>) – grand crosswalk from crosswalk class</p></li>
+<li><p><strong>pudl_out</strong> – class for extracting pudl data, stored in crosswalk
+initialization</p></li>
+<li><p><strong>scenario_one_subplants</strong> – subplants covered by waterfall step/scenario one,
+from <a class="reference internal" href="#gencost.waterfall.subplants_in_scenario_one" title="gencost.waterfall.subplants_in_scenario_one"><code class="xref py py-func docutils literal notranslate"><span class="pre">subplants_in_scenario_one()</span></code></a></p></li>
+</ul>
+</dd>
+</dl>
+<p>Waterfall scenario 2: subplants single and only prime in plant
+1) figure out which subplants are eligible for step 1 (single and only subplant</p>
+<blockquote>
+<div><p>with that prime fuel within a plant)</p>
+</div></blockquote>
+<ol class="arabic simple" start="2">
+<li><p>merge gen fuel and filtered grand crosswalk on plant prime</p></li>
+<li><p>take out subplants covered in scenario 1</p></li>
+<li><p>change relevant prime mover codes to CC (need to do after previous steps)</p></li>
+</ol>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_gf923_by_prime">
+<span class="sig-name descname"><span class="pre">get_gf923_by_prime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">merge_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_gf923_by_prime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_gf923_by_prime" title="Link to this definition">¶</a></dt>
+<dd><p>transform GF 923
+1) CT, CS, and CA’s to CC
+2) make prime mover and plant prime fuel column for later mergers
+3) sum annual net gen and fuel consumption for plant prime fuel
+4) create dictionary with plant prime fuel totals
+4) map those totals to grand crosswalk</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_gf923_by_generator">
+<span class="sig-name descname"><span class="pre">get_gf923_by_generator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">counterfactuals</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_gf923_by_generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_gf923_by_generator" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_cems_by_x">
+<span class="sig-name descname"><span class="pre">get_cems_by_x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">subplant_id_col</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xwalk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">merge_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_cems_by_x"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_cems_by_x" title="Link to this definition">¶</a></dt>
+<dd><p>Adding CEMS data to waterfall
+Three main steps:
+1) create plant/ unit totals with camd data
+2) dictionary with plant/unit as key: gross gen, gross gen max, gen/fuel</p>
+<blockquote>
+<div><p>starts as value</p>
+</div></blockquote>
+<ol class="arabic simple" start="3">
+<li><dl class="simple">
+<dt>map onto grand crosswalk, aggregate camd info to plant prime fuel</dt><dd><p>subplant level</p>
+</dd>
+</dl>
+</li>
+</ol>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_cems_by_generator">
+<span class="sig-name descname"><span class="pre">get_cems_by_generator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xwalk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_cems_by_generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_cems_by_generator" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.add_costs">
+<span class="sig-name descname"><span class="pre">add_costs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'subplant_id'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.add_costs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.add_costs" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df</strong> (<a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.3.1)"><em>pandas.DataFrame</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_wage_scale">
+<span class="sig-name descname"><span class="pre">get_wage_scale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_wage_scale"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_wage_scale" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.get_elec_pf_gf923">
+<span class="sig-name descname"><span class="pre">get_elec_pf_gf923</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.get_elec_pf_gf923"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.get_elec_pf_gf923" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.tech_cols_dummy">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tech_cols_dummy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.tech_cols_dummy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.tech_cols_dummy" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.core_validation">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">core_validation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.core_validation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.core_validation" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>merge_all_df</strong> (<em>Dataframe</em>) – unvalidated output</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Validated output</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>merge_all_df (Dataframe)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.filter_to_single_fuel_generators">
+<span class="sig-name descname"><span class="pre">filter_to_single_fuel_generators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.filter_to_single_fuel_generators"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.filter_to_single_fuel_generators" title="Link to this definition">¶</a></dt>
+<dd><p>Args:</p>
+<p>df (DataFrame): data frame with historical information on generators
+filtered_df (Dataframe): data frame with only single-fuel generators
+by our definition (&gt;= 90 percent of fuel consumption reported in
+GF 923, pudl allocated)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.find_missing_data">
+<span class="sig-name descname"><span class="pre">find_missing_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.find_missing_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.find_missing_data" title="Link to this definition">¶</a></dt>
+<dd><p>objective:
+identify generators with missing data, that we need to fill in historical data
+for</p>
+<p>process:
+1) instances when a generator doesn’t report for entire patio range
+2) instances when a single fuel generator switches fuel
+3) zeroes reported (tbd)</p>
+<p>output: df with plant / gen / year / prime / fuel / ba code / age / fuss
+that we want to fill in with similar plants</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.create_fill_in_ep_thresholds">
+<span class="sig-name descname"><span class="pre">create_fill_in_ep_thresholds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.create_fill_in_ep_thresholds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.create_fill_in_ep_thresholds" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gencost.waterfall.DataBySubplant.fill_in_ep_data">
+<span class="sig-name descname"><span class="pre">fill_in_ep_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">age_year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gencost/waterfall.html#DataBySubplant.fill_in_ep_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gencost.waterfall.DataBySubplant.fill_in_ep_data" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          <a class="prev-page" href="../r_scripts/index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">gencost.r_scripts</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, RMI, CC-BY-4.0
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/rmi-electricity/gencost" aria-label="GitHub">
+        <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16">
+            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+        </svg>
+    </a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">gencost.waterfall</a><ul>
+<li><a class="reference internal" href="#attributes">Attributes</a></li>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+<li><a class="reference internal" href="#module-contents">Module Contents</a><ul>
+<li><a class="reference internal" href="#gencost.waterfall.logger"><code class="docutils literal notranslate"><span class="pre">logger</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.subplants_in_scenario_one"><code class="docutils literal notranslate"><span class="pre">subplants_in_scenario_one()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.mode"><code class="docutils literal notranslate"><span class="pre">mode()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.sorted_unique_cat"><code class="docutils literal notranslate"><span class="pre">sorted_unique_cat()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.fix_cc_in_prime"><code class="docutils literal notranslate"><span class="pre">fix_cc_in_prime()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.add_fuel_group"><code class="docutils literal notranslate"><span class="pre">add_fuel_group()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.drop_zero_cols"><code class="docutils literal notranslate"><span class="pre">drop_zero_cols()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall._hr"><code class="docutils literal notranslate"><span class="pre">_hr()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.positive_heat_rate"><code class="docutils literal notranslate"><span class="pre">positive_heat_rate()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.bio_into_other"><code class="docutils literal notranslate"><span class="pre">bio_into_other()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.allocate_col_by"><code class="docutils literal notranslate"><span class="pre">allocate_col_by()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.rime_sort_key"><code class="docutils literal notranslate"><span class="pre">rime_sort_key()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant"><code class="docutils literal notranslate"><span class="pre">DataBySubplant</span></code></a><ul>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant._dfs"><code class="docutils literal notranslate"><span class="pre">DataBySubplant._dfs</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.xwalk"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.xwalk</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.safe_xwalk"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.safe_xwalk</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.query"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.query</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.clear"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.clear()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_cems"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_cems()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.merge_all"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.merge_all()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_eternally_present_by_generator"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_eternally_present_by_generator()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_historical_by_generator"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_historical_by_generator()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_exa_all"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_exa_all()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_exa_by_prime"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_exa_by_prime()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_exa_by_subplant"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_exa_by_subplant()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.export_data_by_prime"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.export_data_by_prime()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.parasitic_load_distribution"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.parasitic_load_distribution</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.gross_cf_distribution"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.gross_cf_distribution</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.net_cf_distribution"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.net_cf_distribution</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.covered_generators"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.covered_generators</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.yr_groups"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.yr_groups</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.draw_cems_eia_scatter"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.draw_cems_eia_scatter()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.draw_ecdf"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.draw_ecdf()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.draw_capacity_ecdf"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.draw_capacity_ecdf()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.draw_capacity_histogram"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.draw_capacity_histogram()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.compare_capacity_df"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.compare_capacity_df()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_860_by_x"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_860_by_x()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_gen923_by_subplant"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_gen923_by_subplant()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_bf923_by_subplant"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_bf923_by_subplant()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_gf923_by_subplant"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_gf923_by_subplant()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_gf923_by_prime"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_gf923_by_prime()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_gf923_by_generator"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_gf923_by_generator()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_cems_by_x"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_cems_by_x()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_cems_by_generator"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_cems_by_generator()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.add_costs"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.add_costs()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_wage_scale"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_wage_scale()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.get_elec_pf_gf923"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.get_elec_pf_gf923()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.tech_cols_dummy"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.tech_cols_dummy()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.core_validation"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.core_validation()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.filter_to_single_fuel_generators"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.filter_to_single_fuel_generators()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.find_missing_data"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.find_missing_data()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.create_fill_in_ep_thresholds"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.create_fill_in_ep_thresholds()</span></code></a></li>
+<li><a class="reference internal" href="#gencost.waterfall.DataBySubplant.fill_in_ep_data"><code class="docutils literal notranslate"><span class="pre">DataBySubplant.fill_in_ep_data()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=5d46e146"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>

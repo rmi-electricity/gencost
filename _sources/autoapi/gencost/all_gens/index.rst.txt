@@ -1,0 +1,43 @@
+gencost.all_gens
+================
+
+.. py:module:: gencost.all_gens
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   gencost.all_gens.FOSSIL_PRIME_MOVER_MAP
+   gencost.all_gens.UDAY_FOSSIL_FUEL_MAP
+   gencost.all_gens.xwalk
+   gencost.all_gens.self
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   gencost.all_gens.get_all_gens
+
+
+Module Contents
+---------------
+
+.. py:data:: FOSSIL_PRIME_MOVER_MAP
+
+.. py:data:: UDAY_FOSSIL_FUEL_MAP
+
+.. py:data:: xwalk
+
+.. py:data:: self
+
+.. py:function:: get_all_gens(latest_month_year_860m)
+
+   latest_month_year_860m (str):
+   latest month/year reported in 860m in YYYY-MM-DD format
+
+
+

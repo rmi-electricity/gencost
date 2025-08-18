@@ -1,0 +1,67 @@
+gencost.constants
+=================
+
+.. py:module:: gencost.constants
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   gencost.constants.FOSSIL_PRIME_MOVER_MAP
+   gencost.constants.UDAY_FOSSIL_FUEL_MAP
+   gencost.constants.FUEL_GROUP_MAP
+   gencost.constants.CARB_INTENSITY
+   gencost.constants.COST_FLOOR
+   gencost.constants.GET_860_GEN_COLS
+   gencost.constants.HIST_EP_COLS
+   gencost.constants.CURRENT_EP_COLS
+   gencost.constants.FILL_IN_EP_COLS
+   gencost.constants.COLS_FOR_REGRESSION
+   gencost.constants.PUDL_RELEASE_VERSION
+
+
+Module Contents
+---------------
+
+.. py:data:: FOSSIL_PRIME_MOVER_MAP
+
+.. py:data:: UDAY_FOSSIL_FUEL_MAP
+
+.. py:data:: FUEL_GROUP_MAP
+
+.. py:data:: CARB_INTENSITY
+
+   //www.eia.gov/environment/emissions/co2_vol_mass.php
+
+   in tonnes/mmbtu
+
+   :type: https
+
+.. py:data:: COST_FLOOR
+
+.. py:data:: GET_860_GEN_COLS
+   :value: ['utility_id_eia', 'balancing_authority_code_eia', 'state', 'plant_id_eia', 'generator_id',...
+
+
+.. py:data:: HIST_EP_COLS
+   :value: ['biofuel_mmbtu', 'coal_mmbtu', 'natural_gas_mmbtu', 'other_mmbtu', 'other_gas_mmbtu',...
+
+
+.. py:data:: CURRENT_EP_COLS
+   :value: ['plant_id_eia', 'generator_id', 'report_date', 'capacity_mw', 'associated_combined_heat_power',...
+
+
+.. py:data:: FILL_IN_EP_COLS
+   :value: ['plant_id_eia', 'generator_id', 'report_date', 'fuss', 'prime_mover', 'fuel_group',...
+
+
+.. py:data:: COLS_FOR_REGRESSION
+   :value: ['plant_id_eia', 'generator_id', 'report_date', 'prime_mover', 'state', 'capacity_mw',...
+
+
+.. py:data:: PUDL_RELEASE_VERSION
+   :value: 'v2025.7.0'
+
+

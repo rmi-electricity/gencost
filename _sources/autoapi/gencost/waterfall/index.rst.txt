@@ -1,0 +1,401 @@
+gencost.waterfall
+=================
+
+.. py:module:: gencost.waterfall
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   gencost.waterfall.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   gencost.waterfall.DataBySubplant
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   gencost.waterfall.subplants_in_scenario_one
+   gencost.waterfall.mode
+   gencost.waterfall.sorted_unique_cat
+   gencost.waterfall.fix_cc_in_prime
+   gencost.waterfall.add_fuel_group
+   gencost.waterfall.drop_zero_cols
+   gencost.waterfall._hr
+   gencost.waterfall.positive_heat_rate
+   gencost.waterfall.bio_into_other
+   gencost.waterfall.allocate_col_by
+   gencost.waterfall.rime_sort_key
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: subplants_in_scenario_one(gen_923_by_subplant)
+
+   Make a list of sub-plant composite key that work in scenario #1,
+   so we don't have to try to match them in scenario 2.
+
+
+.. py:function:: mode(x)
+
+   Custom mode agg func.
+
+
+.. py:function:: sorted_unique_cat(x)
+
+   Custom unique cat function.
+
+
+.. py:function:: fix_cc_in_prime(df, old_col='prime_mover_code')
+
+   Add prime_mover call with CCs rolled together.
+
+
+.. py:function:: add_fuel_group(df, old_col='energy_source_code')
+
+   Add new column with fuel groups.
+
+
+.. py:function:: drop_zero_cols(df, keep=('solid_fuel_gasification', ))
+
+   Drop numeric columns that sum to zero.
+
+
+.. py:function:: _hr(df, by, mmbtu_col, mwh_col)
+
+   Calculate aggregated heat rate.
+
+
+.. py:function:: positive_heat_rate(df, mmbtu_col, mwh_col, src = False)
+
+   Find the best non-negative heat rate.
+
+   :param df: input dataframe
+   :param mmbtu_col: name of fuel consumption column to use
+   :param mwh_col: name of generation column to use
+   :param src: if True return source of heat rate rather than data
+
+   Returns: array-like of non-negative heat rates or their source
+
+
+
+.. py:function:: bio_into_other(df, col_suffix)
+
+   Filter with columns suffix and combine biofuel into other.
+
+
+.. py:function:: allocate_col_by(df, *, to_allocate, new_suffix, old_suffix, rollup_by, drop = True, drop_bad_rows = None)
+
+   Allocate a column proportionally using values in a set of columns.
+
+   :param df: input dataframe
+   :param to_allocate: the column that will be allocated
+   :param new_suffix: suffix that will replace the old one in the new columns
+   :param old_suffix: suffix of columns to use for allocation
+   :param rollup_by: columns to use in groupby, this rollup is used for allocations
+                     when a given row has only nans and more than one zero.
+   :param drop: drop the old_suffix columns
+   :param drop_bad_rows: drop rows where the allocation failed, rows are dropped if
+                         argument is not None, pass a string to insert into log message
+
+   Returns:
+
+
+
+.. py:function:: rime_sort_key(string)
+
+   Sort strings starting from the end.
+
+
+.. py:class:: DataBySubplant(crosswalk)
+
+   
+   :param crosswalk: :class:`patio.plant_prime_networkx.Crosswalk`.
+
+
+   .. py:attribute:: _dfs
+
+
+   .. py:property:: xwalk
+
+
+   .. py:property:: safe_xwalk
+
+
+   .. py:property:: query
+
+      Return all years and subplants related to the subplant/years
+      that satisfy query.
+
+
+   .. py:method:: clear()
+
+      Remove cached data so it can be recalculated.
+
+
+
+   .. py:method:: get_cems()
+
+
+   .. py:method:: merge_all(clean=True, rollup=False)
+
+
+   .. py:method:: get_eternally_present_by_generator()
+
+      Objective: combine historical and counterfactual dataframes
+
+      Process:
+
+      Notes:
+      Three types of counterfactuals
+      1) missing years
+      2) fuel switch
+      3) zeroes reported
+
+      For instances a generator switched fuel or
+      reported zero fuel consumption or generation,
+      the counterfactual observation replaces the
+      historical one
+
+
+
+
+   .. py:method:: get_historical_by_generator()
+
+
+   .. py:method:: get_exa_all(by_fuel=True)
+
+      Args:
+      pf_crosswalk (dataframe): crosswalk with prime fuel from crosswalk class
+      crosswalk (dataframe): grand crosswalk from crosswalk class
+      pudl_out : class for extracting pudl data
+
+      Put all data together for complete waterfall output. The shapes of each step in
+      the waterfall are different, so merges cannot be done in one sweep.
+
+      Steps:
+      1) Complete waterfall step 1 by merging BF df to G 923 df
+      2) Concat waterfall step 1 and 2 into single df
+      3) Merge cems and 860 data in
+      4) filter based on ppf totals - throw out everything that matches with PPF
+          except ST's
+      5) concat to ppf for all eia_cems_merge data
+
+
+
+
+
+   .. py:method:: get_exa_by_prime()
+
+
+   .. py:method:: get_exa_by_subplant(by_fuel=True)
+
+      1) Complete waterfall step 1 by merging BF df to G 923 df
+      2) Concat waterfall step 1 and 2 into single df
+      3) Merge cems and 860 data in
+
+      Returns:
+
+
+
+
+   .. py:method:: export_data_by_prime(name=None, clean=True)
+
+
+   .. py:property:: parasitic_load_distribution
+
+
+   .. py:property:: gross_cf_distribution
+
+
+   .. py:property:: net_cf_distribution
+
+
+   .. py:property:: covered_generators
+
+
+   .. py:property:: yr_groups
+
+
+   .. py:method:: draw_cems_eia_scatter(comparison, facet_col=None, facet_row=None, color=None, height=500, width=500, clean=True)
+
+
+   .. py:method:: draw_ecdf(x='net_cf', color='prime_mover', facet_col=None, facet_row=None, marginal='rug', clean=True, query=None, height=None, width=None)
+
+
+   .. py:method:: draw_capacity_ecdf(facet_col='prime_mover', facet_row=None, clean=True, ecdfnorm='probability', ecdfmode='standard', height=None, width=None)
+
+
+   .. py:method:: draw_capacity_histogram(facet_col='prime_mover', facet_row=None, clean=True, ecdfnorm='probability', ecdfmode='standard', height=None, width=None, query=None)
+
+
+   .. py:method:: compare_capacity_df(clean)
+
+
+   .. py:method:: get_860_by_x(subplant_id_col='pf_subplant_id', merge_only=False, age_year=None)
+
+      Map capacity and sum to plant prime fuel subplant level
+
+
+
+
+   .. py:method:: get_gen923_by_subplant()
+
+      Args:
+      crosswalk (dataframe): grand crosswalk from crosswalk class
+      pudl_out : class for extracting pudl data
+
+      Waterfall scenario 1: generation data from GF 923
+      Transforms:
+      1) create column counting how many gens are in each subplant group
+      2) merge gen 923 with crosswalk to get subplant id
+      3) filter out generators without a subplant match
+      4) create column counting how many gens reported in g 923 are in each
+          subplant group
+      5) keep rows where gens reported = gens in subplant
+      6) throw out CCs reported before 15, we don't trust this G 923 data
+      7) aggregate to subplant level annually
+
+
+
+
+   .. py:method:: get_bf923_by_subplant(merge_only=False)
+
+      :param by_fuel: pivot by fuel group
+      :param merge_only:
+
+      transform BF 923
+      1) make year and unit id pudl as it is in bf table
+      2) merge with grand crosswalk on unit id pudl, drop na's they mess up m:1 check
+      3) roll up to subplant level
+
+
+
+
+   .. py:method:: get_gf923_by_subplant(scenario_one_subplants)
+
+      :param crosswalk: grand crosswalk from crosswalk class
+      :type crosswalk: dataframe
+      :param pudl_out: class for extracting pudl data, stored in crosswalk
+                       initialization
+      :param scenario_one_subplants: subplants covered by waterfall step/scenario one,
+                                     from :func:`subplants_in_scenario_one`
+
+      Waterfall scenario 2: subplants single and only prime in plant
+      1) figure out which subplants are eligible for step 1 (single and only subplant
+          with that prime fuel within a plant)
+      2) merge gen fuel and filtered grand crosswalk on plant prime
+      3) take out subplants covered in scenario 1
+      4) change relevant prime mover codes to CC (need to do after previous steps)
+
+
+
+
+
+   .. py:method:: get_gf923_by_prime(merge_only=False)
+
+      transform GF 923
+      1) CT, CS, and CA's to CC
+      2) make prime mover and plant prime fuel column for later mergers
+      3) sum annual net gen and fuel consumption for plant prime fuel
+      4) create dictionary with plant prime fuel totals
+      4) map those totals to grand crosswalk
+
+
+
+
+
+   .. py:method:: get_gf923_by_generator(counterfactuals=False)
+
+
+   .. py:method:: get_cems_by_x(subplant_id_col, xwalk=None, merge_only=False)
+
+      Adding CEMS data to waterfall
+      Three main steps:
+      1) create plant/ unit totals with camd data
+      2) dictionary with plant/unit as key: gross gen, gross gen max, gen/fuel
+          starts as value
+      3) map onto grand crosswalk, aggregate camd info to plant prime fuel
+          subplant level
+
+
+
+
+   .. py:method:: get_cems_by_generator(xwalk=None)
+
+
+   .. py:method:: add_costs(df, on='subplant_id')
+
+
+   .. py:method:: get_wage_scale()
+
+
+   .. py:method:: get_elec_pf_gf923()
+
+
+   .. py:method:: tech_cols_dummy(df)
+      :staticmethod:
+
+
+
+   .. py:method:: core_validation(df, level)
+      :staticmethod:
+
+
+      :param merge_all_df: unvalidated output
+      :type merge_all_df: Dataframe
+
+      :returns: Validated output
+      :rtype: merge_all_df (Dataframe)
+
+
+
+   .. py:method:: filter_to_single_fuel_generators(df)
+
+      Args:
+
+      df (DataFrame): data frame with historical information on generators
+      filtered_df (Dataframe): data frame with only single-fuel generators
+      by our definition (>= 90 percent of fuel consumption reported in
+      GF 923, pudl allocated)
+
+
+
+
+
+   .. py:method:: find_missing_data()
+
+      objective:
+      identify generators with missing data, that we need to fill in historical data
+      for
+
+      process:
+      1) instances when a generator doesn't report for entire patio range
+      2) instances when a single fuel generator switches fuel
+      3) zeroes reported (tbd)
+
+      output: df with plant / gen / year / prime / fuel / ba code / age / fuss
+      that we want to fill in with similar plants
+
+
+
+
+   .. py:method:: create_fill_in_ep_thresholds(df)
+
+
+   .. py:method:: fill_in_ep_data(age_year=None)
+
+

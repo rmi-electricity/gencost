@@ -1,0 +1,6 @@
+gencost.r_scripts
+=================
+
+.. py:module:: gencost.r_scripts
+
+
